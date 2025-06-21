@@ -1,0 +1,5757 @@
+./src/interfaces/IProject.ts
+#######
+export interface IProject {
+    name: string;
+}#######
+
+./src/interfaces/ITaskGroup.ts
+#######
+import { ITask } from './ITask';
+
+export interface ITaskGroup {
+    name: string;
+    tasks: ITask[]; // Use ITask instead of any[]
+}#######
+
+./src/interfaces/ITimeline.ts
+#######
+/**
+ * Timeline-related interfaces for managing date ranges, time units, and minimap functionality
+ */
+import { TimeUnit } from "../enums/TimeUnit";
+
+/**
+ * Represents a single entry in the minimap, with a date and task count
+ */
+export interface IMinimapEntry {
+  date: Date;
+  count: number;
+}
+
+/**
+ * Represents the entire minimap with entries and methods
+ */
+export interface IMinimap {
+  entries: IMinimapEntry[];
+  getEntries(): IMinimapEntry[];
+  updateCounts(tasks: any[]): void;
+}
+
+/**
+ * Represents timeline management with date ranges and time unit
+ */
+export interface ITimeline {
+  // Timeline date properties
+  currentDate: Date;
+  globalMinDate: Date;
+  globalMaxDate: Date;
+  localMinDate: Date;
+  localMaxDate: Date;
+  currentTimeUnit: TimeUnit;
+  
+  // Timeline methods
+  updateTimeUnit(timeUnit: TimeUnit, reinitializeViewport?: boolean): void;
+  updateViewport(newMinDate: Date, newMaxDate: Date): void;
+  initializeViewport(): void;
+  getMinimap(): IMinimapEntry[];
+} #######
+
+./src/interfaces/ITaskdownSettings.ts
+#######
+export interface ITaskdownSettings {
+	taskDirectory: string;
+	openByDefault: boolean;
+	openInNewPane: boolean;
+	numberOfColumns: number;
+	columnWidth: number;
+	numberOfRows: number;
+	rowHeight: number;
+	globalMinDate: string; // ISO string format
+	globalMaxDate: string; // ISO string format
+	defaultTimeUnit: string; // Default time unit view (day, week, month)
+}#######
+
+./src/interfaces/ITask.ts
+#######
+export interface ITask {
+    name: string;
+    start: string;
+    end: string;
+    category: string;
+    status: string;
+    filePath: string;
+    content: string;
+    priority: number;
+    totalSubtasks: number;
+    completedSubtasks: number;
+    // Layout properties (optional)
+    groupName?: string;
+    x?: number;
+    y?: number;
+    width?: number;
+    height?: number;
+}#######
+
+./src/interfaces/IBoard.ts
+#######
+import { ITaskGroup } from './ITaskGroup';
+
+export interface IBoard {
+    taskGroups: ITaskGroup[]; // Use ITaskGroup instead of any[]
+    numberOfColumns: number;
+    headers: string[];
+}#######
+
+./src/main.ts
+#######
+import { Plugin, WorkspaceLeaf } from "obsidian";
+import { TaskDownManager } from "./controllers/TaskDownManager";
+import { TaskdownView } from "./views/TaskdownView";
+import { ITaskdownSettings } from "./interfaces/ITaskdownSettings";
+import { SettingsManager, TaskdownSettingTab } from "./controllers/SettingsManager";
+
+export default class TaskdownPlugin extends Plugin {
+	settings: ITaskdownSettings;
+	settingsManager: SettingsManager;
+	taskDownManager: TaskDownManager;
+
+	async onload() {
+		await this.loadSettings();
+
+		// Initialize TaskDownManager
+		this.taskDownManager = new TaskDownManager(this.app, this);
+
+		// Initialize the manager (this is now asynchronous)
+		await this.taskDownManager.initialize();
+
+		// Register the view
+		this.registerView(
+			"taskdown-view",
+			(leaf) => new TaskdownView(leaf, this.taskDownManager)
+		);
+
+		// Add the settings tab (Corrected indentation)
+		this.addSettingTab(
+			new TaskdownSettingTab(
+				this.app, 
+				this, 
+				this.settingsManager, 
+				this.taskDownManager.taskManager // Pass the TaskManager instance
+			)
+		);
+
+		// Add ribbon icon to activate the view
+		this.addRibbonIcon("calendar-clock", "Open Taskdown Board", () => {
+			this.activateView();
+		});
+
+		// Command to activate the view
+		this.addCommand({
+			id: "open-taskdown-board",
+			name: "Open Taskdown Board",
+			callback: () => {
+				this.activateView();
+			},
+		});
+
+		// Open the view on startup if the setting is enabled
+		this.app.workspace.onLayoutReady(() => {
+			if (this.taskDownManager.shouldOpenByDefault()) {
+				this.activateView();
+			}
+		});
+	}
+
+	async activateView() {
+		let leaf: WorkspaceLeaf | null = null;
+		const leaves = this.app.workspace.getLeavesOfType("taskdown-view");
+
+		if (leaves.length > 0) {
+			// A leaf with our view already exists, use that
+			leaf = leaves[0];
+		} else {
+			// Our view could use some space. In the right split by default.
+			const openInNewPane = this.settingsManager.settings.openInNewPane;
+			leaf = openInNewPane ? this.app.workspace.getRightLeaf(false) : this.app.workspace.getLeaf(false);
+			if (leaf) {
+				await leaf.setViewState({ type: "taskdown-view", active: true });
+			}
+		}
+
+		// "Reveal" the leaf in case it is in a collapsed sidebar
+		if (leaf) {
+			this.app.workspace.revealLeaf(leaf);
+		}
+	}
+
+	onunload() {
+		if (this.taskDownManager) {
+			this.taskDownManager.unregisterEvents();
+		}
+		this.app.workspace.detachLeavesOfType("taskdown-view");
+	}
+
+	async loadSettings() {
+		// Use SettingsManager to load settings
+		this.settingsManager = new SettingsManager(this);
+		await this.settingsManager.loadSettings();
+		
+		// Remove redundant loading into plugin.settings and overwriting settingsManager
+		// this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
+		// this.settingsManager.settings = this.settings;
+		
+		// If other parts of the plugin need access, they should use this.settingsManager.settings
+		// For compatibility, we can keep the plugin's direct 'settings' property pointing to the manager's settings:
+		this.settings = this.settingsManager.settings; 
+	}
+
+	async saveData(settings: ITaskdownSettings) {
+		await super.saveData(settings);
+	}
+
+	async saveSettings() {
+		// Use SettingsManager to save settings
+		await this.saveData(this.settingsManager.settings);
+		// The SettingsManager's saveSettings method emits the 'settings-changed' event
+		// Alternatively, call the manager's method if it does more than just saveData:
+		// await this.settingsManager.saveSettings(); 
+	}
+} #######
+
+./src/components/BoardContainer/BoardGroupingSelection.ts
+#######
+import { BoardManager } from "../../controllers/BoardManager";
+import { DropdownComponent } from "obsidian"; // Import DropdownComponent
+
+export function BoardGroupingSelection(boardManager: BoardManager): HTMLElement {
+    const container = document.createElement("div");
+    container.className = "board-grouping-selection"; // Keep the container class
+
+    // Use DropdownComponent
+    const dropdown = new DropdownComponent(container);
+
+    // Add options using DropdownComponent API
+    dropdown.addOption("status", "Status");
+    dropdown.addOption("category", "Category");
+
+    // Set initial value
+    dropdown.setValue(boardManager.getGroupingVariable());
+
+    // Add change listener using DropdownComponent API
+    dropdown.onChange((selectedValue) => {
+        boardManager.setGroupingVariable(selectedValue);
+    });
+
+    // Apply a specific class for styling, similar to NavProjectsSelection
+    dropdown.selectEl.addClass("board-grouping-select"); 
+
+    // DropdownComponent automatically appends its element to the container
+    return container;
+} #######
+
+./src/components/BoardContainer/BoardContainer.ts
+#######
+import { BoardManager } from "../../controllers/BoardManager";
+import { BoardTaskGroup } from "./BoardTaskGroup";
+import { BoardTimelineHeader } from "./BoardTimelineHeader";
+
+export class BoardContainer {
+    public element: HTMLElement;
+    private boardManager: BoardManager;
+    private contentElement: HTMLElement;
+    private isDebugMode: boolean;
+
+    constructor(boardManager: BoardManager, isDebugMode = false) {
+        this.boardManager = boardManager;
+        this.isDebugMode = isDebugMode;
+        
+        this.element = document.createElement("div");
+        this.element.classList.add("board-container");
+        
+        this.contentElement = document.createElement("div");
+        this.contentElement.classList.add("board-content");
+        this.element.appendChild(this.contentElement);
+        
+        // Listen for task updates to recalc layout and re-render board tasks
+        this.boardManager.registerTaskUpdateCallback(() => {
+            this.boardManager.updateCurrentLayout();
+            this.renderBoard();
+        });
+        
+        // Listen for board updates (including settings changes)
+        this.boardManager.on("board-updated", () => {
+            this.renderBoard();
+        });
+        
+        this.renderBoard();
+    }
+
+    private renderBoard(): void {
+        this.contentElement.innerHTML = "";
+        
+        // Obtain the layout from boardManager which now handles task parsing, date conversion, and setting the current date
+        const layouter = this.boardManager.getCurrentLayout();
+        
+        const columnWidth = this.boardManager.getColumnWidth();
+        const rowHeight = this.boardManager.getRowHeight();
+
+        // Create timeline header; BoardTimelineHeader now internally creates headers from layouter.columnHeaders
+        const timelineHeaderEl = BoardTimelineHeader(layouter, this.boardManager, columnWidth, this.isDebugMode);
+        this.contentElement.appendChild(timelineHeaderEl);
+
+        // Get settings to pass down
+        const settings = this.boardManager.settingsManager.settings;
+
+        // Use 'any' for task types here to match the structure from BoardLayouter
+        layouter.taskGrids.forEach((taskGrid: any) => {
+            const tasksInGroup = taskGrid.tasks;
+            // Calculate grid height based on max task 'y' position, accounting for the spacer row
+            // Find the maximum 0-based y index used by tasks in the group
+            const maxY = tasksInGroup.reduce((max: number, task: any) => Math.max(max, task.y ?? -1), -1);
+            // The total grid height needs to accommodate the row at maxY and the spacer row at maxY + 1
+            // So, the height in rows is maxY + 1. Ensure minimum height of 1 row.
+            const gridHeight = Math.max(1, maxY + 1);
+
+            const gridConfig = {
+                gridWidth: layouter.columnHeaders.length,
+                gridHeight,
+                columnWidth,
+                rowHeight
+            };
+            // Pass settings and boardManager to BoardTaskGroup
+            const taskGroupEl = BoardTaskGroup(taskGrid.group, tasksInGroup, gridConfig, settings, this.boardManager, this.isDebugMode);
+            this.contentElement.appendChild(taskGroupEl);
+        });
+    }
+}
+#######
+
+./src/components/BoardContainer/BoardTaskCard.ts
+#######
+/**
+ * Renders an individual task card within a task group, displaying essential task details and supporting interactions like drag-and-drop.
+ *
+ * Legacy files:
+ * - "./src/components/YearView.ts"
+ * - "./src/layouters/BoardLayouter.ts"
+ * -
+ */
+
+import { positionTooltip } from "../../utils/tooltipUtils";
+import { TFile } from "obsidian";
+// Removed ITask import, using 'any' for task type from BoardLayouter
+import { ITaskdownSettings } from "../../interfaces/ITaskdownSettings"; // Import ITaskdownSettings
+// Removed ITask import, using 'any' for task type from BoardLayouter
+
+
+export function BoardTaskCard(
+	task: any, // Reverted to any to match data from BoardLayouter
+	settings: ITaskdownSettings, // Add settings parameter
+	isDebugMode = false
+): HTMLElement {
+	const card = document.createElement("div");
+	card.className = "taskdown-task"; // Base class
+
+	if (isDebugMode) {
+		card.classList.add("debug-cell");
+	}
+
+	// Display Task Name
+	const taskName = document.createElement("div");
+	taskName.className = "taskdown-card-name";
+	taskName.textContent = task.name || "Unnamed Task";
+	card.appendChild(taskName);
+
+	// Display Subtask Progress if applicable
+	if (task.totalSubtasks > 0) {
+		const subtaskContainer = document.createElement("div");
+		subtaskContainer.className = "taskdown-subtask-container"; // New class for the container
+
+		for (let i = 0; i < task.totalSubtasks; i++) {
+			const subtaskBox = document.createElement("span");
+			subtaskBox.className = "taskdown-subtask-box"; // Class for individual boxes
+			if (i < task.completedSubtasks) {
+				subtaskBox.classList.add("completed"); // Mark completed boxes
+			}
+			subtaskContainer.appendChild(subtaskBox);
+		}
+		card.appendChild(subtaskContainer);
+	}
+
+
+	card.classList.add("hover-enabled");
+
+	const tooltip = document.createElement("div");
+	tooltip.className = "taskdown-tooltip";
+
+	const formatDateToYYYYMMDD = (date: Date | null): string => {
+		// Check if date is valid before formatting
+		if (!date || !(date instanceof Date) || isNaN(date.getTime()))
+			return "";
+		const year = date.getFullYear();
+		const month = String(date.getMonth() + 1).padStart(2, "0");
+		const day = String(date.getDate()).padStart(2, "0");
+		return `${year}${month}${day}`;
+	};
+
+	// Helper to safely create Date objects from potentially mixed types (Date or string)
+	const safeCreateDate = (dateInput: string | Date): Date | null => {
+		if (!dateInput) return null;
+		if (dateInput instanceof Date) {
+			return isNaN(dateInput.getTime()) ? null : dateInput;
+		}
+		if (typeof dateInput === "string") {
+			try {
+				const date = new Date(dateInput);
+				return isNaN(date.getTime()) ? null : date;
+			} catch (e) {
+				console.error("Error parsing date string:", dateInput, e);
+				return null;
+			}
+		}
+		return null; // Input is neither Date nor string
+	};
+
+	const tooltipContent = document.createElement("div");
+	tooltipContent.className = "tooltip-content";
+
+	// Calculate end position for tooltip if possible, using layout properties
+	// Use task.x_start and task.x_end as provided by BoardLayouter
+	const x_start_layout = task.x_start ?? 1; // Layouter uses 1-based index
+	const x_end_layout = task.x_end ?? x_start_layout;
+	const y_layout = task.y ?? 0; // Layouter uses 0-based index
+
+	tooltipContent.innerHTML = `
+	   <div><strong>name:</strong> ${task.name || ""}</div>
+	   <div><strong>start:</strong> ${formatDateToYYYYMMDD(
+			safeCreateDate(task.start)
+		)}</div>
+	   <div><strong>end:</strong> ${formatDateToYYYYMMDD(
+			safeCreateDate(task.end)
+		)}</div>
+	   <div><strong>x (layout):</strong> ${x_start_layout}-${x_end_layout}</div>
+	   <div><strong>y (layout):</strong> ${y_layout}</div>
+	   <div><strong>category:</strong> ${task.category || ""}</div>
+	   <div><strong>status:</strong> ${task.status || ""}</div>
+	   <div><strong>priority:</strong> ${task.priority ?? "N/A"}</div>
+	   ${
+			task.totalSubtasks > 0
+				? `<div><strong>subtasks:</strong> ${task.completedSubtasks}/${task.totalSubtasks}</div>`
+				: ""
+		}
+	 `;
+
+	tooltip.appendChild(tooltipContent);
+	card.appendChild(tooltip);
+
+	card.addEventListener("mouseenter", () => {
+		// Calculate position to ensure tooltip stays in view
+		positionTooltip(card, tooltip);
+		tooltip.style.display = "block";
+	});
+
+	card.addEventListener("mouseleave", () => {
+		tooltip.style.display = "none";
+	});
+
+	card.addEventListener("click", async (e) => {
+		e.stopPropagation(); // Prevent event bubbling
+
+		// Assuming filePath exists on the task object from BoardLayouter/TaskManager
+		if (task.filePath) {
+			openTaskFile(task.filePath);
+		} else {
+			console.warn("Task object missing filePath:", task);
+		}
+	});
+
+	// We don't set width here anymore - let the grid layout handle it
+	// This allows cards to properly span multiple columns
+
+	// TODO: Add additional task details and event listeners for interactions.
+	return card;
+}
+
+/**
+ * Opens a task file in the editor
+ */
+function openTaskFile(filePath: string): void {
+	const app = (window as any).app;
+	if (!app) return;
+
+	const file = app.vault.getAbstractFileByPath(filePath);
+	if (!file) {
+		console.error(`File not found at path: ${filePath}`);
+		return;
+	}
+
+	app.workspace.getLeaf("split", "vertical").openFile(file as TFile);
+}
+#######
+
+./src/components/BoardContainer/BoardTimelineHeader.ts
+#######
+import { BoardLayouter } from "../../controllers/BoardLayouter";
+import { BoardManager } from "../../controllers/BoardManager";
+import { BoardGroupingSelection } from "./BoardGroupingSelection";
+
+/**
+ * Renders the timeline header for the board view, displaying time units (such as months or weeks) based on the current view mode. It sets up the grid headers for task alignment.
+ *
+ * Legacy files:
+ * - "./src/components/YearView.ts"
+ * - "./src/layouters/BoardLayouter.ts"
+ * - 
+ */
+
+export function BoardTimelineHeader(layouter: BoardLayouter, boardManager: BoardManager, columnWidth?: number, isDebugMode = false): HTMLElement {
+  const container = document.createElement("div");
+  container.className = isDebugMode ? "debug-board-column-headers" : "board-column-headers";
+  container.style.display = "grid";
+  
+  // Use provided columnWidth or default to 100px
+  const width = columnWidth || 100;
+  // Use fixed width columns to ensure consistent sizing
+  container.style.gridTemplateColumns = `${width}px repeat(${layouter.columnHeaders.length}, ${width}px)`;
+  container.style.gridAutoFlow = "row";
+  container.style.gridAutoColumns = "unset";
+
+  // Create the grouping selection dropdown for the first column (group header column)
+  const groupingSelectionCell = BoardGroupingSelection(boardManager);
+  groupingSelectionCell.style.gridColumn = "1";
+  groupingSelectionCell.style.gridRow = "1";
+  if (isDebugMode) {
+    groupingSelectionCell.classList.add("debug-cell");
+  }
+  container.appendChild(groupingSelectionCell);
+
+  // Modify header cells to start from grid column 2
+  layouter.columnHeaders.forEach((header, index) => {
+    const cellEl = document.createElement("div");
+    cellEl.className = "board-cell";
+    cellEl.textContent = header;
+    cellEl.style.gridColumnStart = (index + 2).toString();
+    cellEl.style.gridRowStart = "1";
+    if (isDebugMode) {
+      cellEl.classList.add("debug-cell");
+    }
+    container.appendChild(cellEl);
+  });
+  return container;
+}
+
+
+#######
+
+./src/components/BoardContainer/BoardTaskGroup.ts
+#######
+/**
+ * Represents the view for a single task group on the board. It arranges tasks into a grid and includes a header indicating the group name.
+ *
+ * Legacy files:
+ * - "./src/components/YearView.ts"
+ * - "./src/layouters/BoardLayouter.ts"
+ * - 
+ */
+
+import { BoardTaskCard } from "./BoardTaskCard";
+import { ITaskdownSettings } from "../../interfaces/ITaskdownSettings"; // Import settings interface
+import { BoardManager } from "../../controllers/BoardManager"; // Import BoardManager type
+
+export function BoardTaskGroup(
+	groupName: string,
+	tasks: any[], // Reverted to any[] to match data from BoardLayouter via BoardContainer
+	gridConfig: {
+		gridWidth: number;
+		gridHeight: number;
+		columnWidth?: number;
+		rowHeight?: number;
+	},
+	settings: ITaskdownSettings,
+	boardManager: BoardManager, // Added boardManager parameter
+	isDebugMode = false
+): HTMLElement {
+	const container = document.createElement("div");
+	container.className = isDebugMode
+		? "debug-board-task-group"
+		: "board-task-group";
+
+	const columnWidth = gridConfig.columnWidth || 100;
+
+	// Calculate the actual maximum row needed by tasks
+	let maxOccupiedRow = 0; 
+	tasks.forEach((task) => {
+		if (!task.invisible) { // Ignore invisible tasks
+			const startY = (task.y ?? 0) + 1; // y is 0-based, grid row is 1-based
+			maxOccupiedRow = Math.max(maxOccupiedRow, startY);
+		}
+	});
+	// Ensure at least one row for the header if there are no tasks
+	const actualGridHeight = Math.max(1, maxOccupiedRow);
+
+	container.style.display = "grid";
+	// Use fixed width columns to ensure consistent sizing
+	container.style.gridTemplateColumns = `${columnWidth}px repeat(${gridConfig.gridWidth}, ${columnWidth}px)`;
+
+	if (gridConfig.rowHeight) {
+		// Use actualGridHeight instead of gridConfig.gridHeight
+		container.style.gridTemplateRows = `repeat(${actualGridHeight}, ${gridConfig.rowHeight}px)`;
+	} else {
+		// Use actualGridHeight instead of gridConfig.gridHeight
+		container.style.gridTemplateRows = `repeat(${actualGridHeight}, auto)`;
+	}
+
+	const header = document.createElement("div");
+	header.className = "group-header";
+	// Use flexbox for header content alignment
+	header.style.display = 'flex';
+	// Align items to the bottom for button placement
+	header.style.alignItems = 'flex-end'; 
+	// Space out text and button, pushing button right
+	header.style.justifyContent = 'space-between'; 
+	// Add some padding for the button
+	header.style.paddingRight = '5px'; 
+	header.style.paddingBottom = '5px'; // Padding at the bottom
+
+	const headerText = document.createElement("span"); // Put text in a span
+	headerText.textContent = groupName;
+	header.appendChild(headerText);
+
+	const addButton = document.createElement("button");
+	addButton.textContent = "+";
+	addButton.className = "add-task-button"; // Add a class for potential styling
+	addButton.style.padding = "0px 5px"; // Minimal padding
+	addButton.style.lineHeight = "1"; // Adjust line height if needed
+	addButton.style.cursor = "pointer";
+	addButton.style.borderRadius = "0"; // Remove rounded corners
+	// No specific margin needed now with flex-end and padding
+
+	addButton.addEventListener('click', async (e) => { // Made async
+		e.stopPropagation(); // Prevent potential parent handlers
+		// Directly call BoardManager to handle task creation
+		try {
+			// Use await since createNewTaskFile is async
+			await boardManager.createNewTaskFile(groupName);
+		} catch (error) {
+			console.error("Error creating task from button:", error);
+			// Optional: Show user notification
+		}
+	});
+	header.appendChild(addButton);
+
+	header.style.gridColumn = "1"; // Header still occupies the first column
+	// Adjust header span to actualGridHeight
+	header.style.gridRow = `1 / span ${actualGridHeight}`; // Header spans calculated rows
+
+	if (isDebugMode) {
+		header.classList.add("debug-cell"); // Keep debug styling if needed
+	}
+
+	container.appendChild(header);
+
+	const occupiedCells = new Set<string>();
+
+	tasks.forEach((task) => {
+		// Re-add check to skip rendering the invisible spacer task from BoardLayouter
+		if (task.invisible) return;
+
+		// Pass settings to BoardTaskCard
+		const card = BoardTaskCard(task, settings, isDebugMode);
+
+		// Offset by 1 since CSS grid column 1 is reserved for the group header.
+		// Use BoardLayouter's 1-based x_start and x_end properties.
+		const startX = (task.x_start ?? 1); // Layouter's x_start is 1-based for data columns
+		const endX = (task.x_end ?? startX); // Default to startX if undefined
+		// Calculate CSS grid column start (minimum 2, because column 1 is the header)
+		const cssGridStartX = Math.max(2, startX + 1);
+		card.style.gridColumnStart = cssGridStartX.toString();
+
+		const span = Math.max(1, endX - startX + 1); // Calculate span, ensure at least 1
+		card.style.gridColumnEnd = `span ${span}`;
+
+		const startY = (task.y ?? 0) + 1; // y is 0-based from layouter, grid row is 1-based
+		card.style.gridRowStart = startY.toString();
+
+		container.appendChild(card);
+
+		// Mark occupied cells based on cssGridStartX and span
+		for (let x = cssGridStartX; x < cssGridStartX + span; x++) {
+			occupiedCells.add(`${x},${startY}`);
+		}
+	});
+
+	return container;
+}
+
+
+#######
+
+./src/components/NavBar/NavBar.ts
+#######
+import { NavTimeLineSelectionProps } from "./NavTimeLineSelection";
+import { createNavTitle } from "./NavTitle";
+import { NavViewsSelection } from "./NavViewsSelection";
+import { createNavTimeLineSelection } from "./NavTimeLineSelection";
+import { NavProjectsSelection } from "./NavProjectsSelection";
+import { NavColorMapSelection } from "./NavColorMapSelection";
+import { SettingsManager } from "../../controllers/SettingsManager"; // Import SettingsManager
+import { BoardManager } from "../../controllers/BoardManager";
+import { TimeUnit } from "../../enums/TimeUnit";
+import { TimeMarkerInfo } from "./NavTimeSlider";
+import { App } from "obsidian"; // Ensure App is imported
+import { TaskDownManager } from "../../controllers/TaskDownManager"; // Added import
+
+// Simple debounce utility function
+function debounce<T extends (...args: any[]) => void>(
+	func: T,
+	wait: number
+): (...args: Parameters<T>) => void {
+	let timeout: ReturnType<typeof setTimeout> | null = null;
+	return (...args: Parameters<T>): void => {
+		const later = () => {
+			timeout = null;
+			func(...args);
+		};
+		if (timeout !== null) {
+			clearTimeout(timeout);
+		}
+		timeout = setTimeout(later, wait);
+	};
+}
+
+export class NavBar {
+	container: HTMLElement;
+	private title: HTMLElement;
+	private projectsSelector: NavProjectsSelection;
+	private colorMapSelector: NavColorMapSelection;
+	private viewsSelector: NavViewsSelection;
+	private timelineContainer: HTMLElement;
+	private version: string;
+	private isDebugActive = false;
+	private settingsManager: SettingsManager; // Store reference
+	private app: App; // Store App reference
+	private boardManager: BoardManager; // Store BoardManager reference for convenience
+	private taskDownManager: TaskDownManager; // Store TaskDownManager reference
+	// Reference to the controls row
+	private controlsRow: HTMLElement;
+	// Reference to the new color map row
+	private colorMapRow: HTMLElement;
+
+	constructor(
+		app: App, 
+		taskDownManager: TaskDownManager, // Changed from BoardManager
+		version: string, 
+		onProjectSelect: (project: string) => void
+	) {
+		this.app = app;
+		this.taskDownManager = taskDownManager; // Store TaskDownManager
+		this.boardManager = taskDownManager.getBoardManager(); 
+		this.settingsManager = taskDownManager.settingsManager;
+		this.version = version;
+		this.container = document.createElement("div");
+		this.container.classList.add("nav-bar");
+
+		const headerRow = document.createElement("div");
+		headerRow.className = "nav-header";
+		const initialTitle = taskDownManager.getCurrentProjectFolder() === "All" ? "All Projects" : taskDownManager.getCurrentProjectFolder();
+		this.title = createNavTitle(initialTitle);
+		headerRow.appendChild(this.title);
+		this.container.appendChild(headerRow);
+
+		// Create and store reference to the controls row
+		this.controlsRow = document.createElement("div");
+		this.controlsRow.className = "nav-controls-row";
+
+		// --- Populate Controls Row ---
+		this.projectsSelector = new NavProjectsSelection(
+			this.app,
+			this.taskDownManager, 
+			onProjectSelect
+		);
+		this.controlsRow.appendChild(this.projectsSelector.element);
+
+		this.viewsSelector = new NavViewsSelection("DayView", (viewName) => {
+			let timeUnit = TimeUnit.DAY;
+			if (viewName.includes("Week")) timeUnit = TimeUnit.WEEK;
+			else if (viewName.includes("Month")) timeUnit = TimeUnit.MONTH;
+			this.taskDownManager.updateCurrentLayout(timeUnit, true);
+			setTimeout(() => { this.setTimeline(); }, 10); 
+		});
+		this.controlsRow.appendChild(this.viewsSelector.element);
+
+		// Append controls row to the main container
+		this.container.appendChild(this.controlsRow);
+
+		// --- Create and Populate Color Map Row ---
+		this.colorMapRow = document.createElement("div");
+		this.colorMapRow.className = "nav-color-map-row"; // New class for styling
+
+		// Instantiate the color map selector
+		this.colorMapSelector = new NavColorMapSelection(this.app, this.taskDownManager);
+		this.colorMapRow.appendChild(this.colorMapSelector.element);
+		
+		// Append the color map row below the controls row
+		this.container.appendChild(this.colorMapRow);
+
+		// --- Event Listeners and Initial Timeline ---
+		taskDownManager.on("board-updated", () => { this.setTimeline(); });
+		taskDownManager.timelineManager.on("viewport-initialized", () => { this.setTimeline(); });
+		taskDownManager.on("projects-updated", (projectFolders: string[], currentProject: string) => {
+			this.updateProjectsUI(projectFolders, currentProject);
+		});
+		taskDownManager.on("project-changed", (currentProject: string) => {
+			this.updateProjectsUI(taskDownManager.getProjectFolders(), currentProject);
+		});
+
+		this.setTimeline(); // Initial timeline setup
+	}
+
+	setViews(selectedView: string, onViewSelect: (view: string) => void) {
+		// Update the views selector
+		this.viewsSelector.updateViews(selectedView);
+
+		// Replace the callback
+		this.viewsSelector = new NavViewsSelection(selectedView, onViewSelect);
+
+		// Replace the element IN THE CONTROLS ROW
+		if (this.controlsRow) {
+			const oldElement = this.controlsRow.querySelector(".nav-views");
+			if (oldElement) {
+				this.controlsRow.replaceChild(
+					this.viewsSelector.element,
+					oldElement
+				);
+			} else {
+				// If no old element, insert after projects selector
+				const projectsEl = this.controlsRow.querySelector(".nav-projects");
+				if (projectsEl) {
+					this.controlsRow.insertBefore(
+						this.viewsSelector.element,
+						projectsEl.nextSibling
+					);
+				} else {
+					// Fallback: insert before debug toggle if it exists
+					this.controlsRow.insertBefore(
+						this.viewsSelector.element,
+						null // Or append if it should be last
+					);
+				}
+			}
+		}
+	}
+
+	/**
+	 * Generates quarterly time markers based on the global date range.
+	 * Moved from NavTimeLineSelection.ts
+	 */
+	private generateTimeMarkers(
+		globalMinDate: Date,
+		globalMaxDate: Date
+	): TimeMarkerInfo[] {
+		// Return empty array since time markers are no longer displayed
+		return [];
+	}
+
+	setTimeline() {
+		const timelineManager = this.taskDownManager.timelineManager;
+		const props: NavTimeLineSelectionProps = {
+			globalMinDate: timelineManager.globalMinDate,
+			globalMaxDate: timelineManager.globalMaxDate,
+			viewportMinDate: timelineManager.localMinDate,
+			viewportMaxDate: timelineManager.localMaxDate,
+			currentDate: timelineManager.currentDate,
+			minimapData: timelineManager.getMinimap(),
+			timeMarkers: this.generateTimeMarkers(
+				timelineManager.globalMinDate,
+				timelineManager.globalMaxDate
+			), // Kept for potential future use, though slider ignores it
+			timeUnit: timelineManager.currentTimeUnit, // Pass the current time unit
+			onViewportChange: (newMinDate: Date, newMaxDate: Date) => {
+				const safeMinDate = new Date(Math.max(timelineManager.globalMinDate.getTime(), newMinDate.getTime()));
+				const safeMaxDate = new Date(Math.min(timelineManager.globalMaxDate.getTime(), newMaxDate.getTime()));
+				
+				// Directly update TimelineManager
+				timelineManager.updateViewport(safeMinDate, safeMaxDate);
+
+				// Use TaskDownManager for external callback/layout update
+				const externalCallback = () => { 
+					this.taskDownManager.updateCurrentLayout(undefined, false); // Don't reinit viewport here
+				};
+
+				if (timelineManager.currentTimeUnit === TimeUnit.MONTH) {
+					externalCallback(); // Call immediately for month view
+				} else {
+					// Debounce for other views
+					if (!this.debouncedExternalViewportChange) {
+						this.debouncedExternalViewportChange = debounce(externalCallback, 200); // 200ms debounce
+					}
+					this.debouncedExternalViewportChange(safeMinDate, safeMaxDate);
+				}
+			}
+		};
+
+		if (this.timelineContainer) {
+			this.timelineContainer.remove();
+		}
+		this.timelineContainer = createNavTimeLineSelection(props);
+		this.container.appendChild(this.timelineContainer);
+	}
+
+	private debouncedExternalViewportChange:
+		| ((minDate: Date, maxDate: Date) => void)
+		| null = null;
+
+	// Method to update NavBar's project-related UI elements (title, dropdown selection)
+	public updateProjectsUI(
+		projectFolders: string[], // List of actual project folders (excluding "All")
+		selectedProject: string // The currently selected project ("All" or specific)
+	) {
+		// Update the projects dropdown
+		this.projectsSelector.updateProjects(projectFolders, selectedProject);
+
+		// Update the title based on the selected project
+		const titleText = selectedProject === "All" ? "All Projects" : selectedProject;
+		this.updateTitle(titleText);
+	}
+
+	// Add method to update title text
+	public updateTitle(text: string) {
+		if (this.title) {
+			this.title.textContent = text;
+		}
+	}
+
+	// Method to explicitly trigger a UI update based on current TaskDownManager state
+	public triggerProjectsUpdate(): void {
+		const projectFolders = this.taskDownManager.getProjectFolders();
+		const currentProject = this.taskDownManager.getCurrentProjectFolder();
+		this.updateProjectsUI(projectFolders, currentProject);
+	}
+
+	get element(): HTMLElement {
+		return this.container;
+	}
+}
+#######
+
+./src/components/NavBar/NavProjectsSelection.ts
+#######
+/**
+ * Handles the rendering and interaction of project selection using Obsidian's DropdownComponent.
+ * Displays a list of projects from the BoardManager and highlights the currently selected project.
+ *
+ * Used by the NavBar component to create and manage project selection.
+ */
+
+// import { BoardManager } from "../../controllers/BoardManager"; // Consider if this should be TaskManager or TaskDownManager now - Removed unused import
+// import { TaskManager } from "../../controllers/TaskManager"; // No longer needed directly
+import { DropdownComponent, App, Notice } from "obsidian"; // Added App and Notice import
+import { NewProjectModal } from "../../modals/NewProjectModal"; // Import the new modal
+import { TaskDownManager } from "../../controllers/TaskDownManager"; // Import TaskDownManager
+
+const NEW_FOLDER_VALUE = "__NEW_FOLDER__"; // Constant for the special value
+
+export class NavProjectsSelection {
+    element: HTMLElement; // This remains the container div
+    private projects: string[];
+    private currentProject: string;
+    private onProjectSelected: (project: string) => void;
+    private dropdown: DropdownComponent | null = null; // Store the component instance
+    // Keep references if needed for updates, or rely on external calls
+    private app: App; 
+    private taskDownManager: TaskDownManager; // Store TaskDownManager reference
+    // private taskManager: TaskManager; // Removed TaskManager reference
+
+    constructor(
+        app: App, // Added App
+        taskDownManager: TaskDownManager, // Changed from TaskManager
+        onProjectSelected: (project: string) => void
+    ) {
+        this.element = document.createElement("div");
+        this.element.className = "nav-projects"; // Container div
+        this.app = app;
+        this.taskDownManager = taskDownManager; // Store it
+
+        // Initialize with only "All" and current state
+        this.projects = ["All"]; 
+        this.currentProject = taskDownManager.getCurrentProjectFolder() || "All";
+        this.onProjectSelected = onProjectSelected;
+        // Restore initial render
+        this.render(); 
+    }
+
+    private render() {
+        const previouslySelected = this.currentProject; // Store the actual current project before potentially changing
+        this.element.empty(); // Clear the container
+
+        // Create and configure the DropdownComponent
+        this.dropdown = new DropdownComponent(this.element);
+
+        // Add "All" and other projects
+        this.projects.forEach((project) => {
+            this.dropdown?.addOption(project, project);
+        });
+
+        // Add separator and "New Folder..." option
+        this.dropdown?.addOption(NEW_FOLDER_VALUE, "───────"); // Visual separator
+        this.dropdown?.selectEl.lastElementChild?.setAttr('disabled', 'true'); // Disable separator
+        this.dropdown?.addOption(NEW_FOLDER_VALUE, "New Folder..."); 
+
+        // Set the current value (should be the actual active project, not NEW_FOLDER)
+        if (this.currentProject && this.projects.includes(this.currentProject)) {
+            this.dropdown?.setValue(this.currentProject);
+        } else {
+             this.dropdown?.setValue("All"); // Fallback if current is invalid
+        }
+
+        this.dropdown?.onChange(async (value) => {
+            if (value === NEW_FOLDER_VALUE) {
+                // Handle new folder creation
+                await this.handleNewFolderCreation();
+                // Reset dropdown to the previously selected project
+                this.dropdown?.setValue(previouslySelected);
+            } else {
+                 // Update internal state and trigger callback for actual project selection
+                 this.currentProject = value; 
+                 if (this.onProjectSelected) {
+                     this.onProjectSelected(value);
+                 }
+            }
+        });
+
+        // Apply specific class for potential styling overrides if needed
+        this.dropdown?.selectEl.addClass("nav-projects-select");
+
+        // No need to manually append, DropdownComponent handles it
+    }
+
+    // Method to handle the new folder creation logic - Now opens the modal
+    private async handleNewFolderCreation(): Promise<void> {
+        new NewProjectModal(this.app, async (folderName) => {
+            // This code runs when the modal is submitted
+            const initialName = folderName; // Already trimmed by modal
+            
+            // Basic sanitization
+            const sanitizedName = initialName.replace(/[/\\:*?"<>|]/g, '').trim();
+            
+            if (sanitizedName !== initialName) {
+                 new Notice(`Folder name sanitized to: "${sanitizedName}"`);
+            }
+            if (!sanitizedName) {
+                new Notice("Invalid folder name after sanitization (resulted in empty string).");
+                return;
+            }
+
+            // Get task directory from TaskDownManager's settingsManager
+            const taskDirectory = this.taskDownManager.settingsManager.settings.taskDirectory;
+            if (!taskDirectory) {
+                new Notice("Task directory not configured in settings.");
+                return;
+            }
+
+            const newFolderPath = `${taskDirectory}/${sanitizedName}`;
+
+            try {
+                const existingFolder = this.app.vault.getAbstractFileByPath(newFolderPath);
+                if (existingFolder) {
+                     new Notice(`Folder "${sanitizedName}" already exists.`);
+                     return;
+                }
+
+                await this.app.vault.createFolder(newFolderPath);
+                new Notice(`Folder "${sanitizedName}" created successfully.`);
+
+                // Trigger TaskDownManager to update its project list
+                // This will emit the 'projects-updated' event, updating the UI
+                await this.taskDownManager.updateProjects();
+
+                // No need to manually update dropdown here, event will handle it
+                // const updatedFolders = this.getProjectFolders(this.app, this.settingsManager);
+                // this.updateProjects(updatedFolders);
+                // this.dropdown?.setValue(this.currentProject); 
+
+            } catch (error) {
+                new Notice(`Error creating folder: ${error.message}`);
+                console.error("Error creating folder:", error);
+            }
+        }).open(); // Open the modal
+    }
+
+    updateProjects(projectFolders: string[], currentProject: string) {
+        this.projects = ["All", ...projectFolders]; 
+        this.currentProject = currentProject; // Update internal current project state
+        this.render(); // Re-render to reflect changes
+    }
+}
+#######
+
+./src/components/NavBar/NavMinimap.ts
+#######
+import { IMinimapEntry } from "../../interfaces/ITimeline";
+
+/**
+ * Input properties for the NavMinimap component
+ */
+export interface NavMinimapProps {
+  minimapData: IMinimapEntry[];
+  globalMinDate: Date;
+  globalMaxDate: Date;
+}
+
+/**
+ * Creates a visualization of task distribution across the timeline.
+ * 
+ * @param props - Input properties for the minimap visualization
+ * @returns HTMLElement - The minimap visualization component
+ */
+export function createNavMinimap(props: NavMinimapProps): HTMLElement {
+  const container = document.createElement("div");
+  container.className = "nav-minimap";
+
+  // Basic validation
+  if (!props || !props.minimapData || !Array.isArray(props.minimapData) || !props.minimapData.length) {
+    const emptyState = document.createElement("div");
+    emptyState.className = "minimap-empty-state";
+    emptyState.textContent = "No timeline data available";
+    container.appendChild(emptyState);
+    return container;
+  }
+
+  // Validate date ranges
+  if (!props.globalMinDate || !props.globalMaxDate || 
+      isNaN(props.globalMinDate.getTime()) || isNaN(props.globalMaxDate.getTime())) {
+    const emptyState = document.createElement("div");
+    emptyState.className = "minimap-empty-state";
+    emptyState.textContent = "Invalid date range";
+    container.appendChild(emptyState);
+    return container;
+  }
+
+  // Find max count for normalization (ensure at least 1 to avoid division by zero)
+  const maxCount = Math.max(...props.minimapData.map((entry) => {
+    // Make sure entry and count are valid
+    return entry && typeof entry.count === 'number' ? entry.count : 0;
+  }), 1);
+
+  // Create the minimap visualization container
+  const visualization = document.createElement("div");
+  visualization.className = "minimap-visualization";
+
+  // Create squares for the minimap
+  props.minimapData.forEach((entry) => {
+    // Skip invalid entries
+    if (!entry || !entry.date || isNaN(entry.date.getTime())) {
+      return;
+    }
+
+    const square = document.createElement("div");
+    square.className = "minimap-square";
+
+    // Calculate grayscale color (white for zero, black for max)
+    // Ensure colorValue is within 0-255 range
+    const count = typeof entry.count === 'number' ? entry.count : 0;
+    const normalizedCount = Math.max(0, Math.min(1, count / maxCount));
+    const colorValue = Math.round(255 - normalizedCount * 255);
+    const colorHex = colorValue.toString(16).padStart(2, '0');
+    square.style.backgroundColor = `#${colorHex}${colorHex}${colorHex}`;
+
+    // Add tooltip with date and count information
+    try {
+      square.title = `${entry.date.toLocaleDateString()}: ${count} tasks`;
+    } catch (e) {
+      square.title = `Unknown date: ${count} tasks`;
+    }
+
+    visualization.appendChild(square);
+  });
+
+  container.appendChild(visualization);
+
+  return container;
+} #######
+
+./src/components/NavBar/NavTimeLineSelection.ts
+#######
+import { TimeUnit } from "../../enums/TimeUnit"; // Import TimeUnit
+import { IMinimapEntry } from "../../interfaces/ITimeline";
+import { createNavMinimap, NavMinimapProps } from "./NavMinimap";
+// Import TimeUnit from NavTimeSlider as well if needed, or rely on the one above
+import { createNavTimeSlider, NavTimeSliderProps, TimeMarkerInfo as TimeMarkerInfoType } from "./NavTimeSlider";
+
+// --- Interfaces ---
+
+/**
+ * Represents a pre-calculated time marker for display.
+ */
+export type TimeMarkerInfo = TimeMarkerInfoType;
+
+/**
+ * Input properties for the NavTimeLineSelection component.
+ */
+export interface NavTimeLineSelectionProps {
+	globalMinDate: Date;
+	globalMaxDate: Date;
+	viewportMinDate: Date;
+	viewportMaxDate: Date;
+	currentDate: Date;
+	minimapData: IMinimapEntry[];
+	timeMarkers: TimeMarkerInfo[]; // Keep for now, though NavTimeSlider doesn't use it directly anymore
+	timeUnit: TimeUnit; // Add timeUnit prop
+	// Callback triggered frequently during drag, providing the desired new viewport
+	onViewportChange: (newMinDate: Date, newMaxDate: Date) => void;
+}
+
+// --- Main Component Function ---
+
+/**
+ * Creates a stateless timeline selection component for the navigation bar.
+ * Combines the minimap and time slider components to visualize and navigate the timeline.
+ *
+ * @param props - Input properties for rendering the timeline.
+ * @returns HTMLElement - The timeline selection component.
+ */
+export function createNavTimeLineSelection(
+	props: NavTimeLineSelectionProps
+): HTMLElement {
+	const container = document.createElement("div");
+	const title = "Timeline";
+	container.className = "nav-timeline-selection";
+
+	// Basic validation for required data
+	if (
+		!props.globalMinDate ||
+		!props.globalMaxDate ||
+		props.globalMinDate >= props.globalMaxDate
+	) {
+		container.textContent = "Timeline data unavailable.";
+		return container;
+	}
+
+	// Create the minimap component
+	const minimapProps: NavMinimapProps = {
+		minimapData: props.minimapData,
+		globalMinDate: props.globalMinDate,
+		globalMaxDate: props.globalMaxDate
+	};
+	const minimap = createNavMinimap(minimapProps);
+	
+	// Create the time slider component
+	const timeSliderProps: NavTimeSliderProps = {
+		globalMinDate: props.globalMinDate,
+		globalMaxDate: props.globalMaxDate,
+		viewportMinDate: props.viewportMinDate,
+		viewportMaxDate: props.viewportMaxDate,
+		currentDate: props.currentDate,
+		// timeMarkers: props.timeMarkers, // NavTimeSlider generates its own ticks now
+		timeUnit: props.timeUnit, // Pass timeUnit down
+		onViewportChange: props.onViewportChange
+	};
+	const timeSlider = createNavTimeSlider(timeSliderProps);
+
+	// Assemble the components
+	const titleElement = document.createElement("h3");
+	titleElement.textContent = title;
+	container.appendChild(titleElement);
+	container.appendChild(minimap);
+	container.appendChild(timeSlider);
+
+	return container;
+}
+#######
+
+./src/components/NavBar/NavTimeSlider.ts
+#######
+/**
+ * Represents a pre-calculated time marker for display
+ */
+export interface TimeMarkerInfo {
+  positionPercent: number; // Position as a percentage from the start
+  label: string; // Text label for the marker (e.g., date)
+}
+
+/**
+ * Input properties for the NavTimeSlider component
+ */
+export interface NavTimeSliderProps {
+  globalMinDate: Date;
+  globalMaxDate: Date;
+  viewportMinDate: Date;
+  viewportMaxDate: Date;
+  currentDate: Date; // The current actual date
+  timeUnit: TimeUnit; // The current time unit view (Day, Week, Month)
+  // timeMarkers: TimeMarkerInfo[]; // Removed as we'll generate ticks dynamically
+  onViewportChange: (newMinDate: Date, newMaxDate: Date) => void; // Callback for when viewport changes
+}
+
+// Type for tracking drag state
+interface DragState {
+  startX: number;
+  startLeftPercent: number;
+  trackWidth: number;
+  isDragging: boolean;
+}
+
+import { TimeUnit } from "../../enums/TimeUnit";
+import { addTime, normalizeDate } from "../../utils/dateUtils";
+
+/**
+ * Creates a timeline slider component for navigating the date range.
+ * Includes a draggable viewport selector, current date indicator, and time unit tick marks.
+ * Also displays hover information (position, date) on the track.
+ *
+ * @param props - Input properties for the time slider.
+ * @returns HTMLElement - The time slider component.
+ */
+export function createNavTimeSlider(props: NavTimeSliderProps): HTMLElement {
+  const container = document.createElement("div");
+  container.className = "nav-time-slider";
+
+  // Basic validation
+  if (!props.globalMinDate || !props.globalMaxDate || props.globalMinDate >= props.globalMaxDate) {
+    const errorElement = document.createElement("div");
+    errorElement.className = "slider-error";
+    errorElement.textContent = "Invalid date range";
+    container.appendChild(errorElement);
+    return container;
+  }
+
+  // Calculate total duration for percentage calculations
+  const globalDurationMs = Math.max(1, props.globalMaxDate.getTime() - props.globalMinDate.getTime());
+
+  // Create the track that holds all slider elements
+  const track = document.createElement("div");
+  track.className = "slider-track";
+
+  // Add tick marks based on the time unit
+  const tickMarksContainer = createTickMarks(
+    props.globalMinDate,
+    props.globalMaxDate,
+    globalDurationMs,
+    props.timeUnit
+  );
+  track.appendChild(tickMarksContainer);
+
+  // Add current date indicator
+  const currentDateIndicator = createCurrentDateIndicator(
+    props.currentDate,
+    props.globalMinDate,
+    globalDurationMs
+  );
+  track.appendChild(currentDateIndicator);
+
+  // Create the viewport selector with drag functionality
+  const viewportSelector = createViewportSelector(
+    props.viewportMinDate,
+    props.viewportMaxDate,
+    props.globalMinDate,
+    props.globalMaxDate,
+    globalDurationMs,
+    props.onViewportChange
+  );
+  track.appendChild(viewportSelector);
+
+  container.appendChild(track);
+
+  // Add hover tooltip functionality to the track
+  setupTrackHover(track, props.globalMinDate, globalDurationMs);
+
+  return container;
+}
+
+/**
+ * Creates an indicator for the current date
+ */
+function createCurrentDateIndicator(
+  currentDate: Date,
+  globalMinDate: Date,
+  globalDurationMs: number
+): HTMLElement {
+  const indicator = document.createElement("div");
+  indicator.className = "current-date-indicator";
+
+  // Calculate position as percentage of total timeline
+  const currentMs = currentDate.getTime() - globalMinDate.getTime();
+  const positionPercent = Math.max(0, Math.min(100, (currentMs / globalDurationMs) * 100));
+
+  indicator.style.left = `${positionPercent}%`;
+  
+  // Add tooltip with the current date
+  indicator.title = `Current: ${currentDate.toLocaleDateString()}`;
+
+  return indicator;
+}
+
+/**
+ * Calculates the slider position and width as percentages based on dates
+ */
+function calculateSliderStyle(
+  viewportMinDate: Date,
+  viewportMaxDate: Date,
+  globalMinDate: Date,
+  globalDurationMs: number
+): { left: number; width: number } {
+  const startMs = viewportMinDate.getTime() - globalMinDate.getTime();
+  const endMs = viewportMaxDate.getTime() - globalMinDate.getTime();
+
+  // Calculate percentages
+  const startPercent = (startMs / globalDurationMs) * 100;
+  const endPercent = (endMs / globalDurationMs) * 100;
+  let widthPercent = endPercent - startPercent;
+
+  // Constrain to valid ranges [0, 100]
+  const left = Math.max(0, Math.min(100, startPercent));
+  // Ensure width doesn't make the selector exceed 100%
+  widthPercent = Math.max(5, Math.min(100 - left, widthPercent)); // Minimum width of 5%
+
+  return { left, width: widthPercent };
+}
+
+/**
+ * Creates a draggable timeline viewport selector
+ */
+function createViewportSelector(
+  viewportMinDate: Date,
+  viewportMaxDate: Date,
+  globalMinDate: Date,
+  globalMaxDate: Date,
+  globalDurationMs: number,
+  onViewportChange: (newMinDate: Date, newMaxDate: Date) => void
+): HTMLElement {
+  const container = document.createElement("div");
+  container.className = "viewport-selector-container";
+
+  const selector = document.createElement("div");
+  selector.className = "viewport-selector";
+
+  // Calculate initial style and viewport width in ms
+  const initialStyle = calculateSliderStyle(
+    viewportMinDate,
+    viewportMaxDate,
+    globalMinDate,
+    globalDurationMs
+  );
+  const viewportWidthMs = Math.max(1, viewportMaxDate.getTime() - viewportMinDate.getTime());
+
+  selector.style.left = `${initialStyle.left}%`;
+  selector.style.width = `${initialStyle.width}%`;
+
+  // Add date range tooltip
+  selector.title = `${viewportMinDate.toLocaleDateString()} - ${viewportMaxDate.toLocaleDateString()}`;
+
+  // Add handles for resizing
+  const leftHandle = document.createElement("div");
+  leftHandle.className = "handle left-handle";
+  
+  const rightHandle = document.createElement("div");
+  rightHandle.className = "handle right-handle";
+
+  selector.appendChild(leftHandle);
+  selector.appendChild(rightHandle);
+
+  // Set up drag handlers
+  setupDragHandlers(
+    selector,
+    container,
+    globalMinDate,
+    globalMaxDate,
+    globalDurationMs,
+    viewportWidthMs,
+    onViewportChange
+  );
+
+  container.appendChild(selector);
+  return container;
+}
+
+/**
+ * Setup drag event handlers for the viewport selector
+ */
+function setupDragHandlers(
+  selector: HTMLElement,
+  container: HTMLElement,
+  globalMinDate: Date,
+  globalMaxDate: Date,
+  globalDurationMs: number,
+  viewportWidthMs: number,
+  onViewportChange: (newMinDate: Date, newMaxDate: Date) => void
+): void {
+  let dragState: DragState | null = null;
+  let animationFrameId: number | null = null;
+
+  // Get the width of the track element
+  const getTrackWidth = (): number => {
+    const trackElement = container.closest(".slider-track");
+    if (!trackElement) {
+      return 0;
+    }
+    const trackRect = trackElement.getBoundingClientRect();
+    return trackRect.width > 0 ? trackRect.width : 0;
+  };
+
+  // Handle drag start event
+  const handleDragStart = (e: MouseEvent | TouchEvent): void => {
+    // Prevent default to avoid text selection during drag
+    e.preventDefault();
+
+    // Get the current left position from the style
+    const currentLeftStyle = selector.style.left;
+    const startLeftPercent = currentLeftStyle.endsWith("%")
+      ? parseFloat(currentLeftStyle.slice(0, -1))
+      : 0;
+
+    // Store initial state for the drag operation
+    dragState = {
+      startX: "touches" in e ? e.touches[0].clientX : e.clientX,
+      startLeftPercent,
+      trackWidth: getTrackWidth(),
+      isDragging: true
+    };
+
+    // Add dragging class to the selector
+    selector.classList.add("dragging");
+
+    // Attach move and end event listeners
+    if ("touches" in e) {
+      // Touch events
+      document.addEventListener("touchmove", handleDragMove, { passive: false });
+      document.addEventListener("touchend", handleDragEnd);
+      document.addEventListener("touchcancel", handleDragEnd);
+    } else {
+      // Mouse events
+      document.addEventListener("mousemove", handleDragMove);
+      document.addEventListener("mouseup", handleDragEnd);
+    }
+  };
+
+  // Handle drag move event
+  const handleDragMove = (e: MouseEvent | TouchEvent): void => {
+    e.preventDefault(); // Prevent scrolling on touch devices
+
+    if (!dragState || !dragState.isDragging) return;
+
+    // Get current position
+    const currentX = "touches" in e ? e.touches[0].clientX : e.clientX;
+
+    // Use requestAnimationFrame for smooth animation
+    if (animationFrameId === null) {
+      animationFrameId = requestAnimationFrame(() => {
+        if (dragState) {
+          updateSelectorPosition(
+            currentX,
+            selector,
+            dragState,
+            globalMinDate,
+            globalDurationMs,
+            viewportWidthMs,
+            onViewportChange
+          );
+        }
+        animationFrameId = null;
+      });
+    }
+  };
+
+  // Handle drag end event
+  const handleDragEnd = (): void => {
+    if (!dragState) return;
+
+    // Clean up
+    selector.classList.remove("dragging");
+    dragState.isDragging = false;
+    dragState = null;
+
+    // Remove event listeners
+    document.removeEventListener("mousemove", handleDragMove);
+    document.removeEventListener("mouseup", handleDragEnd);
+    document.removeEventListener("touchmove", handleDragMove);
+    document.removeEventListener("touchend", handleDragEnd);
+    document.removeEventListener("touchcancel", handleDragEnd);
+
+    // Cancel any pending animation frame
+    if (animationFrameId !== null) {
+      cancelAnimationFrame(animationFrameId);
+      animationFrameId = null;
+    }
+  };
+
+  // Attach the initial event listeners
+  selector.addEventListener("mousedown", handleDragStart);
+  selector.addEventListener("touchstart", handleDragStart, { passive: false });
+}
+
+/**
+ * Update the selector position based on drag movement and trigger callback
+ */
+function updateSelectorPosition(
+  currentX: number,
+  selector: HTMLElement,
+  dragState: DragState,
+  globalMinDate: Date,
+  globalDurationMs: number,
+  viewportWidthMs: number,
+  onViewportChange: (newMinDate: Date, newMaxDate: Date) => void
+): void {
+  const { startX, startLeftPercent, trackWidth } = dragState;
+
+  if (trackWidth <= 0) return; // Safety check
+
+  // Calculate movement delta
+  const deltaX = currentX - startX;
+  const deltaPercent = (deltaX / trackWidth) * 100;
+
+  // Calculate new theoretical position
+  let newLeftPercent = startLeftPercent + deltaPercent;
+
+  // Get current width from selector style
+  const widthStyle = selector.style.width;
+  let widthPercent = 5; // Default minimum width
+  if (widthStyle.endsWith("%")) {
+    const parsedWidth = parseFloat(widthStyle.slice(0, -1));
+    if (!isNaN(parsedWidth) && parsedWidth > 0) {
+      widthPercent = parsedWidth;
+    }
+  }
+
+  // Constrain position within track bounds [0, 100 - width]
+  newLeftPercent = Math.max(0, Math.min(100 - widthPercent, newLeftPercent));
+
+  // Update the visual position
+  selector.style.left = `${newLeftPercent}%`;
+
+  // Calculate new dates based on position
+  const newMinMs = (newLeftPercent / 100) * globalDurationMs + globalMinDate.getTime();
+  const newMinDate = new Date(newMinMs);
+  
+  // Ensure max date doesn't exceed global max by clamping viewport width if necessary
+  const effectiveViewportWidthMs = Math.min(
+    viewportWidthMs,
+    globalDurationMs - (newMinMs - globalMinDate.getTime())
+  );
+  const newMaxDate = new Date(newMinMs + effectiveViewportWidthMs);
+
+  // Update the tooltip
+  selector.title = `${newMinDate.toLocaleDateString()} - ${newMaxDate.toLocaleDateString()}`;
+
+  // Trigger callback with new dates
+  onViewportChange(newMinDate, newMaxDate);
+}
+
+// ==========================================================================
+// Tick Mark Generation
+// ==========================================================================
+
+/**
+ * Creates a container with tick marks based on the time unit.
+ */
+function createTickMarks(
+  globalMinDate: Date,
+  globalMaxDate: Date,
+  globalDurationMs: number,
+  timeUnit: TimeUnit
+): HTMLElement {
+  const container = document.createElement("div");
+  container.className = "slider-tick-marks-container";
+
+  const startDate = normalizeDate(globalMinDate);
+  const endDate = normalizeDate(globalMaxDate);
+
+  let currentDate = startDate;
+
+  while (currentDate <= endDate) {
+    const timeSinceStartMs = currentDate.getTime() - globalMinDate.getTime();
+    const positionPercent = Math.max(0, Math.min(100, (timeSinceStartMs / globalDurationMs) * 100));
+
+    // Only add tick if it's within the visible range (0-100%)
+    // Add a small tolerance for floating point comparisons
+    if (positionPercent >= -0.01 && positionPercent <= 100.01) {
+        const tick = document.createElement("div");
+        tick.className = "slider-tick-mark";
+        tick.style.left = `${positionPercent}%`;
+        // Optional: Add label or different style based on unit significance (e.g., start of month)
+        // tick.title = currentDate.toLocaleDateString(); // Example tooltip
+        container.appendChild(tick);
+    }
+
+
+    // Increment date based on time unit
+    if (timeUnit === TimeUnit.DAY) {
+      currentDate = addTime(currentDate, 1, TimeUnit.DAY);
+    } else if (timeUnit === TimeUnit.WEEK) {
+      // Move to the next Monday
+      const dayOfWeek = currentDate.getDay(); // 0 = Sunday, 1 = Monday, ...
+      const daysToAdd = dayOfWeek === 0 ? 1 : 8 - dayOfWeek; // If Sunday, add 1 day; else add days to reach next Monday
+      currentDate = addTime(currentDate, daysToAdd, TimeUnit.DAY);
+    } else if (timeUnit === TimeUnit.MONTH) {
+      // Move to the first day of the next month
+      currentDate = addTime(currentDate, 1, TimeUnit.MONTH);
+      currentDate.setDate(1); // Ensure it's the first day
+    } else {
+      // Fallback or unknown unit, advance by day to avoid infinite loop
+      currentDate = addTime(currentDate, 1, TimeUnit.DAY);
+    }
+  }
+
+  return container;
+}
+
+
+// ==========================================================================
+// Track Hover Tooltip
+// ==========================================================================
+
+/**
+ * Sets up mousemove and mouseleave listeners on the track to display hover info.
+ */
+function setupTrackHover(
+    track: HTMLElement,
+    globalMinDate: Date,
+    globalDurationMs: number
+): void {
+    let trackWidth = 0;
+
+    const updateTooltip = (event: MouseEvent) => {
+        if (trackWidth <= 0) {
+            const rect = track.getBoundingClientRect();
+            trackWidth = rect.width;
+            if (trackWidth <= 0) return; // Still zero, can't calculate
+        }
+
+        const offsetX = event.offsetX;
+        const percentX = Math.max(0, Math.min(100, (offsetX / trackWidth) * 100));
+        const hoverDateMs = globalMinDate.getTime() + (percentX / 100) * globalDurationMs;
+        const hoverDate = new Date(hoverDateMs);
+
+        track.title = `X: ${offsetX}px (${percentX.toFixed(1)}%) | Date: ${hoverDate.toLocaleDateString()}`;
+    };
+
+    const clearTooltip = () => {
+        track.title = ""; // Clear tooltip on mouse leave
+        trackWidth = 0; // Reset track width cache
+    };
+
+    track.addEventListener("mousemove", updateTooltip);
+    track.addEventListener("mouseleave", clearTooltip);
+
+    // Consider ResizeObserver if track width can change dynamically without mouseleave/enter
+    // const resizeObserver = new ResizeObserver(() => {
+    //     trackWidth = track.getBoundingClientRect().width;
+    // });
+    // resizeObserver.observe(track);
+    // Remember to disconnect observer when element is removed
+}#######
+
+./src/components/NavBar/NavColorMapSelection.ts
+#######
+import { App, DropdownComponent, Menu } from "obsidian";
+import { TaskDownManager } from "../../controllers/TaskDownManager";
+import { SettingsManager } from "../../controllers/SettingsManager";
+import { TaskManager } from "../../controllers/TaskManager";
+import { ITaskdownSettings } from "../../interfaces/ITaskdownSettings";
+import { TaskCardColor, getTaskCardColors } from "../../enums/TaskCardColor";
+
+// Helper function to get the enum key (name) from its value
+function getColorName(colorValue: TaskCardColor): string {
+    return Object.keys(TaskCardColor).find(key => TaskCardColor[key as keyof typeof TaskCardColor] === colorValue) || colorValue;
+}
+
+export class NavColorMapSelection {
+    private app: App;
+    private taskDownManager: TaskDownManager;
+    private settingsManager: SettingsManager;
+    private taskManager: TaskManager;
+    public element: HTMLElement;
+    private controlsContainer: HTMLElement;
+    private variableDropdown: DropdownComponent | null = null;
+    private valueColorPickersContainer: HTMLElement | null = null;
+
+    constructor(app: App, taskDownManager: TaskDownManager) {
+        this.app = app;
+        this.taskDownManager = taskDownManager;
+        this.settingsManager = taskDownManager.settingsManager;
+        this.taskManager = taskDownManager.taskManager;
+
+        this.element = document.createElement("div");
+        this.element.classList.add("nav-color-map-selection");
+
+        this.controlsContainer = this.element.createDiv({ cls: "nav-color-map-controls" });
+
+        this.createVariableSelector();
+        this.createValueColorPickers();
+
+        this.settingsManager.on("settingsChanged", this.handleSettingsChange);
+        this.taskManager.on("tasksChanged", this.handleTasksChange);
+    }
+
+    private createVariableSelector() {
+        this.variableDropdown?.selectEl.parentElement?.remove();
+        this.variableDropdown = null;
+        
+        const dropdownContainer = this.controlsContainer.createDiv({ cls: "nav-dropdown-container" });
+        this.variableDropdown = new DropdownComponent(dropdownContainer);
+        this.variableDropdown.selectEl.classList.add("dropdown", "nav-dropdown");
+
+        const options: Partial<Record<ITaskdownSettings['colorVariable'], string>> = {
+            'none': 'None',
+            'category': 'Category',
+            'status': 'Status',
+        };
+
+        for (const [value, display] of Object.entries(options)) {
+            this.variableDropdown.addOption(value as ITaskdownSettings['colorVariable'], display!);
+        }
+
+        this.variableDropdown.setValue('none'); 
+
+        this.variableDropdown.onChange(async (value) => {
+            const newVariable = value as ITaskdownSettings['colorVariable'];
+            if (this.settingsManager.settings.colorVariable !== newVariable) {
+                this.settingsManager.settings.colorVariable = newVariable;
+                await this.settingsManager.saveSettings();
+                this.createValueColorPickers();
+            }
+        });
+    }
+
+     private createValueColorPickers() {
+        this.valueColorPickersContainer?.remove();
+        this.valueColorPickersContainer = this.controlsContainer.createDiv({ cls: "nav-value-color-pickers" });
+
+        const currentVariable = this.settingsManager.settings.colorVariable;
+        if (currentVariable === 'none') {
+            this.valueColorPickersContainer.setText("Coloring disabled.");
+            return;
+        }
+
+        const uniqueValues = this.taskManager.getUniqueValuesForVariable(currentVariable);
+        const currentMappings = this.settingsManager.settings.colorMappings || {};
+        const availableColors = getTaskCardColors();
+
+        if (uniqueValues.length === 0) {
+             this.valueColorPickersContainer.setText(`No values found for ${currentVariable}.`);
+            return;
+        }
+
+        uniqueValues.forEach(value => {
+            const colorPickerButton = this.valueColorPickersContainer!.createEl("button", {
+                cls: "nav-color-picker-button",
+                attr: { 'data-value': value }
+            });
+            
+            colorPickerButton.textContent = value;
+
+            const currentColor = currentMappings[value];
+            if (currentColor) {
+                colorPickerButton.style.setProperty('--button-color', currentColor);
+            } else {
+                 colorPickerButton.style.removeProperty('--button-color');
+            }
+            
+            colorPickerButton.setAttribute('aria-label', `Set color for ${value}`);
+						
+            colorPickerButton.onclick = (event) => {
+                 if (event.target instanceof HTMLElement) {
+                    this.showColorPickerPopover(event.target, value, availableColors, currentMappings);
+                 }
+            };
+        });
+    }
+
+		private showColorPickerPopover(targetElement: HTMLElement, value: string, availableColors: TaskCardColor[], currentMappings: Record<string, TaskCardColor>) {
+			const menu = new Menu();
+
+            menu.addItem((item) => {
+                item
+                    .setTitle("None")
+                    .setIcon("cross")
+                    .onClick(async () => {
+                        delete this.settingsManager.settings.colorMappings[value];
+                        targetElement.style.removeProperty('--button-color'); 
+                        await this.settingsManager.saveSettings();
+                    });
+            });
+
+            menu.addSeparator();
+
+			availableColors.forEach(color => {
+                const colorName = getColorName(color);
+				menu.addItem((item) => {
+                    const swatch = createSpan({ cls: "nav-color-swatch" });
+                    swatch.style.backgroundColor = color;
+
+                    item.setTitle(colorName);
+                    
+                    // Prepend the swatch element to the menu item's DOM
+                    if ((item as any).dom) {
+                        (item as any).dom.prepend(swatch);
+                    } else {
+                        console.warn("MenuItem DOM element not found via .dom. Swatch not prepended.");
+                        // Basic fallback if .dom is unavailable
+                         item.setTitle(swatch.outerHTML + colorName); 
+                    }
+
+                    item.onClick(async () => {
+                        this.settingsManager.settings.colorMappings[value] = color;
+                        targetElement.style.setProperty('--button-color', color); 
+                        await this.settingsManager.saveSettings();
+                    });
+                });
+			});
+
+            const rect = targetElement.getBoundingClientRect();
+            menu.showAtPosition({ x: rect.left, y: rect.bottom + 5 }); 
+		}
+
+    private handleSettingsChange = () => {
+        // Update variable selector if needed (removed for now, always defaults to None)
+        // const currentSettingValue = this.settingsManager.settings.colorVariable || 'none';
+        // if (this.variableDropdown && this.variableDropdown.getValue() !== currentSettingValue) {
+        //     this.variableDropdown.setValue(currentSettingValue);
+        // }
+
+        // Always re-render value pickers as mappings might have changed or variable changed
+        this.createValueColorPickers();
+    }
+
+    private handleTasksChange = () => {
+        // Re-render value pickers if the variable isn't 'none', as unique values might have changed
+        if (this.settingsManager.settings.colorVariable !== 'none') {
+             this.createValueColorPickers();
+        }
+    }
+
+    destroy() {
+        this.settingsManager.off("settingsChanged", this.handleSettingsChange);
+        this.taskManager.off("tasksChanged", this.handleTasksChange);
+        this.element.remove();
+    }
+} #######
+
+./src/components/NavBar/NavTitle.ts
+#######
+/**
+ * Renders the navigation bar title, displaying the current project and view name along with the plugin version. This component is responsible for dynamically updating the title as projects change.
+ *
+ * Legacy files:
+ * - "./src/components/NavBar.ts"
+ * - 
+ */
+
+export function createNavTitle(selectedProject: string): HTMLElement {
+    const titleEl = document.createElement("h1");
+    titleEl.className = "nav-title";
+    titleEl.textContent = selectedProject === "All" ? "All Projects" : selectedProject;
+    return titleEl;
+}
+
+
+#######
+
+./src/components/NavBar/NavViewsSelection.ts
+#######
+/**
+ * Renders the view selection as three separate buttons (Day, Week, Month).
+ * Allows users to switch between different board views by clicking the buttons.
+ */
+export class NavViewsSelection {
+    element: HTMLElement; // The container div for the buttons
+    private viewOptions: { value: string; label: string }[];
+    private currentView: string;
+    private onViewSelected: (view: string) => void;
+    private buttons: Map<string, HTMLButtonElement>; // Store buttons for easy access
+
+    constructor(
+        selectedView: string,
+        onViewSelected: (view: string) => void
+    ) {
+        this.element = document.createElement("div");
+        this.element.className = "nav-views nav-view-buttons"; // Add class for button group styling
+
+        // Define view options
+        this.viewOptions = [
+            { value: "DayView", label: "Day" },
+            { value: "WeekView", label: "Week" },
+            { value: "MonthView", label: "Month" },
+        ];
+        this.buttons = new Map();
+        this.currentView = selectedView;
+        this.onViewSelected = onViewSelected;
+        this.render();
+    }
+
+    private render() {
+        this.element.empty(); // Clear the container
+        this.buttons.clear();
+
+        this.viewOptions.forEach((option) => {
+            const button = document.createElement("button");
+            button.type = "button"; // Good practice for non-submit buttons
+            button.className = "nav-view-button";
+            button.textContent = option.label;
+            button.dataset.view = option.value; // Store the view value
+
+            // Set initial active state
+            if (option.value === this.currentView) {
+                button.addClass("is-active");
+            }
+
+            // Add click listener
+            button.addEventListener("click", () => {
+                this.handleButtonClick(option.value);
+            });
+
+            this.buttons.set(option.value, button); // Store button reference
+            this.element.appendChild(button);
+        });
+    }
+
+    private handleButtonClick(viewValue: string) {
+        if (viewValue === this.currentView) {
+            return; // Do nothing if the current view is clicked again
+        }
+        this.currentView = viewValue;
+        this.updateButtonStates();
+        if (this.onViewSelected) {
+            this.onViewSelected(this.currentView);
+        }
+    }
+
+    private updateButtonStates() {
+        this.buttons.forEach((button, viewValue) => {
+            if (viewValue === this.currentView) {
+                button.addClass("is-active");
+            } else {
+                button.removeClass("is-active");
+            }
+        });
+    }
+
+    updateViews(currentView: string) {
+        if (this.currentView !== currentView) {
+            this.currentView = currentView;
+            this.updateButtonStates(); // Update button styles based on the new view
+        }
+    }
+}
+#######
+
+./src/enums/TimeUnit.ts
+#######
+export enum TimeUnit {
+	DAY = "day",
+	WEEK = "week",
+	MONTH = "month"
+}#######
+
+./src/enums/TaskCardColor.ts
+#######
+/**
+ * Enum defining the available colors for task cards.
+ * These colors are used in the settings for color mapping.
+ */
+export enum TaskCardColor { // Add export keyword
+    BrightRed = "#F94144",
+    BurntOrange = "#F3722C",
+    Orange = "#F8961E",
+    Mustard = "#F9C74F",
+    OliveGreen = "#90BE6D",
+    Teal = "#43AA8B",
+    SeaGreen = "#4D908E",
+    SlateBlue = "#577590"
+  }
+
+/**
+ * Returns an array of all TaskCardColor enum values.
+ */
+export function getTaskCardColors(): TaskCardColor[] {
+	return Object.values(TaskCardColor);
+}#######
+
+./src/modals/NewProjectModal.ts
+#######
+import { App, Modal, Setting, TextComponent, Notice } from 'obsidian';
+
+export class NewProjectModal extends Modal {
+    folderName = '';
+    onSubmit: (folderName: string) => void;
+
+    constructor(app: App, onSubmit: (folderName: string) => void) {
+        super(app);
+        this.onSubmit = onSubmit;
+    }
+
+    onOpen() {
+        const { contentEl } = this;
+        contentEl.empty(); // Clear any previous content
+        contentEl.addClass('taskdown-new-project-modal');
+
+        contentEl.createEl('h2', { text: 'Create New Project Folder' });
+
+        let textInput: TextComponent;
+
+        new Setting(contentEl)
+            .setName('Folder Name')
+            .addText(text => {
+                textInput = text;
+                text.setPlaceholder('Enter project name');
+                text.onChange(value => {
+                    this.folderName = value;
+                });
+                // Allow submitting with Enter key
+                text.inputEl.addEventListener('keydown', (event) => {
+                    if (event.key === 'Enter') {
+                        event.preventDefault(); // Prevent default form submission if any
+                        this.submitForm();
+                    }
+                });
+            });
+
+        new Setting(contentEl)
+            .addButton(btn => btn
+                .setButtonText('Create')
+                .setCta() // Makes it stand out
+                .onClick(() => {
+                    this.submitForm();
+                }))
+            .addButton(btn => btn
+                .setButtonText('Cancel')
+                .onClick(() => {
+                    this.close();
+                }));
+
+        // Focus the input field when the modal opens
+        // Use a slight delay to ensure the element is ready
+        setTimeout(() => {
+             if (textInput) {
+                 textInput.inputEl.focus();
+             }
+        }, 50); 
+    }
+
+    submitForm() {
+        const trimmedName = this.folderName.trim();
+        if (!trimmedName) {
+            new Notice('Folder name cannot be empty.');
+            return;
+        }
+        this.close();
+        this.onSubmit(trimmedName);
+    }
+
+    onClose() {
+        const { contentEl } = this;
+        contentEl.empty();
+    }
+} #######
+
+./src/controllers/TaskDownManager.ts
+#######
+/**
+ * Central manager that combines all other managers (TaskManager, TimelineManager, BoardManager, SettingsManager)
+ * and coordinates their interactions.
+ */
+import { App, Plugin, TAbstractFile } from "obsidian";
+import { TaskManager } from "./TaskManager";
+import { SettingsManager } from "./SettingsManager";
+import { BoardManager } from "./BoardManager";
+import { TimelineManager } from "./TimelineManager";
+import { TimeUnit } from "../enums/TimeUnit";
+import { ITask } from "../interfaces/ITask";
+import { IMinimapEntry } from "../interfaces/ITimeline";
+import { EventEmitter } from "../utils/eventEmitter";
+
+export class TaskDownManager extends EventEmitter {
+  private app: App;
+  private plugin: Plugin;
+  public taskManager: TaskManager;
+  public settingsManager: SettingsManager;
+  private boardManager: BoardManager;
+  public timelineManager: TimelineManager;
+  private project_folders: string[] = [];
+  private current_project_folder = 'All';
+  
+  constructor(app: App, plugin: Plugin) {
+    super();
+    this.app = app;
+    this.plugin = plugin;
+    
+    // Initialize managers in order of dependency
+    this.settingsManager = new SettingsManager(this.plugin);
+    
+    // DO NOT call initialize here - it will be called explicitly from main.ts
+    // and needs to be awaited properly
+  }
+  
+  /**
+   * Async initialization to load settings before creating managers that depend on them
+   */
+  async initialize(): Promise<void> {
+    if (this.boardManager) { return; }
+    
+    await this.settingsManager.loadSettings();
+    
+    // Initialize managers first
+    this.taskManager = new TaskManager(this.app, this.settingsManager.settings.taskDirectory);
+    this.timelineManager = new TimelineManager(this.settingsManager);
+    this.boardManager = new BoardManager({
+      taskManager: this.taskManager,
+      settingsManager: this.settingsManager,
+      timelineManager: this.timelineManager,
+      app: this.app
+    });
+    
+    this.setupEventListeners();
+    
+    this.boardManager.on("board-updated", () => { this.emit("board-updated"); });
+
+    this.app.workspace.onLayoutReady(async () => {
+        await this.updateProjects(); 
+        
+        const defaultTimeUnit = this.settingsManager.settings.defaultTimeUnit;
+        if (defaultTimeUnit && ["day", "week", "month"].includes(defaultTimeUnit)) {
+             this.updateTimeUnit(defaultTimeUnit as TimeUnit);
+        }
+        
+        await this.boardManager.initialize(this.current_project_folder);
+        await this.taskManager.loadTasks();
+    });
+  }
+  
+  /**
+   * Discover all project folders in the task directory
+   */
+  async updateProjects(): Promise<void> {
+    const taskDirectory = this.settingsManager?.settings?.taskDirectory;
+    if (!taskDirectory) {
+         console.warn("TaskDownManager: updateProjects skipped: Task directory not defined in settings.");
+         this.project_folders = [];
+         this.emit("projects-updated", this.project_folders, "All"); 
+         return;
+    }
+    
+    try {
+        const taskFolder = this.app.vault.getAbstractFileByPath(taskDirectory);
+        
+        if (!taskFolder || !('children' in taskFolder)) {
+            console.warn(`TaskDownManager: updateProjects: Task directory '${taskDirectory}' not found or not a folder.`);
+            this.project_folders = [];
+        } else {
+             const folderWithChildren = taskFolder as { children: TAbstractFile[] };
+             this.project_folders = folderWithChildren.children
+                .filter((item: TAbstractFile) => 'children' in item)
+                .map((folder: TAbstractFile) => folder.name);
+        }
+        
+        if (this.current_project_folder !== "All" && !this.project_folders.includes(this.current_project_folder)) {
+            console.warn(`Current project "${this.current_project_folder}" no longer exists. Resetting to "All".`);
+            this.current_project_folder = "All";
+            await this.taskManager.setActiveProject("All");
+        }
+        
+        if (this.boardManager) {
+            this.boardManager.setProjectFolders(this.project_folders);
+        }
+        
+        this.emit("projects-updated", this.project_folders, this.current_project_folder);
+
+    } catch (error) {
+        console.error("Error updating project list:", error);
+        this.project_folders = [];
+        if (this.current_project_folder !== "All") {
+            this.current_project_folder = "All";
+             await this.taskManager.setActiveProject("All");
+        }
+        if (this.boardManager) { this.boardManager.setProjectFolders([]); }
+        this.emit("projects-updated", this.project_folders, this.current_project_folder);
+    }
+  }
+  
+  /**
+   * Setup event listeners to coordinate between managers
+   */
+  private setupEventListeners(): void {
+    // Listen for task updates from TaskManager
+    this.taskManager.on("tasks-updated", () => {
+      // Update minimap *first*
+      this.timelineManager.updateMinimap(this.taskManager.getTasksForLayout());
+      // Then update layout which might use timeline state
+      this.boardManager.updateCurrentLayout(); 
+      this.emit("taskdown-updated");
+    });
+    
+    // Listen for timeline updates (e.g., minimap calculation finished, viewport changed)
+    this.timelineManager.on("timeline-updated", () => {
+      this.emit("taskdown-updated");
+    });
+    
+    // Listen for board updates (layout calculation finished)
+    this.boardManager.on("board-updated", () => {
+      // This signals UI components (like NavBar, BoardContainer) should refresh
+      this.emit("taskdown-updated");
+    });
+    
+    // Listen for settings changes
+    this.settingsManager.on("settings-changed", () => {
+      // Settings changes might affect layout or timeline, trigger a general update
+      this.boardManager.updateCurrentLayout(); // Recalculate layout based on new settings
+      this.emit("taskdown-updated");
+    });
+  }
+  
+  /**
+   * Get tasks for layout
+   */
+  public getTasksForLayout(): ITask[] {
+    return this.taskManager.getTasksForLayout();
+  }
+  
+  /**
+   * Update the current time unit
+   */
+  public updateTimeUnit(timeUnit: TimeUnit | string): void {
+    // If timeUnit is a string, convert it to TimeUnit enum
+    if (typeof timeUnit === 'string') {
+      if (timeUnit === 'week') {
+        timeUnit = TimeUnit.WEEK;
+      } else if (timeUnit === 'month') {
+        timeUnit = TimeUnit.MONTH;
+      } else {
+        timeUnit = TimeUnit.DAY; // Default to day for any other string
+      }
+    }
+    
+    this.timelineManager.updateTimeUnit(timeUnit as TimeUnit);
+  }
+  
+  /**
+   * Get the current board layout
+   */
+  public getCurrentLayout() {
+    return this.boardManager.getCurrentLayout();
+  }
+  
+  /**
+   * Get the minimap
+   */
+  public getMinimap(): IMinimapEntry[] {
+    return this.timelineManager.getMinimap();
+  }
+  
+  /**
+   * Update the viewport dates
+   */
+  public updateViewport(minDate: Date, maxDate: Date): void {
+    this.timelineManager.updateViewport(minDate, maxDate);
+  }
+  
+  /**
+   * Set the active project
+   */
+  public async setActiveProject(projectName: string): Promise<void> {
+    // Ensure "All" is handled correctly
+    if (projectName !== "All" && !this.project_folders.includes(projectName)) {
+      console.warn(`Attempted to set non-existent project: ${projectName}. Setting to 'All' instead.`);
+      projectName = "All"; // Fallback to "All"
+    }
+    
+    if (this.current_project_folder === projectName) {
+      return;
+    }
+    
+    const previousProject = this.current_project_folder;
+    this.current_project_folder = projectName;
+    
+    try {
+      await this.taskManager.setActiveProject(projectName);
+      // BoardManager doesn't need setCurrentProject as TaskManager drives task loading
+      // Update BoardManager's current project state as well
+      this.boardManager.setCurrentProject(projectName);
+
+      // Emit project-changed AFTER successful TaskManager update
+      this.emit("project-changed", projectName);
+
+    } catch (error) {
+        console.error(`Error setting active project to ${projectName}:`, error);
+        // Revert state if setActiveProject fails
+        this.current_project_folder = previousProject;
+        // Potentially re-emit project-changed with the previous project if needed
+        // this.emit("project-changed", previousProject);
+    }
+  }
+  
+  /**
+   * Get all project folders
+   */
+  public getProjectFolders(): string[] {
+    return this.project_folders;
+  }
+  
+  /**
+   * Get current project folder
+   */
+  public getCurrentProjectFolder(): string {
+    return this.current_project_folder;
+  }
+  
+  /**
+   * Get column width from settings
+   */
+  public getColumnWidth(): number {
+    return this.settingsManager.settings.columnWidth || 100;
+  }
+  
+  /**
+   * Get row height from settings
+   */
+  public getRowHeight(): number {
+    return this.settingsManager.settings.rowHeight || 50;
+  }
+  
+  /**
+   * Get debug information from all managers
+   */
+  public getDebugInfo(): any {
+    return {
+      taskManager: {
+        taskCount: this.taskManager.getTasks().length,
+        totalFiles: this.taskManager.getTotalFiles(),
+        parsedFiles: this.taskManager.getParsedFiles()
+      },
+      timelineManager: this.timelineManager.getDebugInfo(),
+      boardManager: this.boardManager.getDebugInfo(),
+      currentProject: this.current_project_folder,
+      projectFolders: this.project_folders
+    };
+  }
+  
+  /**
+   * Check if the board should open by default on startup
+   */
+  public shouldOpenByDefault(): boolean {
+    return this.settingsManager.settings.openByDefault || false;
+  }
+  
+  /**
+   * Check if the board should open in a new pane
+   */
+  public shouldOpenInNewPane(): boolean {
+    return this.settingsManager.settings.openInNewPane || false;
+  }
+  
+  /**
+   * Unregister any event listeners
+   */
+  public unregisterEvents(): void {
+    if (this.taskManager) {
+      this.taskManager.unregisterEvents();
+    }
+  }
+  
+  /**
+   * Get the board manager for components that need direct access
+   */
+  public getBoardManager(): BoardManager {
+    return this.boardManager;
+  }
+  
+  /**
+   * Register a listener for the board-updated event
+   */
+  public on(event: string, callback: (...args: any[]) => void): void {
+    if (!event || !callback) return;
+    super.on(event, callback);
+  }
+  
+  /**
+   * Update the current layout based on the viewport's time unit
+   */
+  public updateCurrentLayout(timeUnit?: TimeUnit, reinitializeViewport = true): Promise<void> {
+    this.boardManager.updateCurrentLayout(timeUnit, reinitializeViewport);
+    return Promise.resolve();
+  }
+  
+  /**
+   * Gets the total files in the current project
+   */
+  public getTotalFiles(): number {
+    return this.taskManager.getTotalFiles();
+  }
+  
+  /**
+   * Gets the number of parsed files in the current project
+   */
+  public getParsedFiles(): number {
+    return this.taskManager.getParsedFiles();
+  }
+} #######
+
+./src/controllers/BoardManager.ts
+#######
+/**
+ * Handles board I/O operations including task parsing at startup, updating board dimensions on file changes, and supplying tasks to the BoardLayouter.
+ *
+ * Legacy files:
+ * - "./src/controllers/BoardController.ts"
+ * - "./src/components/YearView.ts"
+ * - 
+ */
+import { ITask } from "../interfaces/ITask";
+import { BoardLayouter } from "./BoardLayouter";
+import { TaskManager } from "./TaskManager";
+import { SettingsManager } from "./SettingsManager";
+import { TimelineManager } from "./TimelineManager";
+import { IMinimapEntry } from "../interfaces/ITimeline";
+import { TimeUnit } from "../enums/TimeUnit";
+import { App, TAbstractFile, Notice, TFile, normalizePath } from "obsidian";
+import { EventEmitter } from "../utils/eventEmitter";
+import { formatDateYYYYMMDD } from '../utils/dateUtils';
+
+export class BoardManager extends EventEmitter {
+	taskManager: TaskManager;
+	settingsManager: SettingsManager;
+	timelineManager: TimelineManager;
+	private groupingVariable: string; // Added state for grouping
+	// These are now derived from TaskDownManager
+	private current_project_folder: string;
+	private project_folders: string[];
+	private app: App;
+	currentLayout: BoardLayouter;
+	updateTime: number;
+	sortedByPriority: boolean;
+	
+	constructor({ taskManager, settingsManager, timelineManager, app }: { 
+		taskManager: TaskManager, 
+		settingsManager: SettingsManager, 
+		timelineManager: TimelineManager,
+		app: App 
+	}) {
+		super();
+		this.taskManager = taskManager;
+		this.settingsManager = settingsManager;
+		this.timelineManager = timelineManager;
+		this.current_project_folder = '';
+		this.project_folders = [];
+		this.app = app;
+		this.updateTime = 0;
+		this.sortedByPriority = true;
+		this.groupingVariable = "status"; // Default grouping variable
+		
+		// Don't auto-initialize - defer to explicit initialize() call
+		
+		// Register file change events to update current layout
+		this.app.vault.on('modify', (file: TAbstractFile) => {
+			this.updateCurrentLayout();
+		});
+		this.app.vault.on('create', (file: TAbstractFile) => {
+			this.updateCurrentLayout();
+		});
+		this.app.vault.on('delete', (file: TAbstractFile) => {
+			this.updateCurrentLayout();
+		});
+		
+		// Listen for changes in the timeline manager's viewport
+		this.timelineManager.on("timeline-updated", () => {
+			this.emit("board-updated");
+		});
+		
+		// Special handler for viewport initialization (particularly for month view)
+		this.timelineManager.on("viewport-initialized", () => {
+			this.updateCurrentLayout();
+		});
+		
+		// When task changes come in from the Task Manager, update our layout
+		this.taskManager.on("tasks-updated", async () => {
+			this.updateCurrentLayout();
+		});
+	}
+ 
+	/**
+	 * Initialize the board manager - should be called after construction
+	 * This allows TaskDownManager to set up defaults first
+	 * @param currentProject The current project to initialize with
+	 */
+	public async initialize(currentProject: string): Promise<void> {
+		if (currentProject) {
+			this.current_project_folder = currentProject;
+		}
+		
+		this.updateCurrentLayout(undefined, false);
+	}
+ 
+	getTasksForLayout(): ITask[] {
+		if (this.taskManager && typeof this.taskManager.getTasks === 'function') {
+			return this.taskManager.getTasks();
+		}
+		return [];
+	}
+	
+	updateBoardDimensions(): void {
+		// No need to get tasks if not used
+	}
+ 
+	getDebugInfo(): any {
+		return {
+			project: this.current_project_folder,
+			taskCount: this.getTasksForLayout().length,
+			columnHeaders: this.currentLayout?.columnHeaders || [],
+			taskGridCount: this.currentLayout?.taskGrids?.length || 0
+		};
+	}
+	
+	/**
+	 * Set the list of available project folders
+	 * Managed by TaskDownManager
+	 */
+	public setProjectFolders(folders: string[]): void {
+		this.project_folders = folders;
+	}
+	
+	/**
+	 * Set the current project folder
+	 * Managed by TaskDownManager
+	 */
+	public setCurrentProject(projectName: string): void {
+		this.current_project_folder = projectName;
+		this.updateCurrentLayout();
+	}
+	
+	/**
+	 * Access to project folders - should not be modified directly
+	 */
+	public getProjectFolders(): string[] {
+		return this.project_folders;
+	}
+	
+	/**
+	 * Access to current project folder - should not be modified directly
+	 * Use TaskDownManager methods to change project.
+	 */
+	public getCurrentProjectFolder(): string {
+		return this.current_project_folder;
+	}
+
+	public getCurrentLayout(): BoardLayouter {
+		return this.currentLayout;
+	}
+	
+	/**
+	 * Get minimap from the timeline manager
+	 */
+	public getMinimap(): IMinimapEntry[] {
+		return this.timelineManager.getMinimap();
+	}
+
+	/**
+	 * Updates the current layout based on the timeline's viewport
+	 * @param timeUnit Optional time unit to update
+	 * @param reinitializeViewport Whether to reinitialize the viewport (default: true)
+	 */
+	public updateCurrentLayout(timeUnit?: TimeUnit, reinitializeViewport = true): void {
+		const startTime = Date.now();
+		
+		// Update the current time unit if provided via the timeline manager
+		if (timeUnit) {
+			this.timelineManager.updateTimeUnit(timeUnit, reinitializeViewport);
+		}
+		
+		const rawTasks = this.getTasksForLayout();
+		const tasks = rawTasks.map(task => {
+			const t = task as any;
+			const start = t.start instanceof Date ? t.start : new Date(t.start);
+			const end = t.end instanceof Date ? t.end : new Date(t.end);
+			const id = t.id ? t.id : (t.filePath ? t.filePath : "");
+			return { ...t, id, start, end };
+		});
+		
+		// Use the viewport center date for layout - recalculate for each update
+		// This ensures month view headers update properly when slider moves
+		const centerDate = this.timelineManager.getViewportCenterDate();
+		
+		// Log current viewport bounds for debugging
+		
+		// For month view, we need to provide viewport date range directly
+		let layouterOptions: any = {};
+		if (this.timelineManager.currentTimeUnit === TimeUnit.MONTH) {
+			// Get month range information for current viewport
+			const monthRangeInfo = this.timelineManager.getMonthRangeInfo();
+			
+			// Add viewport information to layouter options
+			layouterOptions = {
+				viewportStartMonth: monthRangeInfo.startMonth,
+				viewportMonthCount: monthRangeInfo.monthCount,
+				useViewportForMonths: true
+			};
+		}
+		
+		// Create a new BoardLayouter with the updated center date and viewport
+		this.currentLayout = new BoardLayouter(
+			centerDate,
+			this.timelineManager.currentTimeUnit,
+			this.settingsManager.settings.numberOfColumns,
+			this.groupingVariable, // Use the internal state
+			tasks,
+			layouterOptions
+		);
+		
+		// Update the minimap via timeline manager
+		this.timelineManager.updateMinimap(tasks);
+		
+		this.updateTime = Date.now() - startTime;
+		this.getDebugInfo();
+		
+		this.emit("board-updated");
+	}
+
+	/**
+	 * Register a callback for task updates
+	 * @param callback Function to call when tasks are updated
+	 */
+	public registerTaskUpdateCallback(callback: () => void): void {
+		if (this.taskManager && typeof this.taskManager.on === 'function') {
+			this.taskManager.on("tasks-updated", callback);
+		}
+	}
+
+	/**
+	 * Get column width from settings
+	 */
+	public getColumnWidth(): number {
+		return this.settingsManager?.settings.columnWidth || 100;
+	}
+
+	/**
+	 * Get row height from settings
+	 */
+	public getRowHeight(): number {
+		return this.settingsManager?.settings.rowHeight || 50;
+	}
+
+	/**
+	 * Get the total number of files parsed in the current project
+	 */
+	public getTotalFiles(): number {
+		return this.taskManager?.getTotalFiles() || 0;
+	}
+
+	/**
+	 * Get the number of successfully parsed files in the current project
+	 */
+	public getParsedFiles(): number {
+		return this.taskManager?.getParsedFiles() || 0;
+	}
+
+	/**
+	 * Check if the board should open by default on startup
+	 */
+	public shouldOpenByDefault(): boolean {
+		return this.settingsManager?.settings.openByDefault || false;
+	}
+
+	/**
+	 * Check if the board should open in a new pane
+	 */
+	public shouldOpenInNewPane(): boolean {
+		return this.settingsManager?.settings.openInNewPane || false;
+	}
+
+	setTimeline(timelineManager: TimelineManager, centerDate?: Date): void {
+		if (centerDate) {
+			timelineManager.currentDate = centerDate;
+		}
+		// Re-initialize the viewport with the current date
+		timelineManager.initializeViewport();
+		
+		// Always update when timeline changes
+		this.updateCurrentLayout();
+	}
+
+	/**
+	 * Creates a new task file within the currently active project folder.
+	 * @param groupName The name of the group (e.g., column header) where the create button was clicked.
+	 */
+	public async createNewTaskFile(groupName: string): Promise<void> {
+		const currentProject = this.getCurrentProjectFolder();
+		
+		if (!currentProject || currentProject === "All") {
+			new Notice("Please select a specific project before creating a task.");
+			return;
+		}
+		
+		const baseTaskDirectory = this.settingsManager.settings.taskDirectory;
+		const projectPath = normalizePath(`${baseTaskDirectory}/${currentProject}`);
+		
+		const startDate = new Date();
+		const endDate = new Date(startDate);
+		endDate.setMonth(endDate.getMonth() + 1);
+
+		if (isNaN(startDate.getTime()) || isNaN(endDate.getTime())) {
+			console.error("Invalid default date calculations", { startDate, endDate });
+			new Notice("Error calculating default dates.");
+			return;
+		}
+
+		const formattedStart = formatDateYYYYMMDD(startDate);
+		const formattedEnd = formatDateYYYYMMDD(endDate);
+
+		const taskName = "New Task";
+		const datePrefix = formattedStart.replace(/-/g, '');
+		const safeName = taskName.replace(/[^a-zA-Z0-9]/g, "_");
+		const fileName = `${datePrefix}_${safeName}.md`; 
+		const desiredFilePath = normalizePath(`${projectPath}/${fileName}`);
+
+		const dynamicFrontmatter: Record<string, any> = { 
+			name: taskName,
+			start: formattedStart,
+			end: formattedEnd,
+			totalSubtasks: 0,
+			completedSubtasks: 0
+		};
+
+		const groupVariable = this.getGroupingVariable();
+		let defaultStatus = 'planned'; 
+		let defaultCategory = 'default'; 
+
+		if (groupVariable && groupVariable !== 'none') {
+			if (groupVariable === 'priority') {
+				const priorityValue = parseInt(groupName);
+				dynamicFrontmatter[groupVariable] = isNaN(priorityValue) ? 0 : priorityValue;
+			} else {
+				dynamicFrontmatter[groupVariable] = groupName;
+			}
+			if (groupVariable === 'status') defaultStatus = '';
+			if (groupVariable === 'category') defaultCategory = '';
+		}
+
+		if (defaultStatus && !dynamicFrontmatter['status']) {
+			dynamicFrontmatter['status'] = defaultStatus;
+		}
+		if (defaultCategory && !dynamicFrontmatter['category']) {
+			dynamicFrontmatter['category'] = defaultCategory;
+		}
+		if (!dynamicFrontmatter['priority'] && groupVariable !== 'priority') {
+			dynamicFrontmatter['priority'] = 0;
+		}
+
+		const contentBody = `Task created in group '${groupName}' within project '${currentProject}' at ${new Date().toLocaleString()}`;
+		
+		const frontmatterLines = ["---"];
+		for (const [key, value] of Object.entries(dynamicFrontmatter)) {
+			if (value !== undefined && value !== null) {
+				frontmatterLines.push(`${key}: ${value}`);
+			}
+		}
+		frontmatterLines.push("---");
+		frontmatterLines.push(""); 
+		frontmatterLines.push(contentBody);
+		const fileContent = frontmatterLines.join("\n");
+
+		try {
+			try {
+				await this.app.vault.createFolder(projectPath); 
+			} catch (folderError: any) {
+				if (!folderError.message.includes('Folder already exists')) {
+					throw folderError;
+				}
+			}
+
+			const file = await this.app.vault.create(desiredFilePath, fileContent);
+			console.log(`File created successfully: ${file.path}`);
+
+			// Open the newly created file
+			this.app.workspace.getLeaf('split', 'vertical').openFile(file as TFile);
+
+		} catch (error: any) {
+			console.error("Error creating task file in project folder:", error);
+			new Notice(`Error creating task file: ${error.message}`);
+		}
+	}
+
+	/**
+	 * Get the current grouping variable.
+	 */
+	public getGroupingVariable(): string {
+		return this.groupingVariable;
+	}
+
+	/**
+	 * Set the grouping variable and trigger a board update.
+	 * @param variable The new grouping variable ('status' or 'category')
+	 */
+	public setGroupingVariable(variable: string): void {
+		if (variable === 'status' || variable === 'category') {
+			this.groupingVariable = variable;
+			this.updateCurrentLayout(); // Trigger re-layout and re-render
+		} else {
+			console.warn(`Invalid grouping variable: ${variable}`);
+		}
+	}
+
+	/**
+	 * Get the settings for the Taskdown plugin.
+	 */
+	public getTaskdownSettings(): any {
+		return this.settingsManager?.settings || {};
+	}
+}
+
+
+#######
+
+./src/controllers/SettingsManager.ts
+#######
+/**
+ * Manages plugin settings by loading, saving, and updating configuration. Also handles category color assignments and default project settings.
+ *
+ * Legacy files:
+ * - "./src/settings/settings.ts"
+ * - "./src/settings/SettingsTab.ts"
+ * -
+ */
+
+import {
+	App,
+	Plugin,
+	PluginSettingTab,
+	Setting,
+	normalizePath,
+} from "obsidian";
+import { EventEmitter } from "../utils/eventEmitter";
+import { ITaskdownSettings } from "../interfaces/ITaskdownSettings"; // Added import
+import { TaskManager } from "./TaskManager"; // Added TaskManager import
+export const DEFAULT_SETTINGS: ITaskdownSettings = {
+	taskDirectory: "Taskdown",
+	openByDefault: true,
+	openInNewPane: false,
+	numberOfColumns: 7,
+	columnWidth: 200,
+	numberOfRows: 8,
+	rowHeight: 80,
+	globalMinDate: new Date(2025, 0, 1).toISOString(), // Jan 1, 2025
+	globalMaxDate: new Date(2025, 11, 31).toISOString(), // Dec 31, 2025
+	// defaultProject: "", // Empty string means first available project - REMOVED
+	defaultTimeUnit: "day", // Default to day view
+};
+
+export class SettingsManager extends EventEmitter {
+	plugin: Plugin;
+	settings: ITaskdownSettings;
+	// Removed TaskManager instance variable
+
+	constructor(plugin: Plugin) { // Reverted constructor signature
+		super();
+		this.plugin = plugin;
+		// Removed TaskManager assignment
+		this.settings = DEFAULT_SETTINGS;
+	}
+
+	async loadSettings(): Promise<void> {
+		this.settings = Object.assign(
+			{},
+			DEFAULT_SETTINGS,
+			await this.plugin.loadData()
+		);
+
+		// Handle migration from old settings format
+		if ("cellWidth" in this.settings) {
+			this.settings.columnWidth = (this.settings as any).cellWidth;
+			delete (this.settings as any).cellWidth;
+		}
+
+		if ("cellHeight" in this.settings) {
+			this.settings.rowHeight = (this.settings as any).cellHeight;
+			delete (this.settings as any).cellHeight;
+		}
+
+		// Remove timeUnit if it exists in loaded settings
+		if ("timeUnit" in this.settings) {
+			delete (this.settings as any).timeUnit;
+		}
+
+		// Remove categoryColors if it exists in loaded settings (migration)
+		if ("categoryColors" in this.settings) {
+			delete (this.settings as any).categoryColors;
+		}
+	}
+
+	async saveSettings(): Promise<void> {
+		await this.plugin.saveData(this.settings);
+		// Emit an event to notify listeners that settings have changed
+		this.emit("settings-changed", this.settings);
+	}
+
+	// Removed assignCategoryColor method
+}
+
+/*
+ * TaskdownSettingTab replicates the legacy settings UI.
+ * Note: PluginSettingTab expects a plugin instance. If you have a main plugin
+ * that already holds a SettingsManager, adjust the constructor accordingly.
+ */
+export class TaskdownSettingTab extends PluginSettingTab {
+	settingsManager: SettingsManager;
+	taskManager: TaskManager; // Store TaskManager instance
+
+	constructor(app: App, plugin: Plugin, settingsManager: SettingsManager, taskManager: TaskManager) { // Add taskManager parameter
+		super(app, plugin);
+		this.settingsManager = settingsManager;
+		this.taskManager = taskManager; // Assign taskManager
+	}
+
+	// Removed COLOR_OPTIONS as we now use the TaskCardColor enum directly
+
+	display(): void {
+		const { containerEl } = this;
+		containerEl.empty();
+
+		// GENERAL SECTION
+		containerEl.createEl("h3", { text: "General" });
+
+		// Task Directory Setting
+		new Setting(containerEl)
+			.setName("Task Directory")
+			.setDesc("Directory where task files are stored")
+			.addText((text) =>
+				text
+					.setPlaceholder("Enter directory path")
+					.setValue(this.settingsManager.settings.taskDirectory)
+					.onChange(async (value) => {
+						this.settingsManager.settings.taskDirectory =
+							normalizePath(value);
+						await this.settingsManager.saveSettings();
+					})
+			);
+
+		// Default Project Setting - REMOVED
+		/*
+		new Setting(containerEl)
+			.setName("Default Project")
+			.setDesc("The project to open by default (leave empty to use first available)")
+			.addText((text) => {
+				text.setPlaceholder("Enter project name")
+					.setValue(this.settingsManager.settings.defaultProject)
+					.onChange(async (value) => {
+						this.settingsManager.settings.defaultProject = value;
+						await this.settingsManager.saveSettings();
+					});
+			});
+		*/
+
+		// Open on Startup Toggle
+		new Setting(containerEl)
+			.setName("Open on Startup")
+			.setDesc("Automatically open Taskdown when Obsidian starts")
+			.addToggle((toggle) =>
+				toggle
+					.setValue(this.settingsManager.settings.openByDefault)
+					.onChange(async (value) => {
+						this.settingsManager.settings.openByDefault = value;
+						await this.settingsManager.saveSettings();
+					})
+			);
+
+		// Open in New Pane Toggle
+		new Setting(containerEl)
+			.setName("Open in New Pane")
+			.setDesc("Open Taskdown in a new pane instead of a new tab")
+			.addToggle((toggle) =>
+				toggle
+					.setValue(this.settingsManager.settings.openInNewPane)
+					.onChange(async (value) => {
+						this.settingsManager.settings.openInNewPane = value;
+						await this.settingsManager.saveSettings();
+				})
+		);
+
+
+
+	// BOARD LAYOUT SECTION
+	containerEl.createEl("h3", { text: "Board Layout" });
+
+		// Column Width Setting
+		new Setting(containerEl)
+			.setName("Column Width")
+			.setDesc("Width of each column in the board (in pixels)")
+			.addText((text) => {
+				// Ensure numeric input.
+				text.inputEl.type = "number";
+				text.setPlaceholder("Enter column width")
+					.setValue(String(this.settingsManager.settings.columnWidth))
+					.onChange(async (value) => {
+						const newVal = parseInt(value);
+						if (!isNaN(newVal)) {
+							this.settingsManager.settings.columnWidth = newVal;
+							await this.settingsManager.saveSettings();
+						}
+					});
+				return text;
+			});
+
+		// Row Height Setting
+		new Setting(containerEl)
+			.setName("Row Height")
+			.setDesc("Height of each row in the board (in pixels)")
+			.addText((text) => {
+				// Ensure numeric input.
+				text.inputEl.type = "number";
+				text.setPlaceholder("Enter row height")
+					.setValue(String(this.settingsManager.settings.rowHeight))
+					.onChange(async (value) => {
+						const newVal = parseInt(value);
+						if (!isNaN(newVal)) {
+							this.settingsManager.settings.rowHeight = newVal;
+							await this.settingsManager.saveSettings();
+						}
+					});
+				return text;
+			});
+
+		// Number of Columns Setting
+		new Setting(containerEl)
+			.setName("Number of Columns")
+			.setDesc("Number of columns to display in the board")
+			.addText((text) => {
+				// Ensure numeric input.
+				text.inputEl.type = "number";
+				text.setPlaceholder("Enter number of columns")
+					.setValue(
+						String(this.settingsManager.settings.numberOfColumns)
+					)
+					.onChange(async (value) => {
+						const newVal = parseInt(value);
+						if (!isNaN(newVal)) {
+							this.settingsManager.settings.numberOfColumns =
+								newVal;
+							await this.settingsManager.saveSettings();
+						}
+					});
+				return text;
+			});
+
+		// TIME SECTION
+		containerEl.createEl("h3", { text: "Time" });
+
+		// Default Time Unit Setting
+		new Setting(containerEl)
+			.setName("Default Time Unit")
+			.setDesc("The default time unit view to use when opening Taskdown")
+			.addDropdown((dropdown) => {
+				dropdown.addOption("day", "Day");
+				dropdown.addOption("week", "Week");
+				dropdown.addOption("month", "Month");
+				dropdown.setValue(this.settingsManager.settings.defaultTimeUnit);
+				dropdown.onChange(async (value) => {
+					this.settingsManager.settings.defaultTimeUnit = value;
+					await this.settingsManager.saveSettings();
+				});
+			});
+
+		// Global Minimum Date Setting
+		new Setting(containerEl)
+			.setName("Global Minimum Date")
+			.setDesc("The minimum date for the global timeline")
+			.addText((text) => {
+				text.inputEl.type = "date";
+				const date = new Date(
+					this.settingsManager.settings.globalMinDate
+				);
+				text.setValue(date.toISOString().split("T")[0]); // YYYY-MM-DD format
+				text.onChange(async (value) => {
+					const newDate = new Date(value);
+					this.settingsManager.settings.globalMinDate =
+						newDate.toISOString();
+					await this.settingsManager.saveSettings();
+				});
+			});
+
+		// Global Maximum Date Setting
+		new Setting(containerEl)
+			.setName("Global Maximum Date")
+			.setDesc("The maximum date for the global timeline")
+			.addText((text) => {
+				text.inputEl.type = "date";
+				const date = new Date(
+					this.settingsManager.settings.globalMaxDate
+				);
+				text.setValue(date.toISOString().split("T")[0]); // YYYY-MM-DD format
+				text.onChange(async (value) => {
+					const newDate = new Date(value);
+					this.settingsManager.settings.globalMaxDate =
+						newDate.toISOString();
+					await this.settingsManager.saveSettings();
+				});
+			});
+	}
+}
+#######
+
+./src/controllers/TimelineManager.ts
+#######
+/**
+ * Manages timeline-related functionality including date ranges, viewport, and minimap generation
+ */
+import { ITimeline, IMinimapEntry } from "../interfaces/ITimeline";
+import { TimeUnit } from "../enums/TimeUnit";
+import { normalizeDate, isDateInRange, getMsPerTimeUnit } from "../utils/dateUtils";
+import { EventEmitter } from "../utils/eventEmitter";
+import { ITask } from "../interfaces/ITask";
+import { SettingsManager } from "./SettingsManager";
+
+export class TimelineManager extends EventEmitter implements ITimeline {
+  // Timeline properties
+  currentDate: Date;
+  globalMinDate: Date;
+  globalMaxDate: Date;
+  localMinDate: Date;
+  localMaxDate: Date;
+  currentTimeUnit: TimeUnit;
+  private settingsManager: SettingsManager;
+  private minimap: IMinimapEntry[] = [];
+
+  constructor(settingsManager: SettingsManager) {
+    super();
+    this.settingsManager = settingsManager;
+    
+    // Set current date to today
+    this.currentDate = new Date();
+    
+    // Initialize global min/max dates from settings
+    this.globalMinDate = new Date(settingsManager.settings.globalMinDate);
+    this.globalMaxDate = new Date(settingsManager.settings.globalMaxDate);
+    
+    // Initialize local min/max dates
+    this.localMinDate = new Date();
+    this.localMaxDate = new Date();
+    
+    // Default time unit
+    this.currentTimeUnit = TimeUnit.DAY;
+    
+    // Initialize the viewport based on current date
+    this.initializeViewport();
+    
+    // Listen for settings changes
+    this.settingsManager.on("settings-changed", () => {
+      // Update global min/max dates from settings
+      this.globalMinDate = new Date(this.settingsManager.settings.globalMinDate);
+      this.globalMaxDate = new Date(this.settingsManager.settings.globalMaxDate);
+      
+      // Emit an event to notify views to redraw
+      this.emit("timeline-updated");
+    });
+  }
+
+  /**
+   * Updates the time unit and optionally reinitializes the viewport
+   */
+  updateTimeUnit(timeUnit: TimeUnit | string, reinitializeViewport = true): void {
+    // Convert string to TimeUnit enum if needed
+    if (typeof timeUnit === 'string') {
+      if (timeUnit === 'week') {
+        timeUnit = TimeUnit.WEEK;
+      } else if (timeUnit === 'month') {
+        timeUnit = TimeUnit.MONTH;
+      } else {
+        timeUnit = TimeUnit.DAY; // Default to day for any other string
+      }
+    }
+    
+    this.currentTimeUnit = timeUnit as TimeUnit;
+    
+    // Re-initialize viewport when time unit changes if requested
+    if (reinitializeViewport) {
+      this.initializeViewport();
+      
+      // Force viewport to be constrained to global min/max
+      this.constrainViewportToGlobalBounds();
+      
+      // For month view, we need to ensure the dates are aligned properly
+      if (timeUnit === TimeUnit.MONTH) {
+        // Force an immediate update to ensure UI components sync with the new viewport
+        this.emit("viewport-initialized");
+      }
+    }
+    
+    // Always update minimap when time unit changes
+    this.emit("timeline-updated");
+  }
+
+  /**
+   * Updates the viewport (local min and max dates) without changing the current date
+   */
+  updateViewport(newMinDate: Date, newMaxDate: Date): void {
+    this.localMinDate = newMinDate;
+    this.localMaxDate = newMaxDate;
+    this.emit("timeline-updated");
+  }
+
+  /**
+   * Initializes the viewport based on the current date, placing it in the middle
+   */
+  initializeViewport(): void {
+    // Special handling for month view
+    if (this.currentTimeUnit === TimeUnit.MONTH) {
+      this.initializeMonthViewport();
+    } else {
+      // Standard calculation for DAY and WEEK views
+      const viewportWidthMs = this.calculateViewportWidth();
+      
+      // Set localMinDate and localMaxDate with currentDate in the middle
+      this.localMinDate = new Date(this.currentDate.getTime() - viewportWidthMs / 2);
+      this.localMaxDate = new Date(this.currentDate.getTime() + viewportWidthMs / 2);
+    }
+  }
+  
+  /**
+   * Special initialization for month view to ensure proper month alignment
+   */
+  private initializeMonthViewport(): void {
+    // Get the number of columns from settings
+    const columns = this.settingsManager.settings.numberOfColumns;
+    
+    // Set current date to the 1st of its month to normalize
+    const normalizedCurrentDate = new Date(this.currentDate.getFullYear(), this.currentDate.getMonth(), 1);
+    
+    // For even number of columns, we want current month to be the last column
+    // For odd number of columns, we want current month in the middle
+    let monthsBack;
+    if (columns % 2 === 0) {
+      // Even number of columns - current month should be the last column
+      monthsBack = columns - 1;
+    } else {
+      // Odd number of columns - current month should be in the middle
+      monthsBack = Math.floor((columns - 1) / 2);
+    }
+    
+    // Start date is X months before the current month
+    const startMonth = new Date(normalizedCurrentDate);
+    startMonth.setMonth(startMonth.getMonth() - monthsBack);
+    
+    // Ensure the start date is not earlier than the global min date
+    if (startMonth < this.globalMinDate) {
+      startMonth.setTime(this.globalMinDate.getTime());
+    }
+    
+    this.localMinDate = startMonth;
+    
+    // End date is the start date plus the number of columns minus 1
+    const endMonth = new Date(startMonth);
+    endMonth.setMonth(endMonth.getMonth() + columns - 1);
+    // Set to last day of the month for proper range
+    endMonth.setMonth(endMonth.getMonth() + 1);
+    endMonth.setDate(0);
+    
+    // Ensure the end date is not later than the global max date
+    if (endMonth > this.globalMaxDate) {
+      endMonth.setTime(this.globalMaxDate.getTime());
+    }
+    
+    this.localMaxDate = endMonth;
+  }
+
+  /**
+   * Calculates the viewport width in milliseconds based on time unit and columns
+   */
+  private calculateViewportWidth(): number {
+    const columns = this.settingsManager.settings.numberOfColumns;
+    const msPerColumn = getMsPerTimeUnit(this.currentTimeUnit);
+    return msPerColumn * columns;
+  }
+
+  /**
+   * Generates a minimap of task counts per time unit between global min and max dates
+   */
+  getMinimap(): IMinimapEntry[] {
+    return this.minimap;
+  }
+
+  /**
+   * Updates the minimap with task counts
+   */
+  updateMinimap(tasks: ITask[]): void {
+    // console.log(`TimelineManager: updateMinimap called with ${tasks?.length ?? 0} tasks.`); // Keep commented out unless debugging
+    
+    this.minimap = [];
+    
+    if (!tasks || !tasks.length) {
+      // console.log("TimelineManager: No tasks, clearing minimap and emitting update.");
+      this.emit("timeline-updated"); // Emit even if no tasks
+      return;
+    }
+    
+    const dates: Date[] = [];
+    let currentDate = new Date(this.globalMinDate);
+    
+    if (!this.globalMinDate || !this.globalMaxDate || this.globalMinDate > this.globalMaxDate) {
+      console.warn("TimelineManager: Invalid global date range for minimap.");
+      return;
+    }
+    
+    currentDate = normalizeDate(currentDate);
+    const endDate = normalizeDate(this.globalMaxDate);
+    
+    while (currentDate <= endDate) {
+      dates.push(new Date(currentDate));
+      if (this.currentTimeUnit === TimeUnit.DAY) {
+        currentDate.setDate(currentDate.getDate() + 1);
+      } else if (this.currentTimeUnit === TimeUnit.WEEK) {
+        currentDate.setDate(currentDate.getDate() + 7);
+      } else if (this.currentTimeUnit === TimeUnit.MONTH) {
+        currentDate.setMonth(currentDate.getMonth() + 1);
+      }
+    }
+    
+    if (!dates.length) {
+      console.warn("TimelineManager: No dates generated for minimap range.");
+       this.emit("timeline-updated"); // Emit even if no dates generated
+      return;
+    }
+    
+    // Initialize the minimap entries with dates and zero counts
+    this.minimap = dates.map(date => ({ date: new Date(date), count: 0 }));
+
+    // --- Simplified and Corrected Task Processing --- 
+    tasks.forEach(task => {
+      if (!task) return;
+      
+      try {
+        const t = task as any;
+        let taskStart: Date, taskEnd: Date;
+        
+        try {
+          taskStart = t.start instanceof Date ? new Date(t.start) : new Date(t.start);
+          taskEnd = t.end instanceof Date ? new Date(t.end) : new Date(t.end);
+        } catch (e) {
+            console.warn(`TimelineManager: Failed to parse dates for task ${task.filePath || task.name}`, e);
+            return; // Skip task if dates are unparseable
+        }
+        
+        if (isNaN(taskStart.getTime()) || isNaN(taskEnd.getTime())) {
+           console.warn(`TimelineManager: Invalid dates found for task ${task.filePath || task.name}: Start=${t.start}, End=${t.end}`);
+           return; // Skip task with invalid dates
+        }
+        
+        // Ensure end date is not before start date
+        if (taskEnd < taskStart) {
+          taskEnd = taskStart;
+        }
+
+        // Iterate through minimap entries and increment count if task overlaps
+        this.minimap.forEach(entry => {
+          // Use isDateInRange to check if the task overlaps with the minimap entry's time interval
+          if (isDateInRange(entry.date, taskStart, taskEnd, this.currentTimeUnit)) {
+            entry.count++;
+          }
+        });
+
+      } catch (error) {
+        console.error(`TimelineManager: Error processing task for minimap: ${task.filePath || task.name}`, error);
+        // Continue processing other tasks even if one fails
+      }
+    });
+    // --- End Simplified Task Processing --- 
+
+    // console.log(`TimelineManager: Minimap updated. Entries: ${this.minimap.length}, Total Count: ${this.minimap.reduce((sum, entry) => sum + entry.count, 0)}`);
+
+    // Emit update AFTER minimap calculation is complete
+    this.emit("timeline-updated"); 
+  }
+
+  /**
+   * Get the center date of the current viewport
+   */
+  getViewportCenterDate(): Date {
+    if (this.currentTimeUnit === TimeUnit.MONTH) {
+      // For month view, we want to handle even and odd number of columns differently
+      const columns = this.settingsManager.settings.numberOfColumns;
+      
+      if (columns % 2 === 0) {
+        // For even number of columns, we want the current month (right edge of viewport)
+        return new Date(this.currentDate.getFullYear(), this.currentDate.getMonth(), 15);
+      } else {
+        // For odd number of columns, we want the middle month
+        const minYear = this.localMinDate.getFullYear();
+        const minMonth = this.localMinDate.getMonth();
+        const maxYear = this.localMaxDate.getFullYear();
+        const maxMonth = this.localMaxDate.getMonth();
+        
+        // Calculate total months between min and max
+        const totalMonths = (maxYear - minYear) * 12 + (maxMonth - minMonth);
+        const middleMonthOffset = Math.floor(totalMonths / 2);
+        
+        // Create a new date at the middle month, 15th day
+        const middleDate = new Date(minYear, minMonth + middleMonthOffset, 15);
+        
+        return middleDate;
+      }
+    } else {
+      // For day and week views, simple midpoint calculation works well
+      const centerDate = new Date((this.localMinDate.getTime() + this.localMaxDate.getTime()) / 2);
+      return centerDate;
+    }
+  }
+
+  /**
+   * Get debug information about the timeline
+   */
+  getDebugInfo(): string {
+    return `Timeline Info:
+    Current Date: ${this.currentDate}
+    Global Min Date: ${this.globalMinDate}
+    Global Max Date: ${this.globalMaxDate}
+    Local Min Date: ${this.localMinDate}
+    Local Max Date: ${this.localMaxDate}
+    Current Time Unit: ${this.currentTimeUnit}
+    Minimap Entries: ${this.minimap.length}`;
+  }
+
+  /**
+   * Ensures the viewport stays within global bounds
+   */
+  public constrainViewportToGlobalBounds(): void {
+    let modified = false;
+    
+    // Check if minDate is less than globalMinDate
+    if (this.localMinDate < this.globalMinDate) {
+      this.localMinDate = new Date(this.globalMinDate.getTime());
+      modified = true;
+    }
+    
+    // Check if maxDate is greater than globalMaxDate
+    if (this.localMaxDate > this.globalMaxDate) {
+      this.localMaxDate = new Date(this.globalMaxDate.getTime());
+      modified = true;
+    }
+    
+    // If we modified the dates, log the changes
+    if (modified) {
+      return;
+    }
+  }
+
+  /**
+   * Get the first day of the month for a given date
+   * Used by BoardLayouter to ensure month alignment
+   */
+  getFirstDayOfMonth(date: Date): Date {
+    return new Date(date.getFullYear(), date.getMonth(), 1);
+  }
+  
+  /**
+   * Get month range information for the current viewport
+   * Returns the start month, number of months, and whether the current date is visible
+   */
+  getMonthRangeInfo(): { startMonth: Date, monthCount: number, currentMonthVisible: boolean } {
+    // Normalize dates to first day of month
+    const startMonth = this.getFirstDayOfMonth(this.localMinDate);
+    const endMonth = this.getFirstDayOfMonth(this.localMaxDate);
+    const currentMonth = this.getFirstDayOfMonth(this.currentDate);
+    
+    // Calculate the number of months in the viewport
+    const monthCount = 
+      (endMonth.getFullYear() - startMonth.getFullYear()) * 12 + 
+      (endMonth.getMonth() - startMonth.getMonth()) + 1;
+    
+    // Check if the current month is within the viewport
+    const currentMonthVisible = 
+      currentMonth >= startMonth && 
+      currentMonth <= endMonth;
+    
+    return {
+      startMonth,
+      monthCount,
+      currentMonthVisible
+    };
+  }
+} #######
+
+./src/controllers/TaskManager.ts
+#######
+import { TFile, App, TAbstractFile } from "obsidian";
+import EventEmitter from "events";
+import { ITask } from "../interfaces/ITask";
+import { parseTaskFile, alignFilenameFrontmatter } from "../utils/fileUtils";
+
+export class TaskManager extends EventEmitter {
+	app: App;
+	taskDirectory: string;
+	activeProject: string | null = "All";
+	private tasks: ITask[] = [];
+	private totalFiles = 0;
+	private parsedFiles = 0;
+
+	constructor(app: App, taskDirectory: string) {
+		super();
+		this.app = app;
+		this.taskDirectory = taskDirectory;
+		this.initialize();
+		// Initial load is triggered by TaskDownManager
+	}
+
+	private initialize(): void {
+		this.app.workspace.onLayoutReady(() => {
+			// Set up file change listeners
+			this.app.vault.on("create", this.handleCreate);
+			this.app.vault.on("delete", this.handleDelete);
+			this.app.vault.on("rename", this.handleRename);
+			this.app.vault.on("modify", this.handleModify);
+			this.app.metadataCache.on("changed", this.handleMetadataChange);
+		});
+	}
+
+	getTasks(): ITask[] {
+		return this.tasks;
+	}
+
+	/**
+	 * Get the total number of files in the current project
+	 */
+	getTotalFiles(): number {
+		return this.totalFiles;
+	}
+
+	/**
+	 * Get the number of successfully parsed files in the current project
+	 */
+	getParsedFiles(): number {
+		return this.parsedFiles;
+	}
+
+	async setActiveProject(projectName: string): Promise<void> {
+		if (this.activeProject === projectName) return;
+		this.activeProject = projectName;
+		await this.loadTasks();
+	}
+
+	getTasksForLayout(): ITask[] {
+		return this.tasks;
+	}
+
+	async loadTasks(): Promise<void> {
+		if (!this.activeProject) {
+			this.tasks = [];
+			this.totalFiles = 0;
+			this.parsedFiles = 0;
+			this.emit("tasks-updated", this.tasks);
+			return;
+		}
+
+		let taskFiles: TFile[];
+		if (this.activeProject === "All") {
+			taskFiles = this.app.vault
+				.getMarkdownFiles()
+				.filter((file) => file.path.startsWith(this.taskDirectory + "/") && file.path.split('/').length > this.taskDirectory.split('/').length + 1);
+		} else {
+			const projectPath = `${this.taskDirectory}/${this.activeProject}`;
+			taskFiles = this.app.vault
+				.getMarkdownFiles()
+				.filter((file) => file.path.startsWith(projectPath + "/"));
+		}
+		
+		this.totalFiles = taskFiles.length;
+		this.parsedFiles = 0;
+
+		try {
+			const tasks: ITask[] = [];
+			for (const file of taskFiles) {
+				try {
+					const task = await parseTaskFile(file, this.app);
+					tasks.push(task);
+					this.parsedFiles++;
+				} catch (error: any) {
+					console.error(`Error parsing task file ${file.path}: ${error.message}`);
+				}
+			}
+
+			this.tasks = tasks;
+			this.emit("tasks-updated", this.tasks);
+		} catch (error: any) {
+			console.error(`Error in task loading process: ${error.message}`);
+			this.tasks = [];
+			this.emit("tasks-updated", this.tasks);
+		}
+	}
+
+	private isFileInActiveProjectScope(filePath: string): boolean {
+		if (this.activeProject === "All") {
+			return filePath.startsWith(this.taskDirectory + "/") && filePath.split('/').length > this.taskDirectory.split('/').length + 1;
+		} else if (this.activeProject) {
+			const projectPath = `${this.taskDirectory}/${this.activeProject}`;
+			return filePath.startsWith(projectPath + "/");
+		}
+		return false;
+	}
+
+	private handleFileChange = async (file: TFile, eventType?: 'create' | 'delete' | 'rename' | 'modify') => {
+		if (!this.isFileInActiveProjectScope(file.path)) return;
+
+		if (this.activeProject === "All") {
+			// For "All" project view, always reload fully
+			await this.loadTasks();
+			return;
+		}
+
+		// Introduce a small delay specifically for 'create' events
+		// This helps mitigate race conditions where the file create event fires
+		// before the file content (especially frontmatter) is fully written/available.
+		if (eventType === 'create') {
+			await new Promise(resolve => setTimeout(resolve, 150)); // 150ms delay
+		}
+		
+		try {
+			// Check if the file still exists (it might have been deleted quickly after creation)
+			const fileExists = this.app.vault.getAbstractFileByPath(file.path);
+
+			if (eventType === 'delete' || !fileExists) {
+				// Handle file deletion
+				const initialLength = this.tasks.length;
+				this.tasks = this.tasks.filter(
+					(task) => task.filePath !== file.path
+				);
+				if (this.tasks.length < initialLength) {
+					// Adjust counts only if a task was actually removed
+					this.parsedFiles--;
+					this.totalFiles--; 
+					console.log(`Removed task for deleted file: ${file.path}`);
+				} else {
+					// File might have been deleted but wasn't a tracked task
+					console.log(`File deleted but not tracked as a task: ${file.path}`);
+				}
+			} else if (file.path.endsWith(".md")) {
+				// Handle create, modify, rename for existing Markdown files
+				console.log(`Processing ${eventType || 'change'} for file: ${file.path}`);
+				await alignFilenameFrontmatter(file, this.app);
+				const updatedTask = await parseTaskFile(file, this.app);
+				const index = this.tasks.findIndex(
+					(task) => task.filePath === file.path
+				);
+
+				if (index !== -1) {
+					// Update existing task
+					this.tasks[index] = updatedTask;
+					console.log(`Updated existing task: ${file.path}`);
+				} else {
+					// Add new task (likely from create or rename)
+					this.tasks.push(updatedTask);
+					this.parsedFiles++;
+					// Recalculate total files in the project
+					const projectPath = `${this.taskDirectory}/${this.activeProject}`;
+					this.totalFiles = this.app.vault.getMarkdownFiles().filter(f => f.path.startsWith(projectPath + "/")).length;
+					console.log(`Added new task: ${file.path}`);
+				}
+			} else {
+				// Ignore non-markdown files
+				return;
+			}
+			
+			this.emit("tasks-updated", this.tasks);
+
+		} catch (error: any) {
+			console.error(`Error handling file change for ${file.path}: ${error.message}`);
+			await this.loadTasks();
+		}
+	};
+
+	private handleMetadataChange = async (file: TFile) => {
+		if (this.isFileInActiveProjectScope(file.path)) {
+			await this.loadTasks();
+		}
+	};
+
+	/**
+		* Gets unique non-empty string values for a given task property from the current tasks.
+		* @param variable The task property key ('category', 'status', 'priority', 'groupName').
+		* @returns An array of unique string values.
+		*/
+	getUniqueValuesForVariable(variable: keyof Omit<ITask, 'startDate' | 'endDate' | 'duration' | 'completed'>): string[] {
+		if (!this.tasks || this.tasks.length === 0) {
+			return [];
+		}
+
+		const valueSet = new Set<string>();
+
+		this.tasks.forEach(task => {
+			// Access the property dynamically. Ensure it exists and is a string.
+			const value = task[variable];
+			if (typeof value === 'string' && value.trim() !== '') {
+				valueSet.add(value.trim());
+			}
+			// Add specific handling if needed for properties that might not be strings directly
+			// e.g., if priority was a number, convert it: else if (variable === 'priority' && typeof value === 'number') { valueSet.add(String(value)); }
+		});
+
+		return Array.from(valueSet);
+	}
+
+	unregisterEvents() {
+		// Unregister listeners correctly
+		this.app.vault.off("create", this.handleCreate);
+		this.app.vault.off("delete", this.handleDelete);
+		this.app.vault.off("rename", this.handleRename);
+		this.app.vault.off("modify", this.handleModify);
+		this.app.metadataCache.off("changed", this.handleMetadataChange);
+	}
+
+	// Wrapper methods to pass event type to handleFileChange
+	private handleCreate = (file: TFile) => this.handleFileChange(file, 'create');
+	private handleDelete = (file: TFile) => this.handleFileChange(file, 'delete');
+	private handleRename = (file: TAbstractFile, oldPath: string) => {
+		// Rename needs special handling if oldPath was tracked
+		if (this.isFileInActiveProjectScope(oldPath)) {
+			this.tasks = this.tasks.filter(task => task.filePath !== oldPath);
+			// Decrement counts if a task was removed from the old path
+			// Note: This assumes rename doesn't immediately trigger a create/modify parse
+			// Consider simplifying rename to just trigger a full reload if complex
+			console.log(`Removed task due to rename from old path: ${oldPath}`);
+			// Adjust counts cautiously - maybe just rely on full reload if rename logic is tricky
+			// this.parsedFiles--; 
+			// this.totalFiles--; 
+		}
+		// Process the *new* file path as if it were modified/created
+		// Check if it's a TFile before passing, though the event usually gives TFile for markdown
+		if (file instanceof TFile) {
+			this.handleFileChange(file, 'rename'); 
+		} else {
+			console.log(`Rename event for non-TFile ignored: ${file.path}`);
+		}
+	};
+	private handleModify = (file: TFile) => this.handleFileChange(file, 'modify');
+}
+#######
+
+./src/controllers/BoardLayouter.ts
+#######
+/*
+ BoardLayouter.ts
+ Implements a board layout engine that creates column headers and lays out tasks into grids by groups.
+*/
+
+import { TimeUnit } from "../enums/TimeUnit"; // Updated path
+import { addTime, diffDays, diffMonths, formatDateByTimeUnit } from "../utils/dateUtils";
+
+export interface Task {
+  id: string;
+  start: Date;
+  end: Date;
+  // Other properties (for grouping, priority, etc.)
+  [key: string]: any;
+  x_start?: number; // 1-indexed column start (excluding header)
+  x_end?: number;   // column end
+  y?: number;       // row index in grid
+  group?: string;
+}
+
+export interface TaskGrid {
+  group: string;
+  tasks: Task[];
+}
+
+// ––– Date arithmetic helpers –––
+function subtractTime(date: Date, amount: number, unit: TimeUnit): Date {
+  return addTime(date, -amount, unit);
+}
+
+// ––– Formatting helpers –––
+export function formatDate(date: Date, unit: TimeUnit): string {
+  return formatDateByTimeUnit(date, unit);
+}
+
+// ––– The BoardLayouter class –––
+export class BoardLayouter {
+  currentDate: Date;
+  timeUnit: TimeUnit;
+  numberOfDateColumns: number;  // number of date intervals (excludes header)
+  numberOfTotalColumns: number; // date columns + header column
+  groupVariable: string;
+  tasks: Task[];
+  
+  // New viewport option properties
+  private viewportStartMonth?: Date;
+  private viewportMonthCount?: number;
+  private useViewportForMonths = false;
+
+  columnHeaders: string[] = [];
+  dateColumns: Date[] = []; // array of Date objects for each column
+  taskGrids: TaskGrid[] = [];
+
+  constructor(
+    currentDate: Date, 
+    timeUnit: TimeUnit, 
+    numberOfDateColumns: number, 
+    groupVariable: string, 
+    tasks: Task[],
+    options: any = {}
+  ) {
+    this.currentDate = currentDate;
+    this.timeUnit = timeUnit;
+    this.numberOfDateColumns = numberOfDateColumns;
+    this.numberOfTotalColumns = numberOfDateColumns;
+    this.groupVariable = groupVariable;
+    this.tasks = tasks;
+    
+    // Extract viewport options if provided
+    if (options) {
+      this.viewportStartMonth = options.viewportStartMonth;
+      this.viewportMonthCount = options.viewportMonthCount;
+      this.useViewportForMonths = !!options.useViewportForMonths;
+    }
+    
+    this.initialize();
+  }
+
+  private initialize() {
+    // Build the board's date columns.
+    if (this.timeUnit === TimeUnit.MONTH) {
+      this.initializeMonthColumns();
+    } else {
+      const startDate = subtractTime(this.currentDate, this.numberOfDateColumns - 1, this.timeUnit);
+      
+      this.dateColumns = [];
+      for (let i = 0; i < this.numberOfDateColumns; i++) {
+        this.dateColumns.push(addTime(startDate, i, this.timeUnit));
+      }
+      
+      // Format dates for column headers
+      this.columnHeaders = this.dateColumns.map(d => formatDate(d, this.timeUnit));
+    }
+    
+    this.processTasks();
+  }
+  
+  /**
+   * Special initialization for month columns to ensure proper month alignment
+   */
+  private initializeMonthColumns() {
+    this.dateColumns = [];
+    
+    // If viewport information is available and should be used, create columns from viewport directly
+    if (this.useViewportForMonths && this.viewportStartMonth && this.viewportMonthCount) {
+      // Directly use the viewport information for month columns
+      const startMonth = new Date(this.viewportStartMonth);
+      
+      // Calculate how many columns to show based on viewport month count and number of columns
+      const columnsToShow = Math.min(this.numberOfDateColumns, this.viewportMonthCount);
+      
+      // If we have more columns than months in viewport, try to center the months
+      let firstMonthOffset = 0;
+      if (columnsToShow < this.numberOfDateColumns) {
+        firstMonthOffset = Math.floor((this.numberOfDateColumns - columnsToShow) / 2);
+      }
+      
+      // Generate columns based on the viewport
+      for (let i = 0; i < this.numberOfDateColumns; i++) {
+        if (i >= firstMonthOffset && i < firstMonthOffset + columnsToShow) {
+          // Within viewport range - use actual months
+          const monthIndex = i - firstMonthOffset;
+          const columnDate = new Date(startMonth);
+          columnDate.setMonth(columnDate.getMonth() + monthIndex);
+          this.dateColumns.push(columnDate);
+        } else {
+          // Outside viewport - use dummy dates
+          // For columns before viewport, use months before viewport start
+          // For columns after viewport, use months after viewport end
+          const columnDate = new Date(startMonth);
+          if (i < firstMonthOffset) {
+            // Before viewport
+            columnDate.setMonth(columnDate.getMonth() - (firstMonthOffset - i));
+          } else {
+            // After viewport
+            columnDate.setMonth(columnDate.getMonth() + (i - firstMonthOffset - columnsToShow));
+          }
+          this.dateColumns.push(columnDate);
+        }
+      }
+    } else {
+      // Use the default logic based on current date
+      // Always start on the 1st day of the month for the current date
+      const normalizedCurrentDate = new Date(this.currentDate.getFullYear(), this.currentDate.getMonth(), 1);
+      
+      // Calculate start month based on layout configuration
+      const startMonth = new Date(normalizedCurrentDate);
+      
+      // For even columns, make the current month be the last column
+      // For odd columns, make the current month be in the middle
+      if (this.numberOfDateColumns % 2 === 0) {
+        // Even number of columns - show current month as the last (rightmost) column
+        startMonth.setMonth(startMonth.getMonth() - (this.numberOfDateColumns - 1));
+      } else {
+        // Odd number of columns - show current month in the middle
+        startMonth.setMonth(startMonth.getMonth() - Math.floor(this.numberOfDateColumns / 2));
+      }
+      
+      // Generate the column dates
+      for (let i = 0; i < this.numberOfDateColumns; i++) {
+        const columnDate = new Date(startMonth);
+        columnDate.setMonth(columnDate.getMonth() + i);
+        this.dateColumns.push(columnDate);
+      }
+    }
+    
+    // Format the column headers
+    this.columnHeaders = this.dateColumns.map(d => formatDate(d, this.timeUnit));
+  }
+
+  private processTasks() {
+    const firstDate = this.dateColumns[0];
+    const lastDate = this.dateColumns[this.dateColumns.length - 1];
+
+    // --- Refined Board Boundary Calculation ---
+    // normFirst: Start of the first day of the first period
+    const normFirst = new Date(firstDate.getFullYear(), firstDate.getMonth(), firstDate.getDate());
+    normFirst.setHours(0, 0, 0, 0); // Ensure start of day
+
+    // normLast: End of the last day of the last period
+    const normLast = new Date(lastDate.getFullYear(), lastDate.getMonth(), lastDate.getDate());
+    if (this.timeUnit === TimeUnit.DAY) {
+      // End of the last day
+      normLast.setHours(23, 59, 59, 999);
+    } else if (this.timeUnit === TimeUnit.WEEK) {
+      // End of the last day of the week containing lastDate
+      const dayOfWeek = normLast.getDay(); // 0=Sun, 1=Mon, ..., 6=Sat
+      const daysToAdd = (dayOfWeek === 0) ? 0 : (7 - dayOfWeek); // Days until next Sunday
+      normLast.setDate(normLast.getDate() + daysToAdd);
+      normLast.setHours(23, 59, 59, 999);
+    } else if (this.timeUnit === TimeUnit.MONTH) {
+      // End of the last day of the month containing lastDate
+      normLast.setMonth(normLast.getMonth() + 1);
+      normLast.setDate(0); // Go to last day of previous month (which is the target month)
+      normLast.setHours(23, 59, 59, 999);
+    }
+    // --- End Refined Boundary Calculation ---
+
+    const processed: Task[] = [];
+
+    for (const task of this.tasks) {
+      // Normalize task dates to start of day for comparison
+      const taskStartNorm = new Date(task.start.getFullYear(), task.start.getMonth(), task.start.getDate());
+      taskStartNorm.setHours(0, 0, 0, 0);
+      const taskEndNorm = new Date(task.end.getFullYear(), task.end.getMonth(), task.end.getDate());
+      taskEndNorm.setHours(0, 0, 0, 0); // Compare start of end day
+
+      // --- Refined Filtering Logic ---
+      // Include tasks where the task interval overlaps the board interval [normFirst, normLast]
+      // Overlap condition: !(taskEnd < boardStart || taskStart > boardEnd)
+      if (taskEndNorm < normFirst || taskStartNorm > normLast) {
+        continue; // Task is completely outside the board's time range
+      }
+      let x_start: number, x_end: number;
+      if (this.timeUnit === TimeUnit.DAY) {
+        const diffStart = diffDays(task.start, firstDate);
+        const diffEnd   = diffDays(task.end, firstDate);
+        x_start = Math.max(1, diffStart + 1);
+        x_end   = Math.min(this.dateColumns.length, diffEnd + 1);
+      } else if (this.timeUnit === TimeUnit.WEEK) {
+        // For week view, assign columns based on the week difference from normFirst.
+        // This handles year boundaries by computing the actual week offset via diffDays.
+        x_start = task.start < normFirst ? 1 : (Math.ceil(diffDays(task.start, normFirst) / 7) + 1);
+        x_end   = task.end > normLast   ? this.dateColumns.length : (Math.ceil(diffDays(task.end, normFirst) / 7) + 1);
+      } else if (this.timeUnit === TimeUnit.MONTH) {
+        // Ensure tasks within the visible months are included
+        const taskStartMonth = new Date(task.start.getFullYear(), task.start.getMonth(), 1);
+        const taskEndMonth = new Date(task.end.getFullYear(), task.end.getMonth(), 1);
+        const firstMonth = new Date(firstDate.getFullYear(), firstDate.getMonth(), 1);
+        
+        // Calculate column position based on month difference
+        x_start = task.start < normFirst ? 1 : (diffMonths(taskStartMonth, firstMonth) + 1);
+        // Ensure x_start is within bounds
+        x_start = Math.max(1, Math.min(this.dateColumns.length, x_start));
+        
+        // Ensure x_end is at least x_start and at most the number of columns
+        x_end = task.end > normLast ? this.dateColumns.length : (diffMonths(taskEndMonth, firstMonth) + 1);
+        x_end = Math.max(x_start, Math.min(this.dateColumns.length, x_end));
+      } else {
+        x_start = x_end = 1;
+      }
+      task.x_start = x_start;
+      task.x_end   = x_end;
+      // Set group (if not present, use "default")
+      task.group = task[this.groupVariable] ? task[this.groupVariable].toString() : "default";
+      processed.push(task);
+    }
+
+    // Group tasks by their group property.
+    const groups: { [group: string]: Task[] } = {};
+    for (const task of processed) {
+      groups[task.group!] = groups[task.group!] || [];
+      groups[task.group!].push(task);
+    }
+
+    // For each group, lay out the tasks.
+    this.taskGrids = [];
+    for (const group in groups) {
+      const laidOutTasks = this.layoutTaskGrid(groups[group]);
+      this.taskGrids.push({ group, tasks: laidOutTasks });
+    }
+  }
+
+  // Lay out a single group's tasks using a greedy algorithm.
+  private layoutTaskGrid(tasks: Task[]): Task[] {
+    // Composite sort:
+    //  – Primary: effective "duration" (interval tasks get their full span; point tasks get 0)
+    //  – Secondary: priority (lower numbers come first)
+    //  – Tertiary: if priorities are equal, force interval tasks to come before point tasks
+    //  – Finally: alphabetical by id.
+    const sortedTasks = tasks.slice().sort((a, b) => {
+      const durA = (a.x_end! - a.x_start!) || 0;
+      const durB = (b.x_end! - b.x_start!) || 0;
+      if (durA !== durB) return durB - durA;
+      if ((a.priority ?? Infinity) !== (b.priority ?? Infinity)) return (a.priority ?? Infinity) - (b.priority ?? Infinity);
+      const isPointA = a.x_start === a.x_end;
+      const isPointB = b.x_start === b.x_end;
+      if (a.priority === b.priority && isPointA !== isPointB) return isPointA ? 1 : -1;
+      return a.id.localeCompare(b.id);
+    });
+
+    // Greedy "hole‐filling": assign each task the lowest row where it does not conflict.
+    const rows: Task[][] = [];
+    for (const task of sortedTasks) {
+      let placed = false;
+      for (let i = 0; i < rows.length; i++) {
+        if (!this.taskConflicts(task, rows[i])) {
+          task.y = i;
+          rows[i].push(task);
+          placed = true;
+          break;
+        }
+      }
+      if (!placed) {
+        task.y = rows.length;
+        rows.push([task]);
+      }
+    }
+    
+    // Find the maximum y-coordinate from all tasks
+    let maxY = -1;
+    for (const task of sortedTasks) {
+      maxY = Math.max(maxY, task.y || 0);
+    }
+    
+    // Always ensure at least one row (even if no tasks exist)
+    if (maxY === -1) {
+      maxY = 0;
+    }
+    
+    // Add an invisible "spacer" task to ensure we always have at least one empty row at the bottom
+    // This task has no visual representation but ensures the grid has the extra empty row
+    const spacerTask: Task = {
+      id: `spacer-${Date.now()}`,
+      start: new Date(),
+      end: new Date(),
+      x_start: 0, // Off-grid position so it won't be visible
+      x_end: 0,
+      y: maxY + 1, // Place it one row below the last used row
+      invisible: true, // Mark it as invisible so it can be filtered out if needed
+    };
+    
+    sortedTasks.push(spacerTask);
+    
+    return sortedTasks;
+  }
+
+  // Determines whether task "A" would conflict with any task already in the given row.
+  // For DAY view we use standard closed–interval overlap.
+  // For WEEK and MONTH views (where tasks might be rendered as a "point" when they fall completely within a period),
+  // we adjust: if one task is rendered as a point and the other as an interval, then if they share the boundary
+  // they are allowed only if their priorities differ; but if the two tasks have the same priority, we force a separation.
+  private taskConflicts(task: Task, row: Task[]): boolean {
+    for (const placedTask of row) {
+      const isTaskPoint = (task.x_start === task.x_end);
+      const isPlacedPoint = (placedTask.x_start === placedTask.x_end);
+      if (this.timeUnit === TimeUnit.DAY) {
+        // In day view, always use closed–interval check.
+        if (!(task.x_start! > placedTask.x_end! || task.x_end! < placedTask.x_start!)) {
+          return true;
+        }
+      } else {
+        // WEEK/MONTH views:
+        if (isTaskPoint && isPlacedPoint) {
+          // Two point tasks conflict if they are in the same column.
+          if (task.x_start === placedTask.x_start) return true;
+          continue; // Otherwise, allow points in different columns on the same row.
+        }
+        // For all other cases (interval/interval, interval/point),
+        // a standard closed-interval overlap check determines conflict.
+        // This includes cases where a point touches the boundary of an interval.
+        if (!(task.x_start! > placedTask.x_end! || task.x_end! < placedTask.x_start!)) {
+          return true; // Conflict if intervals overlap
+        }
+      }
+    }
+    return false;
+  }
+
+  // Public getters.
+  public getColumnHeaders(): string[] {
+    return this.columnHeaders;
+  }
+  public getTaskGrids(): TaskGrid[] {
+    return this.taskGrids;
+  }
+}
+#######
+
+./src/utils/dateUtils.ts
+#######
+import { TimeUnit } from "../enums/TimeUnit";
+
+/**
+ * Adds a specified amount of a given time unit to a date.
+ */
+export function addTime(date: Date, amount: number, unit: TimeUnit): Date {
+	const result = new Date(date);
+	if (unit === TimeUnit.DAY) {
+		result.setDate(result.getDate() + amount);
+	} else if (unit === TimeUnit.WEEK) {
+		result.setDate(result.getDate() + amount * 7);
+	} else if (unit === TimeUnit.MONTH) {
+		result.setMonth(result.getMonth() + amount);
+	}
+	return result;
+}
+
+export function formatDateYYYYMMDD(date: Date): string {
+  if (!date || !(date instanceof Date) || isNaN(date.getTime())) {
+    console.error("Invalid date provided to formatDateYYYYMMDD:", date);
+    const today = new Date();
+    const year = today.getFullYear();
+    const month = (today.getMonth() + 1).toString().padStart(2, '0');
+    const day = today.getDate().toString().padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  }
+  
+  const year = date.getFullYear();
+  const month = (date.getMonth() + 1).toString().padStart(2, '0');
+  const day = date.getDate().toString().padStart(2, '0');
+  
+  return `${year}-${month}-${day}`;
+}
+
+export function diffDays(d1: Date, d2: Date): number {
+  return Math.floor((d1.getTime() - d2.getTime()) / (1000 * 60 * 60 * 24));
+}
+
+export function normalizeDate(d: Date): Date {
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate());
+}
+
+export function getWeekNumber(date: Date): number {
+  const tempDate = new Date(date.getTime());
+  tempDate.setHours(0, 0, 0, 0);
+  tempDate.setDate(tempDate.getDate() + 3 - ((tempDate.getDay() + 6) % 7));
+  const week1 = new Date(tempDate.getFullYear(), 0, 4);
+  return 1 + Math.round((((tempDate.getTime() - week1.getTime()) / 86400000) - 3 + ((week1.getDay() + 6) % 7)) / 7);
+}
+
+export function getMonthYear(d: Date): string {
+  return `${d.getFullYear()}-${d.getMonth()}`;
+}
+
+export function isDateInRange(date: Date, start: Date, end: Date, timeUnit: TimeUnit): boolean {
+  // Handle invalid inputs
+  if (!date || !start || !end) {
+    return false;
+  }
+  
+  try {
+    // Ensure we're working with Date objects
+    const d = date instanceof Date ? date : new Date(date);
+    const s = start instanceof Date ? start : new Date(start);
+    const e = end instanceof Date ? end : new Date(end);
+    
+    // Check for invalid dates
+    if (isNaN(d.getTime()) || isNaN(s.getTime()) || isNaN(e.getTime())) {
+      return false;
+    }
+    
+    const normalizedDate = normalizeDate(d);
+    let normalizedStart = normalizeDate(s);
+    let normalizedEnd = normalizeDate(e);
+    
+    // If end date is before start date, swap them for the comparison
+    if (normalizedEnd < normalizedStart) {
+      [normalizedStart, normalizedEnd] = [normalizedEnd, normalizedStart];
+    }
+    
+    if (timeUnit === TimeUnit.DAY) {
+      // For day view, check if the date is between start and end (inclusive)
+      return normalizedDate >= normalizedStart && normalizedDate <= normalizedEnd;
+    } else if (timeUnit === TimeUnit.WEEK) {
+      // For week view, we need to compare the actual dates rather than week strings
+      // This fix handles tasks that span multiple weeks
+      
+      // Get start of week for each date
+      const dayOfWeek = normalizedDate.getDay() || 7; // Convert Sunday (0) to 7
+      const startOfWeekDate = new Date(normalizedDate);
+      startOfWeekDate.setDate(normalizedDate.getDate() - dayOfWeek + 1); // Monday is 1, so +1
+      
+      // For tasks that span multiple weeks, we need to check if the date's week
+      // is anywhere between the start and end dates of the task
+      return startOfWeekDate >= normalizedStart && startOfWeekDate <= normalizedEnd;
+    } else if (timeUnit === TimeUnit.MONTH) {
+      // For month view, get the month and year
+      const dateMonthYear = getMonthYear(normalizedDate);
+      const startMonthYear = getMonthYear(normalizedStart);
+      const endMonthYear = getMonthYear(normalizedEnd);
+      
+      // Check if the date's month-year is between start and end month-years
+      return dateMonthYear >= startMonthYear && dateMonthYear <= endMonthYear;
+    }
+  } catch (error) {
+    console.error("Error in isDateInRange:", error);
+    return false;
+  }
+  
+  return false;
+}
+
+export function getMsPerTimeUnit(timeUnit: TimeUnit): number {
+  if (timeUnit === TimeUnit.DAY) {
+    return 24 * 60 * 60 * 1000; // 1 day in ms
+  } else if (timeUnit === TimeUnit.WEEK) {
+    return 7 * 24 * 60 * 60 * 1000; // 1 week in ms
+  } else if (timeUnit === TimeUnit.MONTH) {
+    return 30 * 24 * 60 * 60 * 1000; // ~1 month in ms (approximation)
+  }
+  return 24 * 60 * 60 * 1000; // Default to day
+}
+
+export function formatDateByTimeUnit(date: Date, unit: TimeUnit): string {
+  if (unit === TimeUnit.DAY) {
+    return date.toLocaleDateString('en-US', { weekday: 'short' }) + ", " + 
+           date.getDate().toString().padStart(2, '0') + "." + 
+           (date.getMonth() + 1).toString().padStart(2, '0') + "." + 
+           date.getFullYear().toString().slice(-2);
+  } else if (unit === TimeUnit.WEEK) {
+    const weekNum = getWeekNumber(date);
+    return date.getFullYear() + " - W" + (weekNum < 10 ? "0" + weekNum : weekNum);
+  } else if (unit === TimeUnit.MONTH) {
+    return date.toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
+  }
+  return date.toDateString();
+}
+
+export function diffMonths(a: Date, b: Date): number {
+  return (a.getFullYear() - b.getFullYear()) * 12 + (a.getMonth() - b.getMonth());
+}
+
+
+#######
+
+./src/utils/eventEmitter.ts
+#######
+/**
+ * A simple event emitter utility to manage custom events within the plugin. It supports subscribing, unsubscribing, and emitting events.
+ *
+ * Legacy files:
+ * - "./src/utils/eventEmitter.ts"
+ * - 
+ */
+// Define a type for event listeners
+type EventListener = (...args: any[]) => void;
+
+export class EventEmitter {
+  private events: { [key: string]: EventListener[] } = {};
+  
+  on(event: string, listener: EventListener): void {
+    if (!this.events[event]) {
+      this.events[event] = [];
+    }
+    this.events[event].push(listener);
+  }
+  
+  off(event: string, listener: EventListener): void {
+    if (!this.events[event]) return;
+    this.events[event] = this.events[event].filter(l => l !== listener);
+  }
+  
+  emit(event: string, ...args: any[]): void {
+    if (this.events[event]) {
+      this.events[event].forEach(listener => listener(...args));
+    }
+  }
+}
+
+
+#######
+
+./src/utils/tooltipUtils.ts
+#######
+/**
+ * Utility functions for tooltip management
+ */
+
+/**
+ * Calculates and applies the best position for the tooltip to ensure it stays in the viewport
+ * 
+ * @param parent - The parent element that the tooltip is attached to
+ * @param tooltip - The tooltip element to position
+ */
+export function positionTooltip(parent: HTMLElement, tooltip: HTMLElement): void {
+  // Reset tooltip position first for proper size calculation
+  tooltip.style.left = "calc(100% + 5px)";
+  tooltip.style.top = "-10px";
+  tooltip.style.right = "auto";
+  tooltip.style.bottom = "auto";
+  
+  // Make tooltip temporarily visible to calculate dimensions
+  const originalDisplay = tooltip.style.display;
+  tooltip.style.display = "block";
+  tooltip.style.visibility = "hidden";
+  
+  const tooltipRect = tooltip.getBoundingClientRect();
+  const viewportWidth = window.innerWidth;
+  const viewportHeight = window.innerHeight;
+  
+  // Check if tooltip overflows right edge
+  if (tooltipRect.right > viewportWidth) {
+    tooltip.style.left = "auto";
+    tooltip.style.right = "calc(100% + 5px)";
+  }
+  
+  // Check if tooltip overflows bottom edge
+  if (tooltipRect.bottom > viewportHeight) {
+    tooltip.style.top = "auto";
+    tooltip.style.bottom = "0";
+  }
+  
+  // Restore original visibility
+  tooltip.style.display = originalDisplay;
+  tooltip.style.visibility = "visible";
+} #######
+
+./src/utils/fileUtils.ts
+#######
+import { formatDateYYYYMMDD } from "./dateUtils";
+import { App, TFile } from "obsidian";
+import { ITask } from "../interfaces/ITask";
+
+export async function parseTaskFile(file: TFile, app: App): Promise<ITask> {
+	// Read the file content
+	const content = (await app.vault.read(file)) || "";
+
+	// Parse subtasks from content
+	let totalSubtasks = 0;
+	let completedSubtasks = 0;
+	const lines = content.split("\n");
+	const subtaskRegex = /^\s*-\s*\[( |x)\]/i; // Case-insensitive match for 'x'
+
+	for (const line of lines) {
+		const match = line.match(subtaskRegex);
+		if (match) {
+			totalSubtasks++;
+			if (match[1].toLowerCase() === "x") {
+				completedSubtasks++;
+			}
+		}
+	}
+
+	// Extract values from frontmatter using Obsidian's metadataCache
+	const fileCache = app.metadataCache.getFileCache(file);
+	const frontmatter = fileCache?.frontmatter;
+	const fm_name = frontmatter?.name;
+	const fm_start = frontmatter?.start;
+
+	if (!fm_name || !fm_start) {
+		throw new Error(`Missing required frontmatter fields in ${file.path}`);
+	}
+
+	const name = fm_name;
+	const start = fm_start;
+	const end = frontmatter?.end || "";
+	const category = frontmatter?.category || "default";
+	const status = frontmatter?.status || "planned";
+	const priority =
+		frontmatter?.priority !== undefined
+			? parseInt(frontmatter.priority, 10)
+			: 0;
+	//check if start is before end
+	if (start && end && start > end) {
+		throw new Error(
+			`Start date ${start} is after end date ${end} in ${file.path}`
+		);
+	}
+	// Return an object literal conforming to ITask
+	const taskData: ITask = {
+		name,
+		start,
+		end,
+		category,
+		status,
+		filePath: file.path,
+		content,
+		priority,
+		totalSubtasks,
+		completedSubtasks,
+	};
+	return taskData;
+}
+
+export async function alignFilenameFrontmatter(
+	file: TFile,
+	app: App
+): Promise<void> {
+	const fileCache = app.metadataCache.getFileCache(file);
+	if (!fileCache || !fileCache.frontmatter) {
+		throw new Error("Missing required frontmatter fields (start and name)");
+	}
+	const fm = fileCache.frontmatter;
+	if (!fm.start || !fm.name) {
+		throw new Error("Missing required frontmatter fields (start and name)");
+	}
+	const datePrefix = formatDateYYYYMMDD(new Date(fm.start)).replace(/-/g, "");
+	const safeName = fm.name.replace(/[^a-zA-Z0-9]/g, "_");
+	const newBasename = `${datePrefix}_${safeName}`;
+	const newFileName = file.extension
+		? `${newBasename}.${file.extension}`
+		: newBasename;
+	if (file.name !== newFileName) {
+		await update_filename(file, newFileName, app);
+	} else {
+		console.log(`File ${file.name} is already aligned with frontmatter`);
+	}
+}
+
+export async function update_frontmatter(
+	file: TFile,
+	updatedFields: { start?: string; name?: string },
+	app: App
+): Promise<void> {
+	const fullContent = await app.vault.read(file);
+	const fmRegex = /^---\n([\s\S]*?)\n---/;
+	const match = fullContent.match(fmRegex);
+	if (!match) {
+		throw new Error(`No frontmatter section found in ${file.path}`);
+	}
+	let frontmatterText = match[0];
+	let lines = frontmatterText.split("\n");
+
+	if (updatedFields.start) {
+		let updated = false;
+		lines = lines.map((line) => {
+			if (line.trim().startsWith("start:")) {
+				updated = true;
+				return `start: ${updatedFields.start}`;
+			}
+			return line;
+		});
+		if (
+			!updated &&
+			lines.length >= 2 &&
+			lines[lines.length - 1].trim() === "---"
+		) {
+			lines.splice(lines.length - 1, 0, `start: ${updatedFields.start}`);
+		}
+	}
+
+	if (updatedFields.name) {
+		let updated = false;
+		lines = lines.map((line) => {
+			if (line.trim().startsWith("name:")) {
+				updated = true;
+				return `name: ${updatedFields.name}`;
+			}
+			return line;
+		});
+		if (
+			!updated &&
+			lines.length >= 2 &&
+			lines[lines.length - 1].trim() === "---"
+		) {
+			lines.splice(lines.length - 1, 0, `name: ${updatedFields.name}`);
+		}
+	}
+
+	frontmatterText = lines.join("\n");
+	const updatedContent = fullContent.replace(fmRegex, frontmatterText);
+	await app.vault.modify(file, updatedContent);
+}
+
+export async function update_filename(
+	file: TFile,
+	newFileName: string,
+	app: App
+): Promise<TFile> {
+	if (!file.parent) {
+		console.error(
+			`Cannot rename file "${file.name}" because it has no parent folder.`
+		);
+		throw new Error("File has no parent folder.");
+	}
+	const newPath = `${file.parent.path}/${newFileName}`;
+	await app.vault.rename(file, newPath);
+	return file;
+}
+
+/**
+ * Creates a new file with specified frontmatter and content,
+ * ensuring the target directory exists.
+ */
+export async function createFile(
+	app: App,
+	directory: string,
+	fileName: string,
+	defaultFrontmatter: Record<string, any>,
+	dynamicFrontmatter: Record<string, any>,
+	content: string
+): Promise<TFile> {
+	try {
+		// 1. Ensure the target directory exists
+		const directoryExists = await app.vault.adapter.exists(directory);
+		if (!directoryExists) {
+			console.log(`Directory ${directory} does not exist. Creating...`);
+			await app.vault.createFolder(directory);
+		}
+
+		// 2. Construct the full path
+		const fullPath = `${directory}/${fileName}`;
+
+		// 3. Merge frontmatter (dynamic overrides default)
+		const mergedFrontmatter = {
+			...defaultFrontmatter,
+			...dynamicFrontmatter,
+		};
+
+		// 4. Format frontmatter for the file
+		const frontmatterLines = ["---"];
+		for (const [key, value] of Object.entries(mergedFrontmatter)) {
+			if (value !== undefined && value !== null) {
+				frontmatterLines.push(`${key}: ${value}`);
+			}
+		}
+		frontmatterLines.push("---");
+		frontmatterLines.push("");
+		frontmatterLines.push(content);
+		const fileContent = frontmatterLines.join("\n");
+
+		// 5. Create the file
+		console.log(`Attempting to create file at: ${fullPath}`);
+		const file = await app.vault.create(fullPath, fileContent);
+		console.log(`File created successfully: ${file.path}`);
+		return file;
+	} catch (error: any) {
+		console.error(
+			`Error creating file at ${directory}/${fileName}:`,
+			error
+		);
+		if (error.message.includes("EEXIST")) {
+			console.error("File already exists at this path.");
+		}
+		throw error;
+	}
+}
+
+/**
+ * Deletes a task's file
+ */
+export async function deleteFile(task: ITask, app: App): Promise<void> {
+	const file = app.vault.getAbstractFileByPath(task.filePath);
+	if (!file) {
+		throw new Error(`File not found: ${task.filePath}`);
+	}
+	await app.vault.delete(file);
+}
+
+// Utility function to normalize path separators to forward slashes
+#######
+
+./src/views/TaskdownView.ts
+#######
+import { ItemView, WorkspaceLeaf } from "obsidian";
+import { NavBar } from "../components/NavBar/NavBar";
+import { BoardContainer } from "../components/BoardContainer/BoardContainer";
+import { TimeUnit } from '../enums/TimeUnit';
+import { TaskDownManager } from "../controllers/TaskDownManager";
+
+export class TaskdownView extends ItemView {
+    private navBar: NavBar;
+    private boardContainer: BoardContainer;
+    private currentTimeUnit: TimeUnit = TimeUnit.DAY;
+    private taskDownManager: TaskDownManager;
+
+    constructor(
+        leaf: WorkspaceLeaf,
+        taskDownManager: TaskDownManager,
+    ) {
+        super(leaf);
+        this.taskDownManager = taskDownManager;
+        
+        const defaultTimeUnit = this.taskDownManager.settingsManager?.settings.defaultTimeUnit;
+        if (defaultTimeUnit === "week") {
+            this.currentTimeUnit = TimeUnit.WEEK;
+        } else if (defaultTimeUnit === "month") {
+            this.currentTimeUnit = TimeUnit.MONTH;
+        } else {
+            this.currentTimeUnit = TimeUnit.DAY;
+        }
+    }
+
+    async onOpen() {
+        const container = this.containerEl.children[1];
+        container.empty();
+        container.addClass("taskdown-container");
+
+        const handleProjectSelect = (project: string) => {
+            this.taskDownManager.setActiveProject(project);
+        };
+        
+        this.navBar = new NavBar(
+            this.app,
+            this.taskDownManager,
+            "Taskdown Plugin", // Consider getting version from manifest
+            handleProjectSelect
+        );
+        container.appendChild(this.navBar.element);
+
+        // Explicitly trigger initial NavBar UI update
+        this.navBar.triggerProjectsUpdate();
+
+        // Listen for board updates 
+        this.taskDownManager.getBoardManager().on("board-updated", () => {
+
+        });
+
+        // Listen for project changes (e.g., from New Folder creation trigger)
+        this.taskDownManager.on("project-changed", (project: string) => {
+             // NavBar listener handles this already
+        });
+        
+        // Listen for overall updates (tasks loaded, timeline changed, etc.)
+        this.taskDownManager.on("taskdown-updated", () => {
+             // Potentially refresh board container or other elements if needed
+             if (this.boardContainer) {
+                 // Example: Re-render board container if necessary
+                 // this.boardContainer.render(); // Assuming BoardContainer has a render method
+             }
+        });
+
+        // Create board container
+        const boardManager = this.taskDownManager.getBoardManager();
+        this.boardContainer = new BoardContainer(boardManager);
+        container.appendChild(this.boardContainer.element);
+    }
+
+    getViewType(): string {
+        return "taskdown-view";
+    }
+
+    getDisplayText(): string {
+        return "Taskdown View";
+    }
+
+
+    async onClose() {
+        // Cleanup if needed
+    }
+} #######
+
+./styles.css
+#######
+/* =================
+   VARIABLES
+   ================= */
+:root {
+  /* Colors */
+  --color-white: #ffffff;
+  --color-grey-100: #f5f5f5; /* Light grey for background */
+  --color-grey-200: #e9e9e9; /* Hover background */
+  --color-grey-300: #d4d4d4; /* Border color */
+  --color-grey-400: #b0b0b0; /* Hover border color */
+  --color-grey-500: #808080; /* Arrow color */
+  --color-grey-600: #555555;
+  --color-grey-700: #333333; /* Text color */
+  --color-black: #000000;
+
+  /* Spacing */
+  --spacing-xs: 4px;
+  --spacing-sm: 8px;
+  --spacing-md: 12px;
+  --spacing-lg: 16px;
+  
+  /* UI Elements */
+  --border-radius: 3px;
+  --card-border-width: 4px;
+  
+  /* Obsidian theme integration */
+  --background-primary: var(--color-white);
+  --background-modifier-border: var(--color-grey-300);
+  --text-normal: var(--color-grey-700);
+  --interactive-normal: var(--color-grey-100);
+  --interactive-hover: var(--color-grey-200);
+  --interactive-accent: var(--color-grey-700);
+  --text-on-accent: var(--color-white);
+}
+
+/* =================
+   LAYOUT & CONTAINERS
+   ================= */
+.taskdown-container {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+}
+
+.board-container {
+  flex: 1;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  padding: var(--spacing-md);
+  background-color: var(--color-white);
+}
+
+.board-content {
+  flex: 1;
+  display: grid;
+  grid-auto-rows: min-content;
+  gap: var(--spacing-md);
+  overflow: auto;
+  min-height: 0;
+}
+
+/* =================
+   NAVIGATION BAR
+   ================= */
+.nav-bar {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  background-color: var(--background-primary);
+  padding: var(--spacing-md);
+  font-family: Arial, sans-serif;
+  box-shadow: 0 2px 3px rgba(0,0,0,0.05);
+  gap: var(--spacing-sm); /* Reduced gap between rows */
+  min-width: 0; /* Prevent flex item from growing beyond container */
+}
+
+.nav-header {
+  display: flex;
+  align-items: center;
+  padding: 0;
+  min-width: 0; /* Prevent flex item from growing beyond container */
+}
+
+.nav-title {
+  font-size: 1.5rem;
+  margin: 0;
+  color: var(--text-normal);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0; /* Allow text to shrink */
+}
+
+.nav-controls-row {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  padding: var(--spacing-xs) 0; /* Reduced vertical padding */
+  flex-wrap: wrap; /* Allow items to wrap on smaller screens */
+  min-width: 0; /* Prevent flex item from growing beyond container */
+}
+
+/* Dropdown/Button Group containers */
+.nav-projects { /* Keep styles for project dropdown */
+  min-width: 150px !important;
+  max-width: 200px !important;
+  display: flex !important;
+  padding: var(--spacing-xs) 0 !important;
+  flex-shrink: 0;
+}
+.nav-views { /* Container for the view buttons */
+  display: flex; /* Use flex for the button group */
+  flex-shrink: 0; /* Prevent shrinking */
+}
+
+/* Select elements and dropdowns */
+.dropdown {
+  width: 100% !important;
+  height: 100% !important;
+  display: flex !important;
+  align-items: center !important;
+  min-width: 0; /* Allow content to shrink */
+}
+
+/* =================
+   SELECT & DROPDOWN STYLING
+   ================= */
+/* Removed general dropdown styles block (lines 123-144) - superseded by specific class below */
+
+/* Specific styles for Project dropdown */
+.nav-projects-select { /* Added in NavProjectsSelection.ts */
+  /* Base Appearance */
+  appearance: none !important;
+  box-sizing: border-box !important;
+  border-radius: 0 !important;
+  border: 1px solid var(--color-white) !important; /* Start with white border */
+  background-color: var(--color-grey-200) !important; /* Consistent background */
+  box-shadow: none !important;
+  margin: 0 !important;
+
+  /* Sizing & Layout */
+  display: block !important;
+  width: 100% !important;
+  height: 40px !important;
+  min-height: 40px !important;
+  padding: var(--spacing-sm) var(--spacing-sm) !important;
+
+  /* Text & Font */
+  font-size: 14px !important;
+  color: var(--text-normal) !important;
+  line-height: 1.5 !important;
+
+  /* Custom Arrow */
+  background-image: url("data:image/svg+xml;utf8,<svg fill='grey' height='24' viewBox='0 0 24 24' width='24' xmlns='http://www.w3.org/2000/svg'><path d='M7 10l5 5 5-5z'/><path d='M0 0h24v24H0z' fill='none'/></svg>") !important;
+  background-repeat: no-repeat !important;
+  background-position: right 8px top 50% !important;
+  background-size: 16px !important;
+}
+
+/* Specific styles for Board Grouping dropdown */
+.board-grouping-select { /* Added in BoardGroupingSelection.ts */
+  /* Base Appearance */
+  appearance: none !important;
+  box-sizing: border-box !important;
+  border-radius: 0 !important;
+  border: 1px solid var(--color-white) !important; /* Match navbar border */
+  background-color: var(--color-grey-200) !important; /* Match navbar background */
+  box-shadow: none !important;
+  margin: 0 !important;
+
+  /* Sizing & Layout */
+  display: block !important;
+  width: 100% !important; /* Take full width of its container cell */
+  /* height: 100% !important; Let height be determined by content/padding/grid */
+  /* min-height: 40px !important; Let height be determined by content/padding/grid */
+  padding: var(--spacing-sm) var(--spacing-sm) !important; /* Match navbar padding */
+
+  /* Text & Font */
+  font-size: 14px !important; /* Match navbar font size */
+  color: var(--text-normal) !important;
+  line-height: 1.5 !important; /* Match navbar line height */
+
+  /* Custom Arrow */
+  background-image: url("data:image/svg+xml;utf8,<svg fill='grey' height='24' viewBox='0 0 24 24' width='24' xmlns='http://www.w3.org/2000/svg'><path d='M7 10l5 5 5-5z'/><path d='M0 0h24v24H0z' fill='none'/></svg>") !important;
+  background-repeat: no-repeat !important;
+  background-position: right 8px top 50% !important;
+  background-size: 16px !important;
+}
+
+/* Styles for the new View Selection Button Group */
+.nav-view-buttons {
+  display: flex;
+  border-radius: 0; /* Optional: round the corners of the group */
+  overflow: hidden; /* Clip corners if using border-radius */
+  height: 40px; /* Match dropdown height */
+}
+
+.nav-view-button {
+  /* Reset default button styles */
+  appearance: none;
+  border-radius: 0 !important;
+  border: none !important;
+  border-width: 0 !important;
+  margin: 0;
+  padding: 0;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  outline: none;
+
+  /* Layout & Sizing */
+  display: inline-flex; /* Use inline-flex for alignment */
+  align-items: center;
+  justify-content: center;
+  padding: var(--spacing-sm) var(--spacing-md);
+  height: 100%; /* Fill container height */
+  min-width: 60px; /* Ensure buttons have some minimum width */
+  box-sizing: border-box;
+
+  /* Appearance */
+  background-color: var(--color-grey-200) !important; /* Consistent background */
+  color: var(--text-normal);
+  font-size: 14px;
+  line-height: 1; /* Adjust for vertical centering */
+  text-align: center;
+  transition: background-color 0.2s ease, color 0.2s ease, border-color 0.2s ease;
+
+  /* Add right border to separate buttons, except the last one */
+  border-right: none;
+}
+
+/* Remove border from the last button in the group */
+.nav-view-button:last-child {
+  border-right: none;
+}
+
+.nav-view-button:hover {
+  background-color: var(--color-grey-200); /* Slightly darker on hover */
+}
+
+.nav-view-button.is-active {
+  background-color: var(--color-grey-600) !important; /* Dark grey for active */
+  color: var(--text-on-accent); /* White text for active */
+  font-weight: bold; /* Optional: make active text bold */
+}
+
+/* Ensure active button's right border doesn't look weird if next button isn't active */
+.nav-view-button.is-active + .nav-view-button {
+   border-left: 1px solid var(--color-grey-600); /* Add left border matching active bg */
+}
+
+select option {
+  background-color: var(--color-grey-100) !important;
+  color: var(--text-normal) !important;
+  padding: var(--spacing-sm) !important;
+}
+
+select:hover,
+.dropdown select:hover {
+  background-color: var(--color-grey-200) !important;
+  border-color: var(--color-grey-400) !important;
+}
+
+select:focus,
+.dropdown select:focus {
+  outline: none !important;
+  border-color: var(--color-grey-400) !important;
+}
+
+/* Menu styling */
+.menu, 
+.dropdown-menu, 
+.suggestion-container, 
+.popover,
+.menu-item, 
+.suggestion-item, 
+.dropdown-item {
+  border-radius: 0 !important;
+}
+
+.menu, 
+.dropdown-menu, 
+.suggestion-container, 
+.popover {
+  box-shadow: 0 1px 3px rgba(0,0,0,0.1) !important;
+  background-color: var(--color-grey-100) !important;
+  border: 1px solid var(--color-grey-300) !important;
+}
+
+/* =================
+   BUTTONS
+   ================= */
+.nav-debug-toggle {
+  border-radius: 0;
+  border: 1px solid var(--color-grey-300);
+  background-color: var(--color-grey-100);
+  box-shadow: none;
+  outline: none;
+  padding: var(--spacing-md) var(--spacing-lg);
+  line-height: 1.5;
+  font-size: 14px;
+  height: 42px;
+  min-height: 42px;
+  color: var(--text-normal);
+  transition: all 0.2s ease;
+  vertical-align: middle;
+}
+
+.nav-debug-toggle:hover {
+  background-color: var(--color-grey-200);
+  border-color: var(--color-grey-400);
+}
+
+.nav-debug-toggle:focus {
+  outline: none;
+  border-color: var(--color-grey-400);
+}
+
+.nav-debug-toggle.active {
+  background-color: var(--interactive-accent);
+  color: var(--text-on-accent);
+  border-color: var(--interactive-accent);
+}
+
+/* =================
+   TIMELINE COMPONENTS
+   ================= */
+.nav-timeline-selection {
+  width: 100%;
+  background-color: var(--color-grey-100);
+  padding: var(--spacing-xs);
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+  max-height: 100px;
+}
+
+.timeline-title {
+  font-weight: bold;
+  font-size: 12px;
+  color: var(--color-grey-700);
+}
+
+/* Minimap */
+.nav-minimap {
+  width: 100%;
+  height: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.minimap-visualization {
+  width: 100%;
+  height: 20px;
+  display: flex;
+  background-color: var(--color-white);
+  border: 1px solid var(--color-grey-300);
+  border-radius: var(--border-radius);
+  transition: background-color 0.01s ease-out, border-color 0.01s ease-out; /* Near-instant hover */
+}
+
+.minimap-square {
+  flex: 1;
+  height: 100%;
+}
+
+.minimap-empty-state {
+  text-align: center;
+  color: var(--color-grey-500);
+  font-style: italic;
+  padding: var(--spacing-sm);
+}
+
+.minimap-summary {
+  font-size: 10px;
+  color: var(--color-grey-600);
+  text-align: center;
+}
+
+/* Time slider */
+.nav-time-slider {
+  width: 100%;
+  height: 25px;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+}
+
+.slider-track {
+  width: 100%;
+  height: 25px;
+  position: relative;
+  background-color: var(--color-white);
+  border: 1px solid var(--color-grey-300);
+  border-radius: var(--border-radius);
+  cursor: crosshair; /* Indicate hover interaction */
+  transition: background-color 0.01s ease-out, border-color 0.01s ease-out; /* Near-instant hover */
+}
+
+/* Container for all tick marks */
+.slider-tick-marks-container {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none; /* Don't interfere with track hover or selector drag */
+  overflow: hidden; /* Hide ticks outside the track */
+}
+
+/* Individual tick mark */
+.slider-tick-mark {
+  position: absolute;
+  bottom: 0; /* Align to the bottom of the track */
+  width: 1px;
+  height: 5px; /* Height of the tick mark */
+  background-color: var(--color-grey-400); /* Tick color */
+  transform: translateX(-50%); /* Center the tick */
+}
+
+/* Optional: Style for more significant ticks (e.g., month start) */
+/* .slider-tick-mark.significant {
+  height: 8px;
+  background-color: var(--color-grey-600);
+} */
+
+/* Hide old time marker elements if they exist */
+.time-markers,
+.time-marker,
+.marker-label {
+  display: none;
+}
+
+.current-date-indicator {
+  position: absolute;
+  width: 3px;
+  height: 100%;
+  background-color: var(--color-accent);
+  transform: translateX(-50%);
+  z-index: 2;
+}
+
+.viewport-selector-container {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.viewport-selector {
+  position: absolute;
+  height: 100%;
+  background-color: rgba(var(--color-accent-rgb), 0.2);
+  border: 2px solid var(--color-accent);
+  border-radius: var(--border-radius);
+  pointer-events: auto;
+  cursor: grab;
+  transition: background-color 0.01s ease-out, border-color 0.01s ease-out; /* Near-instant hover/drag */
+}
+
+.viewport-selector.dragging {
+  cursor: grabbing;
+  background-color: rgba(var(--color-accent-rgb), 0.3);
+}
+
+.handle {
+  position: absolute;
+  width: 8px;
+  height: 100%;
+  background-color: var(--color-accent);
+  cursor: col-resize;
+}
+
+.left-handle {
+  left: 0;
+  border-top-left-radius: var(--border-radius);
+  border-bottom-left-radius: var(--border-radius);
+}
+
+.right-handle {
+  right: 0;
+  border-top-right-radius: var(--border-radius);
+  border-bottom-right-radius: var(--border-radius);
+}
+
+.slider-error {
+  color: var(--color-error);
+  text-align: center;
+  padding: var(--spacing-md);
+}
+
+/* =================
+   BOARD COMPONENTS
+   ================= */
+.board-column-headers {
+  display: grid;
+  grid-auto-flow: column;
+}
+
+/* Reset padding/border on the first cell (grouping dropdown container) */
+.board-column-headers > div:first-child {
+  padding: 0 !important;
+  border: none !important;
+  border-radius: 0 !important;
+  background-color: transparent !important; /* Ensure cell bg doesn't interfere */
+}
+
+/* Shared cell styles */
+.board-cell, 
+.group-header {
+  padding: var(--spacing-sm);
+  background-color: var(--color-grey-200);
+  border-radius: 2px;
+  border: var(--card-border-width) solid var(--color-white);
+  color: var(--color-grey-700);
+}
+
+.board-cell {
+  text-align: center;
+}
+
+/* Board Groups */
+.board-group-grid {
+  display: grid;
+  grid-auto-rows: minmax(50px, auto);
+  gap: var(--spacing-sm);
+  margin-top: var(--spacing-md);
+}
+
+.group-header {
+  grid-column: 1 / -1;
+  font-weight: bold;
+}
+
+/* Empty Cell */
+.empty-cell {
+  background-color: transparent;
+  border: 1px dashed transparent;
+  min-height: 20px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.empty-cell:hover {
+  background-color: var(--color-grey-200);
+  border-color: var(--color-grey-300);
+}
+
+/* =================
+   TASK COMPONENTS
+   ================= */
+.taskdown-task {
+  background-color: var(--color-grey-400);
+  border-radius: 2px;
+  padding: var(--spacing-md);
+  text-align: left;
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+  color: var(--color-grey-700);
+  border: var(--card-border-width) solid var(--color-white);
+  position: relative;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  z-index: 1;
+}
+
+.taskdown-task:hover {
+  box-shadow: 0 3px 6px rgba(0, 0, 0, 0.15);
+  transform: translateY(-2px);
+}
+
+.taskdown-card-name {
+  font-weight: bold;
+  margin-bottom: var(--spacing-xs);
+}
+
+/* Subtasks */
+.taskdown-subtask-container {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-xs);
+  align-items: center;
+}
+
+.taskdown-subtask-box {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border: 1px solid var(--color-grey-500);
+  background-color: var(--color-white);
+  border-radius: 1px;
+}
+
+.taskdown-subtask-box.completed {
+  background-color: var(--color-grey-600);
+  border-color: var(--color-grey-600);
+}
+
+/* Task Colors (Removed - now applied via inline styles based on settings) */
+
+/* =================
+   TOOLTIPS
+   ================= */
+.hover-enabled {
+  position: relative;
+}
+
+.taskdown-tooltip {
+  display: none;
+  position: absolute;
+  z-index: 100;
+  background-color: var(--color-white);
+  border: 1px solid var(--color-grey-300);
+  border-radius: var(--border-radius);
+  padding: var(--spacing-md);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  min-width: 200px;
+  max-width: 300px;
+  top: -10px;
+  left: calc(100% + 5px);
+  font-size: 12px;
+  color: var(--color-grey-700);
+}
+
+.tooltip-content {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+}
+
+.tooltip-content div {
+  line-height: 1.4;
+}
+
+.tooltip-action {
+  margin-top: var(--spacing-sm);
+  font-weight: bold;
+  color: var(--color-grey-600);
+  cursor: pointer;
+}
+
+.tooltip-action:hover {
+  color: var(--color-grey-700);
+  text-decoration: underline;
+}
+
+/* =================
+   DEBUG COMPONENTS
+   ================= */
+.debug-cell {
+  outline: 2px solid red;
+}
+
+.debug-panel {
+  flex-shrink: 0;
+  background-color: #f5f5f5;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  padding: 10px;
+  margin-top: 10px;
+  font-family: monospace;
+  font-size: 0.85rem;
+  max-height: 300px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+}
+
+.debug-warning {
+  color: #d32f2f;
+  font-weight: bold;
+}
+
+.debug-panel h4 {
+  margin: 0 0 8px 0;
+  font-size: 1rem;
+  color: #333;
+  border-bottom: 1px solid #ddd;
+  padding-bottom: 4px;
+}
+
+.debug-panel h5 {
+  margin: 12px 0 4px 0;
+  font-size: 0.9rem;
+  color: #555;
+}
+
+.debug-section {
+  margin-bottom: 8px;
+}
+
+.debug-info {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 4px;
+  font-size: 0.8rem;
+}
+
+/* Debug Tabs */
+.debug-tabs {
+  display: flex;
+  gap: 2px;
+  margin-bottom: 8px;
+  border-bottom: 1px solid #ddd;
+  padding-bottom: 4px;
+}
+
+.debug-tab {
+  background-color: #e9e9e9;
+  border: 1px solid #ddd;
+  border-radius: 3px 3px 0 0;
+  padding: 4px 8px;
+  font-size: 0.8rem;
+  font-family: monospace;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+}
+
+.debug-tab:hover {
+  background-color: #f0f0f0;
+}
+
+.debug-tab.active {
+  background-color: #fff;
+  border-bottom-color: #fff;
+  font-weight: bold;
+}
+
+.debug-content {
+  overflow-y: auto;
+  flex-grow: 1;
+}
+
+/* Debug Tables */
+.debug-task-table,
+.debug-header-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.75rem;
+  margin-top: 4px;
+}
+
+.debug-header-table th,
+.debug-task-table th {
+  text-align: left;
+  padding: 2px 4px;
+  background-color: #f0f0f0;
+  border-bottom: 1px solid #ddd;
+  font-weight: bold;
+}
+
+.debug-header-table td,
+.debug-task-table td {
+  padding: 2px 4px;
+  border-bottom: 1px solid #eee;
+}
+
+.debug-header-table tr:nth-child(even),
+.debug-task-table tr:nth-child(even) {
+  background-color: #f9f9f9;
+}
+
+.debug-subsection {
+  margin-top: 8px;
+  padding-top: 4px;
+  border-top: 1px dotted #ddd;
+}
+
+.debug-subsection h6 {
+  margin: 4px 0;
+  font-size: 0.8rem;
+  color: #666;
+}
+
+.debug-task-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.75rem;
+  margin-top: 4px;
+  user-select: text; /* Make text selectable */
+  cursor: text; /* Show text cursor on hover */
+}
+
+.debug-task-table th,
+.debug-task-table td {
+  padding: 4px 8px;
+  border: 1px solid #ddd;
+  text-align: left;
+}
+
+.debug-task-table th {
+  background-color: #f5f5f5;
+  font-weight: bold;
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+
+.debug-task-table tr:nth-child(even) {
+  background-color: #f9f9f9;
+}
+
+.debug-task-table tr:hover {
+  background-color: #f0f0f0;
+}
+
+.debug-task-table:focus {
+  outline: 2px solid #007bff;
+  outline-offset: 2px;
+}
+
+.debug-task-table td:focus,
+.debug-task-table th:focus {
+  outline: 1px solid #007bff;
+  outline-offset: -1px;
+}
+
+h3 {
+  padding: 0 0;
+  margin: 0;
+}
+
+/* Specific styles for Grouping dropdown (to match Project dropdown) */
+.board-grouping-select { /* Added in BoardGroupingSelection.ts */
+  /* Base Appearance */
+  appearance: none !important;
+  box-sizing: border-box !important;
+  border-radius: 0 !important;
+  border: 4px solid var(--color-white) !important; /* Start with white border */
+  background-color: var(--color-grey-200) !important;
+  box-shadow: none !important;
+  margin: 0 !important;
+
+  /* Sizing & Layout */
+  display: block !important;
+  width: 100% !important; /* Fill the container cell */
+  height: 100% !important; /* Fill the container cell height */
+  min-height: 40px !important; /* Match project select */
+  padding: var(--spacing-sm) var(--spacing-sm) !important;
+
+  /* Text & Font */
+  font-size: 14px !important;
+  color: var(--text-normal) !important;
+  line-height: 1.5 !important;
+
+  /* Custom Arrow */
+  background-image: url("data:image/svg+xml;utf8,<svg fill='grey' height='24' viewBox='0 0 24 24' width='24' xmlns='http://www.w3.org/2000/svg'><path d='M7 10l5 5 5-5z'/><path d='M0 0h24v24H0z' fill='none'/></svg>") !important;
+  background-repeat: no-repeat !important;
+  background-position: right 8px top 50% !important;
+  background-size: 16px !important;
+}
+
+/* =================
+   NAV BAR ADDITIONS
+   ================= */
+
+/* Style the row containing the color map controls */
+.nav-color-map-row {
+  display: flex; /* Use flexbox for the row */
+  justify-content: flex-start; /* Align content to the left */
+  padding: var(--spacing-xs) 0; /* Remove horizontal padding, keep vertical */
+  /* border-top: 1px solid var(--color-grey-300); */ /* Remove separator line */
+  background-color: var(--background-primary); /* Use primary background (usually white) */
+}
+
+/* Container for Color Map Selection (now within the row) */
+.nav-color-map-selection {
+  display: flex;
+  align-items: center; 
+  gap: var(--spacing-sm); 
+  /* Remove padding, as it's now on the row */
+  /* padding: 0 var(--spacing-md); */ 
+  width: 100%; /* Take full width within the row */
+}
+
+/* Container for the controls (variable dropdown + value pickers) */
+.nav-color-map-controls {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+}
+
+/* Container specifically for the color picker buttons */
+.nav-value-color-pickers {
+  display: flex;
+  flex-wrap: wrap; /* Allow buttons to wrap if needed */
+  gap: var(--spacing-xs);
+  align-items: center;
+}
+
+/* Individual color picker buttons */
+.nav-color-picker-button {
+  /* Size & Layout */
+  min-width: 50px; /* Adjust as needed */
+  height: 40px; /* Match other nav control heights */
+  display: inline-flex; /* Use flex for alignment */
+  align-items: center; 
+  justify-content: center;
+  padding: var(--spacing-xs) var(--spacing-sm);
+  
+  /* Appearance */
+  border-radius: var(--border-radius-sm); 
+  border: 1px solid var(--interactive-normal); /* Default border */
+  background-color: var(--background-secondary); /* Default background */
+  color: var(--text-normal); /* Default text color */
+  font-size: var(--font-ui-small);
+  text-align: center;
+  white-space: nowrap; /* Prevent text wrapping */
+  overflow: hidden;
+  text-overflow: ellipsis;
+  
+  cursor: pointer;
+  transition: transform 0.1s ease-out, box-shadow 0.1s ease-out, background-color 0.1s ease, border-color 0.1s ease;
+  outline: none;
+  background-clip: padding-box; 
+}
+
+/* Apply custom background color if set via inline style */
+.nav-color-picker-button[style*="--button-color:"] {
+  background-color: var(--button-color);
+  /* Optional: adjust text color for contrast based on the background */
+  /* color: ... */ 
+}
+
+.nav-color-picker-button:hover {
+  transform: scale(1.05); /* Smaller pop */
+  box-shadow: 0 0 3px rgba(0,0,0,0.2);
+  border-color: var(--interactive-hover);
+}
+
+/* Remove focus styles for these simple buttons if desired */
+/* .nav-color-picker-button:focus { */
+  /* outline: none; */
+  /* box-shadow: none; */
+/* } */
+
+/* Style the variable selection dropdown container */
+.nav-color-map-selection .nav-dropdown-container {
+  /* Occupy minimal space needed */
+  flex-shrink: 0; 
+}
+
+/* Make the color variable dropdown look like a button (similar to projects) */
+.nav-color-map-selection .dropdown {
+  /* Use standard interactive background/border variables */
+  background-color: var(--color-grey-200); /* Consistent background */
+  border: 1px solid var(--interactive-normal);
+  border-radius: 0; /* Explicitly remove border radius */
+  padding: var(--spacing-sm) var(--spacing-md);
+  font-size: 14px; /* Match project selector size */
+  height: auto; /* Let padding define height */
+  min-height: 36px; /* Ensure minimum height */
+  color: var(--text-normal);
+  box-shadow: none;
+  appearance: none; /* Hide native dropdown arrow */
+  /* Add custom arrow SVG if needed */
+  /* background-image: url('data:image/svg+xml,...'); */
+  background-position: right var(--spacing-sm) center;
+  background-repeat: no-repeat;
+  background-size: 14px; /* Adjust size if using custom arrow */
+  padding-right: calc(var(--spacing-sm) + 20px); /* Space for arrow */
+  min-width: 110px; /* Adjust as needed */
+  text-align: left;
+  cursor: pointer;
+  transition: background-color 0.1s ease, border-color 0.1s ease; /* Smooth transition */
+}
+
+.nav-color-map-selection .dropdown:hover {
+  /* Use standard hover variables */
+  background-color: var(--background-modifier-hover); 
+  border-color: var(--interactive-hover);
+}
+
+.nav-color-map-selection .dropdown:focus {
+  outline: none;
+  border-color: var(--interactive-accent); /* Accent color on focus */
+  box-shadow: 0 0 0 1px var(--interactive-accent); /* Subtle focus ring */
+}
+
+/* Style for text when coloring is disabled or no values */
+.nav-value-color-pickers span {
+    font-size: var(--font-ui-small);
+    color: var(--text-muted);
+    font-style: italic;
+    padding: var(--spacing-xs);
+    text-align: left; /* Ensure text aligns left */
+    width: 100%; /* Allow text to take width and align left */
+}
+
+/* Style for the color swatches within the popup menu */
+.nav-color-swatch {
+    display: inline-block;
+    width: 12px;
+    height: 12px;
+    margin-right: 8px;
+    vertical-align: middle;
+    border: 1px solid var(--color-grey-500);
+    border-radius: 2px;
+}
+
+/* Adjust menu item title alignment with swatch */
+.menu-item-title {
+    display: flex;
+    align-items: center;
+}
+#######
+
