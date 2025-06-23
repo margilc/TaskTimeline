@@ -462,11 +462,12 @@ select:focus,
   transform: translateX(-50%); /* Center the tick */
 }
 
-/* Optional: Style for more significant ticks (e.g., month start) */
-/* .slider-tick-mark.significant {
+/* Emphasized ticks for special dates (January, month-start Mondays) */
+.slider-tick-mark.emphasized {
   height: 8px;
+  width: 2px;
   background-color: var(--color-grey-600);
-} */
+}
 
 
 .current-date-indicator {
@@ -1036,6 +1037,10 @@ h3 {
 .timeline-header-cell {
     text-align: center;
     font-size: 12px;
+}
+
+.timeline-header-cell.emphasized-header {
+    background-color: var(--color-grey-300) !important;
 }
 
 /* =================

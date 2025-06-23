@@ -33,12 +33,20 @@ export class DebugEventListener {
         
         console.group(`🐛 Event #${this.eventCount}: ${eventName} @ ${timestamp}`);
         
-        if (args && args.length > 0) {
-            args.forEach((arg, index) => {
-                console.log(`  Arg ${index}:`, arg);
-            });
+        // Log timeline viewport and column headers specifically
+        const state = this.appStateManager.getState();
+        
+        console.log('Timeline Viewport:', state.volatile.timelineViewport);
+        
+        if (state.volatile.boardLayout?.columnHeaders) {
+            console.log('Column Headers:', state.volatile.boardLayout.columnHeaders.map(header => ({
+                date: header.date.toISOString().split('T')[0],
+                label: header.label,
+                index: header.index,
+                isEmphasized: header.isEmphasized
+            })));
         } else {
-            console.log('  No arguments');
+            console.log('Column Headers: Not available');
         }
         
         console.groupEnd();

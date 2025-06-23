@@ -1,11 +1,11 @@
 {
 	"id": "task-timeline",
 	"name": "TaskTimeline",
-	"version": "1.0.490",
+	"version": "1.0.565",
 	"minAppVersion": "0.15.0",
 	"description": "Transform task-based markdown files into an interactive timeline board view for project management",
 	"author": "Mario Gilcher",
 	"authorUrl": "https://github.com/margilc",
 	"fundingUrl": "https://github.com/sponsors/margilc",
 	"isDesktopOnly": false
-} 
+}

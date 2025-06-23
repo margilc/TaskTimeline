@@ -1,7 +1,7 @@
 import { AppStateManager } from '../../core/AppStateManager';
 import { PluginEvent } from '../../enums/events';
 import { TimeUnit } from "../../enums/TimeUnit";
-import { generateTimeMarkers } from '../../core/utils/timelineUtils';
+import { generateTimeMarkersWithMetadata, snapViewportToTimeUnit } from '../../core/utils/timelineUtils';
 
 export class NavTimeSlider {
     private container: HTMLElement;
@@ -73,19 +73,19 @@ export class NavTimeSlider {
         if (!this.track) return;
 
         const timeUnit = this.appStateManager.getCurrentTimeUnit();
-        const markers = generateTimeMarkers(globalMinDate.toISOString(), globalMaxDate.toISOString(), timeUnit);
+        const markers = generateTimeMarkersWithMetadata(globalMinDate.toISOString(), globalMaxDate.toISOString(), timeUnit);
 
         const tickContainer = document.createElement("div");
         tickContainer.className = "slider-tick-marks-container";
 
-        markers.forEach(markerDate => {
-            const date = new Date(markerDate);
+        markers.forEach(marker => {
+            const date = new Date(marker.date);
             const timeSinceStartMs = date.getTime() - globalMinDate.getTime();
             const positionPercent = (timeSinceStartMs / globalDurationMs) * 100;
 
             if (positionPercent >= 0 && positionPercent <= 100) {
                 const tick = document.createElement("div");
-                tick.className = "slider-tick-mark";
+                tick.className = marker.type === 'emphasized' ? "slider-tick-mark emphasized" : "slider-tick-mark";
                 tick.style.left = `${positionPercent}%`;
                 tickContainer.appendChild(tick);
             }
@@ -122,7 +122,7 @@ export class NavTimeSlider {
         const endMs = viewportMaxDate.getTime() - globalMinDate.getTime();
         const startPercent = Math.max(0, (startMs / globalDurationMs) * 100);
         const endPercent = Math.min(100, (endMs / globalDurationMs) * 100);
-        const widthPercent = Math.max(5, endPercent - startPercent);
+        const widthPercent = Math.max(0.5, endPercent - startPercent);
 
         this.selector.style.left = `${startPercent}%`;
         this.selector.style.width = `${widthPercent}%`;
@@ -259,10 +259,13 @@ export class NavTimeSlider {
 
         newLeftPercent = Math.max(0, Math.min(100 - widthPercent, newLeftPercent));
 
-        this.selector.style.left = `${newLeftPercent}%`;
-
-        this.updateSelectorTooltip(newLeftPercent, widthPercent);
-        this.updateViewportFromPosition(newLeftPercent, widthPercent);
+        // Calculate and apply snapped viewport immediately during drag
+        const snappedViewport = this.calculateSnappedViewportFromPosition(newLeftPercent, widthPercent);
+        
+        if (snappedViewport) {
+            // Apply the snapped viewport immediately
+            this.updateViewportFromSnappedPosition(snappedViewport);
+        }
     }
 
     private updateSelectorTooltip(leftPercent: number, widthPercent: number): void {
@@ -285,6 +288,47 @@ export class NavTimeSlider {
         if (!isNaN(newMinDate.getTime()) && !isNaN(newMaxDate.getTime())) {
             this.selector.title = `${newMinDate.toLocaleDateString()} - ${newMaxDate.toLocaleDateString()}`;
         }
+    }
+
+    private calculateSnappedViewportFromPosition(leftPercent: number, widthPercent: number): {localMinDate: string, localMaxDate: string} | null {
+        const state = this.appStateManager.getState();
+        
+        if (!state.volatile.globalMinDateSnapped || !state.volatile.globalMaxDateSnapped) return null;
+
+        const globalMinDate = new Date(state.volatile.globalMinDateSnapped);
+        const globalMaxDate = new Date(state.volatile.globalMaxDateSnapped);
+        
+        if (isNaN(globalMinDate.getTime()) || isNaN(globalMaxDate.getTime())) return null;
+        
+        const globalDurationMs = globalMaxDate.getTime() - globalMinDate.getTime();
+        
+        if (globalDurationMs <= 0) return null;
+        
+        if (isNaN(leftPercent) || isNaN(widthPercent) || leftPercent < 0 || widthPercent <= 0) return null;
+
+        const newMinMs = globalMinDate.getTime() + (leftPercent / 100) * globalDurationMs;
+        const newMaxMs = globalMinDate.getTime() + ((leftPercent + widthPercent) / 100) * globalDurationMs;
+        
+        if (isNaN(newMinMs) || isNaN(newMaxMs) || newMinMs >= newMaxMs) return null;
+        
+        const newMinDate = new Date(newMinMs);
+        const newMaxDate = new Date(newMaxMs);
+        
+        if (isNaN(newMinDate.getTime()) || isNaN(newMaxDate.getTime())) return null;
+
+        const viewport = {
+            localMinDate: newMinDate.toISOString(),
+            localMaxDate: newMaxDate.toISOString()
+        };
+
+        // Apply snapping based on current time unit
+        const timeUnit = this.appStateManager.getCurrentTimeUnit();
+        const numberOfColumns = this.appStateManager.getState().persistent.settings?.numberOfColumns || 7;
+        return snapViewportToTimeUnit(viewport, timeUnit, numberOfColumns);
+    }
+
+    private updateViewportFromSnappedPosition(snappedViewport: {localMinDate: string, localMaxDate: string}): void {
+        this.appStateManager.getEvents().trigger(PluginEvent.UpdateTimelineViewportPending, snappedViewport);
     }
 
     private updateViewportFromPosition(leftPercent: number, widthPercent: number): void {

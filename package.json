@@ -1,11 +1,13 @@
 {
     "name": "TaskTimeline",
-    "version": "1.0.490",
+    "version": "1.0.566",
     "description": "Transform your task-based markdown files into an interactive, timeline-based board view",
     "main": "main.js",
     "type": "module",
     "scripts": {
         "dev": "npm run graph:deps && node esbuild.config.mjs",
+        "build": "node esbuild.config.mjs production",
+        "build-quick": "npm run graph:deps && node esbuild.config.mjs production",
         "test": "jest",
         "graph:deps": "depcruise --config .dependency-cruiser.cjs --output-type dot src | dot -Tpng > dependency-graph.png"
     },

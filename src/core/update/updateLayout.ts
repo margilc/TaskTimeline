@@ -2,7 +2,7 @@ import { App } from 'obsidian';
 import { IAppState } from '../../interfaces/IAppState';
 import { ITask } from '../../interfaces/ITask';
 import { TimeUnit } from '../../enums/TimeUnit';
-import { addTime, formatDateByTimeUnit, normalizeDate } from '../utils/dateUtils';
+import { addTime, formatDateByTimeUnit, formatWeekWithMonth, normalizeDate, diffMonths } from '../utils/dateUtils';
 import { groupTasks } from '../utils/groupingUtils';
 
 const layoutCache = new Map<string, any>();
@@ -11,12 +11,43 @@ export function clearLayoutCache(): void {
     layoutCache.clear();
 }
 
+
 export function updateLayout(app: App, currentState: IAppState): IAppState {
     const tasks = currentState.volatile.currentTasks || [];
     const timeUnit = (currentState.persistent.currentTimeUnit as TimeUnit) || TimeUnit.DAY;
     const currentDateStr = currentState.persistent.currentDate;
     const currentDate = currentDateStr ? new Date(currentDateStr) : new Date();
     const numberOfColumns = currentState.persistent.settings?.numberOfColumns || 7;
+    
+    const timelineViewport = currentState.volatile.timelineViewport;
+    let startDate: Date;
+    let endDate: Date;
+    
+    if (timelineViewport) {
+        // Use the snapped viewport start date, but calculate end based on numberOfColumns
+        startDate = new Date(timelineViewport.localMinDate);
+        endDate = addTime(startDate, numberOfColumns - 1, timeUnit);
+        endDate = normalizeDate(endDate);
+    } else {
+        // Fallback to original logic if no viewport
+        const viewportCenter = currentDate;
+        const pastUnits = Math.floor((numberOfColumns - 1) / 2);
+        const futureUnits = numberOfColumns - 1 - pastUnits;
+        
+        if (timeUnit === TimeUnit.DAY) {
+            startDate = normalizeDate(addTime(viewportCenter, -pastUnits, TimeUnit.DAY));
+            endDate = normalizeDate(addTime(viewportCenter, futureUnits, TimeUnit.DAY));
+        } else if (timeUnit === TimeUnit.WEEK) {
+            startDate = normalizeDate(addTime(viewportCenter, -pastUnits, TimeUnit.WEEK));
+            endDate = normalizeDate(addTime(viewportCenter, futureUnits, TimeUnit.WEEK));
+        } else if (timeUnit === TimeUnit.MONTH) {
+            startDate = normalizeDate(addTime(viewportCenter, -pastUnits, TimeUnit.MONTH));
+            endDate = normalizeDate(addTime(viewportCenter, futureUnits, TimeUnit.MONTH));
+        } else {
+            startDate = normalizeDate(addTime(viewportCenter, -pastUnits, TimeUnit.DAY));
+            endDate = normalizeDate(addTime(viewportCenter, futureUnits, TimeUnit.DAY));
+        }
+    }
     
     const cacheKey = generateCacheKey(tasks, timeUnit, currentDateStr, currentState.volatile.timelineViewport, currentState.persistent.boardGrouping, numberOfColumns);
     
@@ -29,35 +60,6 @@ export function updateLayout(app: App, currentState: IAppState): IAppState {
                 boardLayout: cached
             }
         };
-    }
-    
-    const timelineViewport = currentState.volatile.timelineViewport;
-    let viewportCenter = currentDate;
-    
-    if (timelineViewport) {
-        const startTime = new Date(timelineViewport.localMinDate).getTime();
-        const endTime = new Date(timelineViewport.localMaxDate).getTime();
-        const centerTime = startTime + (endTime - startTime) / 2;
-        viewportCenter = new Date(centerTime);
-    }
-    const pastUnits = Math.floor((numberOfColumns - 1) / 2);
-    const futureUnits = numberOfColumns - 1 - pastUnits;
-    
-    let startDate: Date;
-    let endDate: Date;
-    
-    if (timeUnit === TimeUnit.DAY) {
-        startDate = normalizeDate(addTime(viewportCenter, -pastUnits, TimeUnit.DAY));
-        endDate = normalizeDate(addTime(viewportCenter, futureUnits, TimeUnit.DAY));
-    } else if (timeUnit === TimeUnit.WEEK) {
-        startDate = normalizeDate(addTime(viewportCenter, -pastUnits, TimeUnit.WEEK));
-        endDate = normalizeDate(addTime(viewportCenter, futureUnits, TimeUnit.WEEK));
-    } else if (timeUnit === TimeUnit.MONTH) {
-        startDate = normalizeDate(addTime(viewportCenter, -pastUnits, TimeUnit.MONTH));
-        endDate = normalizeDate(addTime(viewportCenter, futureUnits, TimeUnit.MONTH));
-    } else {
-        startDate = normalizeDate(addTime(viewportCenter, -pastUnits, TimeUnit.DAY));
-        endDate = normalizeDate(addTime(viewportCenter, futureUnits, TimeUnit.DAY));
     }
     
     const columnHeaders = generateColumnHeaders(startDate, endDate, timeUnit, numberOfColumns);
@@ -99,17 +101,33 @@ function generateCacheKey(tasks: ITask[], timeUnit: TimeUnit, currentDateStr: st
     return `${taskKey}:${timeUnit}:${currentDateStr}:${viewportKey}:${groupingKey}:${numberOfColumns}`;
 }
 
-function generateColumnHeaders(startDate: Date, endDate: Date, timeUnit: TimeUnit, targetColumns?: number): Array<{date: Date, label: string, index: number}> {
-    const headers: Array<{date: Date, label: string, index: number}> = [];
+function generateColumnHeaders(startDate: Date, endDate: Date, timeUnit: TimeUnit, targetColumns?: number): Array<{date: Date, label: string, index: number, isEmphasized: boolean}> {
+    const headers: Array<{date: Date, label: string, index: number, isEmphasized: boolean}> = [];
     let currentDate = normalizeDate(startDate);
     let index = 1;
     
     if (targetColumns && targetColumns > 0) {
         for (let i = 0; i < targetColumns; i++) {
+            const isEmphasized = isHeaderEmphasized(currentDate, timeUnit);
+            let label: string;
+            if (timeUnit === TimeUnit.WEEK && isEmphasized) {
+                // Find which month is starting in this week
+                const weekStart = getWeekStart(currentDate);
+                const weekEnd = addTime(weekStart, 6, TimeUnit.DAY);
+                const currentMonth1st = new Date(weekStart.getFullYear(), weekStart.getMonth(), 1);
+                const nextMonth1st = new Date(weekStart.getFullYear(), weekStart.getMonth() + 1, 1);
+                
+                // Use the month that has its 1st day in this week
+                const monthToShow = (nextMonth1st >= weekStart && nextMonth1st <= weekEnd) ? nextMonth1st : currentMonth1st;
+                label = formatWeekWithMonth(currentDate, monthToShow);
+            } else {
+                label = formatDateByTimeUnit(currentDate, timeUnit);
+            }
             headers.push({
                 date: new Date(currentDate),
-                label: formatDateByTimeUnit(currentDate, timeUnit),
-                index
+                label,
+                index,
+                isEmphasized
             });
             
             if (i < targetColumns - 1) {
@@ -119,10 +137,26 @@ function generateColumnHeaders(startDate: Date, endDate: Date, timeUnit: TimeUni
         }
     } else {
         while (currentDate <= endDate) {
+            const isEmphasized = isHeaderEmphasized(currentDate, timeUnit);
+            let label: string;
+            if (timeUnit === TimeUnit.WEEK && isEmphasized) {
+                // Find which month is starting in this week
+                const weekStart = getWeekStart(currentDate);
+                const weekEnd = addTime(weekStart, 6, TimeUnit.DAY);
+                const currentMonth1st = new Date(weekStart.getFullYear(), weekStart.getMonth(), 1);
+                const nextMonth1st = new Date(weekStart.getFullYear(), weekStart.getMonth() + 1, 1);
+                
+                // Use the month that has its 1st day in this week
+                const monthToShow = (nextMonth1st >= weekStart && nextMonth1st <= weekEnd) ? nextMonth1st : currentMonth1st;
+                label = formatWeekWithMonth(currentDate, monthToShow);
+            } else {
+                label = formatDateByTimeUnit(currentDate, timeUnit);
+            }
             headers.push({
                 date: new Date(currentDate),
-                label: formatDateByTimeUnit(currentDate, timeUnit),
-                index
+                label,
+                index,
+                isEmphasized
             });
             
             currentDate = addTime(currentDate, 1, timeUnit);
@@ -133,7 +167,33 @@ function generateColumnHeaders(startDate: Date, endDate: Date, timeUnit: TimeUni
     return headers;
 }
 
-function generateTaskGrids(tasks: ITask[], groupBy: string, columnHeaders: Array<{date: Date, label: string, index: number}>, timeUnit: TimeUnit): Array<{group: string, tasks: ITask[]}> {
+function isHeaderEmphasized(date: Date, timeUnit: TimeUnit): boolean {
+    if (timeUnit === TimeUnit.MONTH) {
+        // Emphasize January
+        return date.getMonth() === 0;
+    } else if (timeUnit === TimeUnit.WEEK) {
+        // Emphasize weeks that contain the first day of any month
+        const weekStart = getWeekStart(date);
+        const weekEnd = addTime(weekStart, 6, TimeUnit.DAY);
+        
+        // Check if the 1st of the current or next month falls within this week
+        const currentMonth1st = new Date(weekStart.getFullYear(), weekStart.getMonth(), 1);
+        const nextMonth1st = new Date(weekStart.getFullYear(), weekStart.getMonth() + 1, 1);
+        
+        const currentMonthInWeek = currentMonth1st >= weekStart && currentMonth1st <= weekEnd;
+        const nextMonthInWeek = nextMonth1st >= weekStart && nextMonth1st <= weekEnd;
+        
+        return currentMonthInWeek || nextMonthInWeek;
+    } else if (timeUnit === TimeUnit.DAY) {
+        // Emphasize all Mondays
+        const dayOfWeek = date.getDay();
+        return dayOfWeek === 1;
+    }
+    
+    return false;
+}
+
+function generateTaskGrids(tasks: ITask[], groupBy: string, columnHeaders: Array<{date: Date, label: string, index: number, isEmphasized: boolean}>, timeUnit: TimeUnit): Array<{group: string, tasks: ITask[]}> {
     const groupedTasks = groupTasks(tasks, groupBy);
     const taskGrids: Array<{group: string, tasks: ITask[]}> = [];
     
@@ -145,7 +205,7 @@ function generateTaskGrids(tasks: ITask[], groupBy: string, columnHeaders: Array
     return taskGrids;
 }
 
-function calculateTaskPositions(tasks: ITask[], columnHeaders: Array<{date: Date, label: string, index: number}>, timeUnit: TimeUnit): ITask[] {
+function calculateTaskPositions(tasks: ITask[], columnHeaders: Array<{date: Date, label: string, index: number, isEmphasized: boolean}>, timeUnit: TimeUnit): ITask[] {
     if (tasks.length === 0) return [];
     
     const sortedTasks = [...tasks].sort((a, b) => {
@@ -182,7 +242,7 @@ function getDuration(task: ITask): number {
     return Math.max(1, Math.floor((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)));
 }
 
-function findTaskPosition(task: ITask, columnHeaders: Array<{date: Date, label: string, index: number}>, occupiedRows: Array<Array<boolean>>, timeUnit: TimeUnit): {xStart: number, xEnd: number, y: number} | null {
+function findTaskPosition(task: ITask, columnHeaders: Array<{date: Date, label: string, index: number, isEmphasized: boolean}>, occupiedRows: Array<Array<boolean>>, timeUnit: TimeUnit): {xStart: number, xEnd: number, y: number} | null {
     const taskStart = new Date(task.start);
     const taskEnd = task.end ? new Date(task.end) : taskStart;
     

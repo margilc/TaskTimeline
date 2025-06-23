@@ -37,7 +37,8 @@ export class NavTimelineSelection {
         // Recalculate viewport and regenerate minimap when time unit changes
         const currentDate = this.appStateManager.getCurrentDate();
         const timeUnit = this.appStateManager.getCurrentTimeUnit();
-        const newViewport = calculateDefaultViewport(currentDate, timeUnit);
+        const numberOfColumns = this.appStateManager.getState().persistent.settings?.numberOfColumns || 7;
+        const newViewport = calculateDefaultViewport(currentDate, timeUnit, numberOfColumns);
         
         this.appStateManager.getEvents().trigger(PluginEvent.UpdateTimelineViewportPending, newViewport);
         this.appStateManager.getEvents().trigger(PluginEvent.UpdateMinimapDataPending);
@@ -67,7 +68,8 @@ export class NavTimelineSelection {
         if (!state.volatile.timelineViewport) {
             const currentDate = this.appStateManager.getCurrentDate();
             const timeUnit = this.appStateManager.getCurrentTimeUnit();
-            const defaultViewport = calculateDefaultViewport(currentDate, timeUnit);
+            const numberOfColumns = state.persistent.settings?.numberOfColumns || 7;
+            const defaultViewport = calculateDefaultViewport(currentDate, timeUnit, numberOfColumns);
             this.appStateManager.getEvents().trigger(PluginEvent.UpdateTimelineViewportPending, defaultViewport);
             return; // Will re-render when viewport is set
         }

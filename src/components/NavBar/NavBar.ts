@@ -38,12 +38,36 @@ export class NavBar {
 
 		const headerRow = document.createElement("div");
 		headerRow.className = "nav-header";
+		headerRow.style.display = "flex";
+		headerRow.style.justifyContent = "space-between";
+		headerRow.style.alignItems = "center";
 		
 		this.navTitle = new NavTitle(this.appStateManager);
 		headerRow.appendChild(this.navTitle.getElement());
 		
+		// Right side container for buttons
+		const rightButtonsContainer = document.createElement("div");
+		rightButtonsContainer.style.display = "flex";
+		rightButtonsContainer.style.alignItems = "center";
+		rightButtonsContainer.style.gap = "8px";
+		
+		// Debug dump button
+		const debugButton = document.createElement("button");
+		debugButton.textContent = "🐛 Dump State";
+		debugButton.style.backgroundColor = "#e74c3c";
+		debugButton.style.color = "white";
+		debugButton.style.border = "none";
+		debugButton.style.padding = "4px 8px";
+		debugButton.style.cursor = "pointer";
+		debugButton.style.fontSize = "12px";
+		debugButton.style.borderRadius = "3px";
+		debugButton.addEventListener("click", () => this.dumpAppState());
+		
 		this.navSettings = new NavSettings(this.app, this.appStateManager);
-		headerRow.appendChild(this.navSettings.getElement());
+		
+		rightButtonsContainer.appendChild(debugButton);
+		rightButtonsContainer.appendChild(this.navSettings.getElement());
+		headerRow.appendChild(rightButtonsContainer);
 		
 		this.container.appendChild(headerRow);
 
@@ -77,6 +101,68 @@ export class NavBar {
 
 	public getElement(): HTMLElement {
 		return this.container;
+	}
+
+	private dumpAppState(): void {
+		const state = this.appStateManager.getState();
+		
+		// Create a minimal dump focused on alignment issues
+		const alignmentDump = {
+			settings: {
+				numberOfColumns: state.persistent.settings?.numberOfColumns,
+				currentTimeUnit: state.persistent.currentTimeUnit
+			},
+			globalTimeline: {
+				globalMinDateSnapped: state.volatile.globalMinDateSnapped,
+				globalMaxDateSnapped: state.volatile.globalMaxDateSnapped,
+				spanDays: state.volatile.globalMinDateSnapped && state.volatile.globalMaxDateSnapped ? 
+					Math.floor((new Date(state.volatile.globalMaxDateSnapped).getTime() - new Date(state.volatile.globalMinDateSnapped).getTime()) / (1000 * 60 * 60 * 24)) : null
+			},
+			timelineViewport: state.volatile.timelineViewport,
+			boardLayout: state.volatile.boardLayout ? {
+				columnHeaders: state.volatile.boardLayout.columnHeaders?.map(header => ({
+					date: header.date.toISOString().split('T')[0],
+					label: header.label,
+					index: header.index,
+					isEmphasized: header.isEmphasized
+				})),
+				viewport: state.volatile.boardLayout.viewport ? {
+					startDate: state.volatile.boardLayout.viewport.startDate.toISOString().split('T')[0],
+					endDate: state.volatile.boardLayout.viewport.endDate.toISOString().split('T')[0]
+				} : null,
+				gridWidth: state.volatile.boardLayout.gridWidth
+			} : null,
+			timestamp: new Date().toISOString()
+		};
+		
+		const jsonString = JSON.stringify(alignmentDump, null, 2);
+		
+		// Copy to clipboard
+		navigator.clipboard.writeText(jsonString).then(() => {
+			console.log("📋 Alignment dump copied to clipboard!");
+			console.log("🐛 Alignment Dump:", alignmentDump);
+			
+			// Show temporary notification
+			const notification = document.createElement("div");
+			notification.textContent = "✅ Alignment dump copied to clipboard!";
+			notification.style.position = "fixed";
+			notification.style.top = "20px";
+			notification.style.right = "20px";
+			notification.style.backgroundColor = "#27ae60";
+			notification.style.color = "white";
+			notification.style.padding = "10px 15px";
+			notification.style.borderRadius = "5px";
+			notification.style.zIndex = "9999";
+			notification.style.fontSize = "14px";
+			document.body.appendChild(notification);
+			
+			setTimeout(() => {
+				document.body.removeChild(notification);
+			}, 3000);
+		}).catch(err => {
+			console.error("Failed to copy to clipboard:", err);
+			console.log("🐛 Alignment Dump (copy manually):", jsonString);
+		});
 	}
 
 	public destroy(): void {

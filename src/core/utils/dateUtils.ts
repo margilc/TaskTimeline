@@ -37,7 +37,10 @@ export function diffDays(d1: Date, d2: Date): number {
 }
 
 export function normalizeDate(d: Date): Date {
-  return new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  const year = d.getUTCFullYear();
+  const month = d.getUTCMonth();
+  const day = d.getUTCDate();
+  return new Date(Date.UTC(year, month, day));
 }
 
 export function getWeekNumber(date: Date): number {
@@ -124,6 +127,13 @@ export function formatDateByTimeUnit(date: Date, unit: TimeUnit): string {
     return date.toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
   }
   return date.toDateString();
+}
+
+export function formatWeekWithMonth(date: Date, monthDate?: Date): string {
+  const weekNum = getWeekNumber(date);
+  const dateToUse = monthDate || date;
+  const monthAbbr = dateToUse.toLocaleDateString('en-US', { month: 'short' });
+  return date.getFullYear() + " - W" + (weekNum < 10 ? "0" + weekNum : weekNum) + " - " + monthAbbr;
 }
 
 export function diffMonths(a: Date, b: Date): number {

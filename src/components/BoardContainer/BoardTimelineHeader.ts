@@ -42,7 +42,8 @@ export function BoardTimelineHeader(boardLayout: any, appStateManager: AppStateM
   // Modify header cells to start from grid column 2
   boardLayout.columnHeaders.forEach((header: any, index: number) => {
     const cellEl = document.createElement("div");
-    cellEl.className = "board-cell timeline-header-cell clickable-header";
+    const cellClass = header.isEmphasized ? "board-cell timeline-header-cell clickable-header emphasized-header" : "board-cell timeline-header-cell clickable-header";
+    cellEl.className = cellClass;
     cellEl.textContent = header.label;
     cellEl.style.gridColumnStart = (index + 2).toString();
     cellEl.style.gridRowStart = "1";

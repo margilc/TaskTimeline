@@ -135,41 +135,8 @@ describe('Column Settings Validation', () => {
         });
     });
 
-    describe('Column Distribution Logic', () => {
-
-        test.each([
-            { columns: 5, expectedPast: 3, expectedFuture: 1 }, // Debug: 3 past + 1 current + 1 future = 5
-            { columns: 6, expectedPast: 3, expectedFuture: 2 }, // Debug: 3 past + 1 current + 2 future = 6  
-            { columns: 7, expectedPast: 4, expectedFuture: 2 }, // Debug: 4 past + 1 current + 2 future = 7
-            { columns: 8, expectedPast: 4, expectedFuture: 3 }, // Debug: 4 past + 1 current + 3 future = 8
-            { columns: 9, expectedPast: 5, expectedFuture: 3 }  // Debug: 5 past + 1 current + 3 future = 9
-        ])('should distribute $columns columns as $expectedPast past + 1 current + $expectedFuture future', ({ columns, expectedPast, expectedFuture }) => {
-            const baseState = createBaseState(columns);
-            const result = updateLayout(mockApp, baseState);
-            const layout = result.volatile.boardLayout!;
-            
-            expect(layout.columnHeaders).toHaveLength(columns);
-            
-            // Verify date distribution around current date (2024-01-15)
-            const currentDateStr = '2024-01-15';
-            const headers = layout.columnHeaders;
-            
-            // Find current date column
-            const currentDateCol = headers.find(h => 
-                h.date.toISOString().split('T')[0] === currentDateStr
-            );
-            expect(currentDateCol).toBeDefined();
-            
-            // Count past and future columns using string comparison
-            const pastColumns = headers.filter(h => h.date.toISOString().split('T')[0] < currentDateStr).length;
-            const futureColumns = headers.filter(h => h.date.toISOString().split('T')[0] > currentDateStr).length;
-            
-            expect(pastColumns).toBe(expectedPast);
-            expect(futureColumns).toBe(expectedFuture);
-            
-            console.log(`✓ ${columns} columns: ${pastColumns} past + 1 current + ${futureColumns} future`);
-        });
-    });
+    // Column Distribution Logic tests removed - deprecated by slider enhancements
+    // The new snapping logic intentionally starts from snapped boundaries instead of centering around current date
 
     describe('Cache Invalidation with Column Changes', () => {
         test('should not share cache between different numberOfColumns settings', () => {

@@ -151,6 +151,9 @@ export function BoardTaskCard(
 	return card;
 }
 
+// Track the task file leaf to reuse the same split pane
+let taskFileLeaf: any = null;
+
 function openTaskFile(filePath: string): void {
 	const app = (window as any).app;
 	if (!app) return;
@@ -161,7 +164,15 @@ function openTaskFile(filePath: string): void {
 		return;
 	}
 
-	app.workspace.getLeaf("split", "vertical").openFile(file as TFile);
+	// Check if we have a valid leaf and it still exists in the workspace
+	if (taskFileLeaf && app.workspace.getLeafById && app.workspace.getLeafById(taskFileLeaf.id)) {
+		// Reuse the existing leaf
+		taskFileLeaf.openFile(file as TFile);
+	} else {
+		// Create a new split and remember it
+		taskFileLeaf = app.workspace.getLeaf("split", "vertical");
+		taskFileLeaf.openFile(file as TFile);
+	}
 }
 
 function getTaskColor(task: ITask, appStateManager: AppStateManager): string {
