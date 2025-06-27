@@ -2,6 +2,7 @@ import { App, TFile } from 'obsidian';
 import { IAppState, IPersistentState, IVolatileState, IDragOperation } from '../../interfaces/IAppState';
 import { ITask } from '../../interfaces/ITask';
 import { TimeUnit } from '../../enums/TimeUnit';
+import { renameTaskFileForNewStartDate } from '../utils/fileRenameUtils';
 
 function findPositionedTask(taskId: string, volatile: IVolatileState): any | null {
     if (!volatile.boardLayout?.taskGrids) {
@@ -56,6 +57,13 @@ export async function updateTaskPosition(
         // Update task frontmatter
         await updateTaskFrontmatter(app, task, newDates, newGroupingValue, persistent);
         
+        // Check if file needs to be renamed due to start date change
+        const oldStartDate = task.start;
+        const newStartDate = newDates.start;
+        
+        if (oldStartDate !== newStartDate) {
+            await renameTaskFileForNewStartDate(app, task, newStartDate);
+        }
         
         // Trigger task reload to reflect changes
         return { persistent, volatile };
@@ -220,3 +228,4 @@ function updateOrAddFrontmatterField(lines: string[], field: string, value: stri
     // Add new field if not found
     lines.push(`${field}: ${value}`);
 }
+

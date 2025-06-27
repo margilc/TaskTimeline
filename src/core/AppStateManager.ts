@@ -13,6 +13,7 @@ import { updateLayout, clearLayoutCache } from './update/updateLayout';
 import { updateBoardGrouping } from './update/updateBoardGrouping';
 import { updateSettings } from './update/updateSettings';
 import { createTask } from './update/createTask';
+import { renameTaskFileForNewStartDate } from './utils/fileRenameUtils';
 import { updateDragStart, updateDragMove, updateDragEnd } from './update/updateDragState';
 import { updateResizeStart, updateResizeMove, updateResizeEnd } from './update/updateResizeState';
 import { updateGroupOrder } from './update/updateGroupOrder';
@@ -99,6 +100,33 @@ export class AppStateManager extends Component {
 
     private handleFileModify(file: TAbstractFile): void {
         if (this.isRelevantFile(file) && file instanceof TFile && file.extension === 'md') {
+            // Handle file modification with potential renaming
+            this.handleFileModifyWithRenaming(file);
+        }
+    }
+    
+    private async handleFileModifyWithRenaming(file: TFile): Promise<void> {
+        try {
+            // Store current task before updating to compare start dates
+            const currentTasks = this.state.volatile.currentTasks || [];
+            const taskBeforeUpdate = currentTasks.find(task => task.filePath === file.path);
+            
+            // Parse the new content to get the updated start date
+            const content = await this.app.vault.read(file);
+            const { parseTaskFromContent } = await import('./utils/taskUtils');
+            const parsedTask = parseTaskFromContent(content, file.path);
+            
+            if (parsedTask && taskBeforeUpdate && parsedTask.start !== taskBeforeUpdate.start) {
+                // Start date changed - rename file before triggering task updates
+                await renameTaskFileForNewStartDate(this.app, taskBeforeUpdate, parsedTask.start);
+            }
+            
+            // Trigger task updates (will pick up the renamed file)
+            this.events.trigger(PluginEvent.UpdateTasksPending);
+            
+        } catch (error) {
+            console.error('Error handling file modification with renaming:', error);
+            // Fall back to normal task update even if renaming fails
             this.events.trigger(PluginEvent.UpdateTasksPending);
         }
     }

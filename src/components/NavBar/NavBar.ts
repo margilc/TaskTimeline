@@ -106,43 +106,75 @@ export class NavBar {
 	private dumpAppState(): void {
 		const state = this.appStateManager.getState();
 		
-		// Create a minimal dump focused on alignment issues
-		const alignmentDump = {
-			settings: {
-				numberOfColumns: state.persistent.settings?.numberOfColumns,
-				currentTimeUnit: state.persistent.currentTimeUnit
+		// Create comprehensive debug dump including tasks and layout
+		const debugDump = {
+			tasks: {
+				count: state.volatile.currentTasks?.length || 0,
+				list: state.volatile.currentTasks?.map(task => ({
+					id: task.id,
+					name: task.name,
+					start: task.start,
+					end: task.end,
+					filePath: task.filePath,
+					projectId: task.projectId,
+					status: task.status,
+					priority: task.priority,
+					responsible: task.responsible,
+					position: {
+						x: task.x,
+						y: task.y,
+						xStart: task.xStart,
+						xEnd: task.xEnd
+					}
+				})) || []
 			},
-			globalTimeline: {
-				globalMinDateSnapped: state.volatile.globalMinDateSnapped,
-				globalMaxDateSnapped: state.volatile.globalMaxDateSnapped,
-				spanDays: state.volatile.globalMinDateSnapped && state.volatile.globalMaxDateSnapped ? 
-					Math.floor((new Date(state.volatile.globalMaxDateSnapped).getTime() - new Date(state.volatile.globalMinDateSnapped).getTime()) / (1000 * 60 * 60 * 24)) : null
-			},
-			timelineViewport: state.volatile.timelineViewport,
-			boardLayout: state.volatile.boardLayout ? {
-				columnHeaders: state.volatile.boardLayout.columnHeaders?.map(header => ({
+			layout: {
+				timeUnit: state.volatile.boardLayout?.timeUnit,
+				gridWidth: state.volatile.boardLayout?.gridWidth,
+				columnHeaders: state.volatile.boardLayout?.columnHeaders?.map(header => ({
 					date: header.date.toISOString().split('T')[0],
 					label: header.label,
 					index: header.index,
 					isEmphasized: header.isEmphasized
-				})),
-				viewport: state.volatile.boardLayout.viewport ? {
+				})) || [],
+				taskGrids: state.volatile.boardLayout?.taskGrids?.map(grid => ({
+					group: grid.group,
+					taskCount: grid.tasks.length,
+					tasks: grid.tasks.map(task => ({
+						id: task.id,
+						name: task.name,
+						xStart: task.xStart,
+						xEnd: task.xEnd,
+						y: task.y
+					}))
+				})) || [],
+				viewport: state.volatile.boardLayout?.viewport ? {
 					startDate: state.volatile.boardLayout.viewport.startDate.toISOString().split('T')[0],
 					endDate: state.volatile.boardLayout.viewport.endDate.toISOString().split('T')[0]
-				} : null,
-				gridWidth: state.volatile.boardLayout.gridWidth
-			} : null,
+				} : null
+			},
+			settings: {
+				numberOfColumns: state.persistent.settings?.numberOfColumns,
+				currentTimeUnit: state.persistent.currentTimeUnit
+			},
+			timeline: {
+				globalMinDateSnapped: state.volatile.globalMinDateSnapped,
+				globalMaxDateSnapped: state.volatile.globalMaxDateSnapped,
+				timelineViewport: state.volatile.timelineViewport,
+				spanDays: state.volatile.globalMinDateSnapped && state.volatile.globalMaxDateSnapped ? 
+					Math.floor((new Date(state.volatile.globalMaxDateSnapped).getTime() - new Date(state.volatile.globalMinDateSnapped).getTime()) / (1000 * 60 * 60 * 24)) : null
+			},
 			timestamp: new Date().toISOString()
 		};
 		
-		const jsonString = JSON.stringify(alignmentDump, null, 2);
+		const jsonString = JSON.stringify(debugDump, null, 2);
 		
 		// Copy to clipboard
 		navigator.clipboard.writeText(jsonString).then(() => {
 			
 			// Show temporary notification
 			const notification = document.createElement("div");
-			notification.textContent = "✅ Alignment dump copied to clipboard!";
+			notification.textContent = "✅ Debug dump (tasks + layout) copied to clipboard!";
 			notification.style.position = "fixed";
 			notification.style.top = "20px";
 			notification.style.right = "20px";

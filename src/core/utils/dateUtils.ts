@@ -6,11 +6,14 @@ import { TimeUnit } from "../../enums/TimeUnit";
 export function addTime(date: Date, amount: number, unit: TimeUnit): Date {
 	const result = new Date(date);
 	if (unit === TimeUnit.DAY) {
-		result.setDate(result.getDate() + amount);
+		result.setUTCDate(result.getUTCDate() + amount);
 	} else if (unit === TimeUnit.WEEK) {
-		result.setDate(result.getDate() + amount * 7);
+		result.setUTCDate(result.getUTCDate() + amount * 7);
 	} else if (unit === TimeUnit.MONTH) {
-		result.setMonth(result.getMonth() + amount);
+		// Use UTC methods for consistent month calculations
+		result.setUTCMonth(result.getUTCMonth() + amount);
+		// Ensure we're on the 1st of the month for month boundaries
+		result.setUTCDate(1);
 	}
 	return result;
 }
