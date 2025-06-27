@@ -201,7 +201,6 @@ function generateTimePeriods(globalMinDate: Date, globalMaxDate: Date, timeUnit:
         const nextDate = advanceToNextPeriod(currentDate, timeUnit);
         
         if (nextDate <= currentDate || periods.length > 10000) {
-            console.warn('generateTimePeriods: Breaking to prevent infinite loop');
             break;
         }
         

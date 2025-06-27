@@ -21,7 +21,6 @@ async function listSubfolderNames(app: App, directoryPath: string): Promise<stri
         return subfolderNames;
         
     } catch (error) {
-        console.error(`Error listing subfolders in ${directoryPath}:`, error);
         return [];
     }
 }
@@ -75,7 +74,6 @@ export async function updateProjects(
         };
         
     } catch (error) {
-        console.error('updateProjects error:', error);
         return {
             volatile: { ...currentVolatileState, availableProjects: ['All Projects'] },
             persistent: currentPersistentState

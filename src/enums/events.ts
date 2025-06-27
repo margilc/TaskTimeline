@@ -30,4 +30,20 @@ export enum PluginEvent {
     UpdateSettingsDone = 'update_settings_done',
     CreateTaskPending = 'create_task_pending',
     CreateTaskDone = 'create_task_done',
+    
+    // Drag/Drop events
+    DragStartPending = 'drag_start_pending',
+    DragStartDone = 'drag_start_done',
+    DragMovePending = 'drag_move_pending',
+    DragMoveDone = 'drag_move_done',
+    DragEndPending = 'drag_end_pending',
+    DragEndDone = 'drag_end_done',
+    
+    // Resize events
+    ResizeStartPending = 'resize_start_pending',
+    ResizeStartDone = 'resize_start_done',
+    ResizeMovePending = 'resize_move_pending',
+    ResizeMoveDone = 'resize_move_done',
+    ResizeEndPending = 'resize_end_pending',
+    ResizeEndDone = 'resize_end_done',
 } 

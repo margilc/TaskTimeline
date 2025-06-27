@@ -3,7 +3,7 @@ import { IAppState } from '../../interfaces/IAppState';
 import { ITask } from '../../interfaces/ITask';
 import { TimeUnit } from '../../enums/TimeUnit';
 import { addTime, formatDateByTimeUnit, formatWeekWithMonth, normalizeDate, diffMonths } from '../utils/dateUtils';
-import { groupTasks } from '../utils/groupingUtils';
+import { groupTasks, getGroupValue } from '../utils/groupingUtils';
 
 const layoutCache = new Map<string, any>();
 
@@ -65,7 +65,7 @@ export function updateLayout(app: App, currentState: IAppState): IAppState {
     const columnHeaders = generateColumnHeaders(startDate, endDate, timeUnit, numberOfColumns);
     
     const grouping = currentState.persistent.boardGrouping || { groupBy: 'none', availableGroups: [] };
-    const taskGrids = generateTaskGrids(tasks, grouping.groupBy, columnHeaders, timeUnit);
+    const taskGrids = generateTaskGrids(tasks, grouping.groupBy, grouping.availableGroups, columnHeaders, timeUnit);
     
     const gridWidth = columnHeaders.length + 1;
     const gridHeight = Math.max(...taskGrids.map(grid => grid.tasks.length), 1);
@@ -193,13 +193,17 @@ function isHeaderEmphasized(date: Date, timeUnit: TimeUnit): boolean {
     return false;
 }
 
-function generateTaskGrids(tasks: ITask[], groupBy: string, columnHeaders: Array<{date: Date, label: string, index: number, isEmphasized: boolean}>, timeUnit: TimeUnit): Array<{group: string, tasks: ITask[]}> {
+function generateTaskGrids(tasks: ITask[], groupBy: string, availableGroups: string[], columnHeaders: Array<{date: Date, label: string, index: number, isEmphasized: boolean}>, timeUnit: TimeUnit): Array<{group: string, tasks: ITask[]}> {
     const groupedTasks = groupTasks(tasks, groupBy);
     const taskGrids: Array<{group: string, tasks: ITask[]}> = [];
     
-    for (const [groupName, groupTasks] of Object.entries(groupedTasks)) {
-        const positionedTasks = calculateTaskPositions(groupTasks, columnHeaders, timeUnit);
-        taskGrids.push({ group: groupName, tasks: positionedTasks });
+    // Use stable group order from availableGroups instead of Object.entries order
+    for (const groupName of availableGroups) {
+        const groupTasks = groupedTasks[groupName];
+        if (groupTasks && groupTasks.length > 0) {
+            const positionedTasks = calculateTaskPositions(groupTasks, columnHeaders, timeUnit);
+            taskGrids.push({ group: groupName, tasks: positionedTasks });
+        }
     }
     
     return taskGrids;

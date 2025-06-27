@@ -17,6 +17,8 @@ export interface IPersistentState {
         groupBy: string;
         availableGroups: string[];
     };
+    // Row header ordering: project -> variable -> ordered levels
+    groupingOrderings?: Record<string, Record<string, string[]>>;
     // Keep flexible for now
     [key: string]: any;
 }
@@ -40,6 +42,9 @@ export interface IVolatileState {
     // Snapped date boundaries for visual alignment
     globalMinDateSnapped?: string;
     globalMaxDateSnapped?: string;
+    // Drag/Drop state
+    dragState?: IDragState;
+    resizeState?: IResizeState;
     // Keep flexible for now
     [key: string]: any;
 }
@@ -47,4 +52,46 @@ export interface IVolatileState {
 export interface IAppState {
     persistent: IPersistentState;
     volatile: IVolatileState;
+}
+
+// Drag/Drop interfaces
+export interface IDragState {
+    isActive: boolean;
+    taskId?: string;
+    initialPosition?: { x: number, y: number };
+    currentPosition?: { x: number, y: number };
+    targetGrid?: { column: number, row: number, group: string };
+    ghostElement?: HTMLElement;
+}
+
+export interface IResizeState {
+    isActive: boolean;
+    taskId?: string;
+    resizeType?: 'start' | 'end';
+    initialColumn?: number;
+    targetColumn?: number;
+    previewElement?: HTMLElement;
+}
+
+export interface IDragOperation {
+    taskId: string;
+    sourcePosition: { column: number, row: number, group: string };
+    targetPosition: { column: number, row: number, group: string };
+    mousePosition: { x: number, y: number };
+}
+
+export interface IResizeOperation {
+    taskId: string;
+    resizeType: 'start' | 'end';
+    initialColumn: number;
+    targetColumn: number;
+    mousePosition: { x: number, y: number };
+}
+
+export interface IGroupingReorder {
+    projectId: string;
+    variable: 'status' | 'priority' | 'category' | 'responsible';
+    sourceIndex: number;
+    targetIndex: number;
+    orderedLevels: string[];
 } 

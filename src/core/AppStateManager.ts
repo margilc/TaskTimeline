@@ -13,6 +13,8 @@ import { updateLayout, clearLayoutCache } from './update/updateLayout';
 import { updateBoardGrouping } from './update/updateBoardGrouping';
 import { updateSettings } from './update/updateSettings';
 import { createTask } from './update/createTask';
+import { updateDragStart, updateDragMove, updateDragEnd } from './update/updateDragState';
+import { updateResizeStart, updateResizeMove, updateResizeEnd } from './update/updateResizeState';
 import { DEFAULT_COLOR, ColorVariable } from './utils/colorUtils';
 import { calculateDefaultViewport } from './utils/timelineUtils';
 
@@ -48,6 +50,16 @@ export class AppStateManager extends Component {
         this.events.on(PluginEvent.UpdateBoardGroupingPending, this.handleUpdateBoardGroupingPending.bind(this));
         this.events.on(PluginEvent.UpdateSettingsPending, this.handleUpdateSettingsPending.bind(this));
         this.events.on(PluginEvent.CreateTaskPending, this.handleCreateTaskPending.bind(this));
+        
+        // Drag/Drop event listeners
+        this.events.on(PluginEvent.DragStartPending, this.handleDragStartPending.bind(this));
+        this.events.on(PluginEvent.DragMovePending, this.handleDragMovePending.bind(this));
+        this.events.on(PluginEvent.DragEndPending, this.handleDragEndPending.bind(this));
+        
+        // Resize event listeners
+        this.events.on(PluginEvent.ResizeStartPending, this.handleResizeStartPending.bind(this));
+        this.events.on(PluginEvent.ResizeMovePending, this.handleResizeMovePending.bind(this));
+        this.events.on(PluginEvent.ResizeEndPending, this.handleResizeEndPending.bind(this));
     }
 
 
@@ -111,7 +123,6 @@ export class AppStateManager extends Component {
             this.events.trigger(PluginEvent.UpdateProjectsDone);
             this.events.trigger(PluginEvent.AppStateUpdated, this.state);
         } catch (error) {
-            console.error('Error handling update_projects_pending:', error);
         }
     }
 
@@ -136,7 +147,6 @@ export class AppStateManager extends Component {
             // Trigger layout update after tasks change
             this.events.trigger(PluginEvent.UpdateLayoutPending);
         } catch (error) {
-            console.error('Error handling update_tasks_pending:', error);
         }
     }
 
@@ -168,7 +178,6 @@ export class AppStateManager extends Component {
             this.events.trigger(PluginEvent.UpdateColorMappingsDone);
             this.events.trigger(PluginEvent.AppStateUpdated, this.state);
         } catch (error) {
-            console.error('Error handling update_colormappings_pending:', error);
         }
     }
 
@@ -193,7 +202,6 @@ export class AppStateManager extends Component {
             // Trigger layout update after time unit changes
             this.events.trigger(PluginEvent.UpdateLayoutPending);
         } catch (error) {
-            console.error('Error handling update_timeunit_pending:', error);
         }
     }
 
@@ -209,7 +217,6 @@ export class AppStateManager extends Component {
             this.events.trigger(PluginEvent.UpdateCurrentDateDone);
             this.events.trigger(PluginEvent.AppStateUpdated, this.state);
         } catch (error) {
-            console.error('Error handling update_currentdate_pending:', error);
         }
     }
 
@@ -232,7 +239,6 @@ export class AppStateManager extends Component {
             // Trigger layout update after viewport changes
             this.events.trigger(PluginEvent.UpdateLayoutPending);
         } catch (error) {
-            console.error('Error handling update_timelineviewport_pending:', error);
         }
     }
 
@@ -247,7 +253,6 @@ export class AppStateManager extends Component {
             this.events.trigger(PluginEvent.UpdateMinimapDataDone);
             this.events.trigger(PluginEvent.AppStateUpdated, this.state);
         } catch (error) {
-            console.error('Error handling update_minimapdata_pending:', error);
         }
     }
 
@@ -261,7 +266,6 @@ export class AppStateManager extends Component {
             this.events.trigger(PluginEvent.UpdateSnappedDateBoundariesDone);
             this.events.trigger(PluginEvent.AppStateUpdated, this.state);
         } catch (error) {
-            console.error('Error handling update_snappeddateboundaries_pending:', error);
         }
     }
 
@@ -275,7 +279,6 @@ export class AppStateManager extends Component {
             this.events.trigger(PluginEvent.UpdateLayoutDone);
             this.events.trigger(PluginEvent.AppStateUpdated, this.state);
         } catch (error) {
-            console.error('Error handling update_layout_pending:', error);
         }
     }
 
@@ -294,7 +297,6 @@ export class AppStateManager extends Component {
             // Trigger layout update after grouping changes
             this.events.trigger(PluginEvent.UpdateLayoutPending);
         } catch (error) {
-            console.error('Error handling update_boardgrouping_pending:', error);
         }
     }
 
@@ -319,7 +321,6 @@ export class AppStateManager extends Component {
             this.events.trigger(PluginEvent.UpdateSettingsDone);
             this.events.trigger(PluginEvent.AppStateUpdated, this.state);
         } catch (error) {
-            console.error('Error handling update_settings_pending:', error);
         }
     }
 
@@ -337,8 +338,99 @@ export class AppStateManager extends Component {
             
             // Don't trigger manual update - let vault events handle it to avoid double processing
         } catch (error) {
-            console.error('Error handling create_task_pending:', error);
             new Notice(error.message || "Failed to create task. Please try again.");
+        }
+    }
+
+    // Drag/Drop event handlers
+    private async handleDragStartPending(dragData: any): Promise<void> {
+        try {
+            const result = updateDragStart(this.app, this.state.persistent, this.state.volatile, dragData);
+            
+            this.state.persistent = result.persistent;
+            this.state.volatile = result.volatile;
+            
+            this.events.trigger(PluginEvent.DragStartDone);
+            this.events.trigger(PluginEvent.AppStateUpdated, this.state);
+        } catch (error) {
+            console.error('❌ Drag Start Error:', error);
+            console.error('Drag data:', dragData);
+        }
+    }
+
+    private async handleDragMovePending(dragData: any): Promise<void> {
+        try {
+            const result = updateDragMove(this.app, this.state.persistent, this.state.volatile, dragData);
+            
+            this.state.persistent = result.persistent;
+            this.state.volatile = result.volatile;
+            
+            this.events.trigger(PluginEvent.DragMoveDone);
+            this.events.trigger(PluginEvent.AppStateUpdated, this.state);
+        } catch (error) {
+            console.error('❌ Drag Move Error:', error);
+            console.error('Drag data:', dragData);
+        }
+    }
+
+    private async handleDragEndPending(dragData: any): Promise<void> {
+        try {
+            const result = await updateDragEnd(this.app, this.state.persistent, this.state.volatile, dragData);
+            
+            this.state.persistent = result.persistent;
+            this.state.volatile = result.volatile;
+            
+            this.events.trigger(PluginEvent.DragEndDone);
+            this.events.trigger(PluginEvent.AppStateUpdated, this.state);
+            
+            // Reload tasks after file modification to reflect changes
+            this.events.trigger(PluginEvent.UpdateTasksPending);
+        } catch (error) {
+            console.error('❌ Drag End Error:', error);
+            console.error('Drag data:', dragData);
+        }
+    }
+
+    // Resize event handlers
+    private async handleResizeStartPending(resizeData: any): Promise<void> {
+        try {
+            const result = updateResizeStart(this.app, this.state.persistent, this.state.volatile, resizeData);
+            
+            this.state.persistent = result.persistent;
+            this.state.volatile = result.volatile;
+            
+            this.events.trigger(PluginEvent.ResizeStartDone);
+            this.events.trigger(PluginEvent.AppStateUpdated, this.state);
+        } catch (error) {
+        }
+    }
+
+    private async handleResizeMovePending(resizeData: any): Promise<void> {
+        try {
+            const result = updateResizeMove(this.app, this.state.persistent, this.state.volatile, resizeData);
+            
+            this.state.persistent = result.persistent;
+            this.state.volatile = result.volatile;
+            
+            this.events.trigger(PluginEvent.ResizeMoveDone);
+            this.events.trigger(PluginEvent.AppStateUpdated, this.state);
+        } catch (error) {
+        }
+    }
+
+    private async handleResizeEndPending(resizeData: any): Promise<void> {
+        try {
+            const result = await updateResizeEnd(this.app, this.state.persistent, this.state.volatile, resizeData);
+            
+            this.state.persistent = result.persistent;
+            this.state.volatile = result.volatile;
+            
+            this.events.trigger(PluginEvent.ResizeEndDone);
+            this.events.trigger(PluginEvent.AppStateUpdated, this.state);
+            
+            // Reload tasks after file modification to reflect changes
+            this.events.trigger(PluginEvent.UpdateTasksPending);
+        } catch (error) {
         }
     }
 
@@ -421,7 +513,6 @@ export class AppStateManager extends Component {
             
             this.events.trigger(PluginEvent.AppStateUpdated, this.state);
         } catch (error) {
-            console.error('Failed to initialize AppStateManager:', error);
         }
     }
 

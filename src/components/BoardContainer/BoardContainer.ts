@@ -108,7 +108,6 @@ export class BoardContainer {
                     const validTasks = tasksInGroup.filter(task => {
                         const validation = validateTask(task);
                         if (!validation.isValid) {
-                            console.warn(`Invalid task skipped: ${task.name} (priority: ${task.priority}, file: ${task.filePath})`, validation.errors);
                             return false;
                         }
                         return true;
@@ -131,7 +130,6 @@ export class BoardContainer {
                     const taskGroupEl = BoardTaskGroup(taskGrid.group, validTasks, gridConfig, settings, this.appStateManager, this.app, this.isDebugMode);
                     this.contentElement.appendChild(taskGroupEl);
                 } catch (error) {
-                    console.error(`Error rendering task group ${taskGrid.group}:`, error);
                     
                     const errorElement = createEmptyStateElement(
                         `Error loading group: ${taskGrid.group}`, 
@@ -141,7 +139,6 @@ export class BoardContainer {
                 }
             });
         } catch (error) {
-            console.error('Error rendering board:', error);
             
             const errorElement = createEmptyStateElement(
                 'Error loading board. Please try refreshing.', 
@@ -149,6 +146,9 @@ export class BoardContainer {
             );
             this.contentElement.appendChild(errorElement);
         }
+        
+        // Board layout complete - drag/drop coordinate calculation 
+        // now handled in business logic layer
     }
 
     public destroy(): void {

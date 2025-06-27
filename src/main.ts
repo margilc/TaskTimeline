@@ -13,8 +13,8 @@ export default class TaskTimelinePlugin extends Plugin {
 		this.appStateManager = new AppStateManager(this);
 		await this.appStateManager.initialize();
 		
-		// DebugEventListener - Listens to all events from AppStateManager
-		this.debugEventListener = new DebugEventListener(this.appStateManager);
+		// DebugEventListener - Temporarily disabled to eliminate console spam
+		// this.debugEventListener = new DebugEventListener(this.appStateManager);
 		
 		this.registerView(
 			TASK_TIMELINE_VIEW_TYPE,
@@ -67,7 +67,6 @@ export default class TaskTimelinePlugin extends Plugin {
 				this.app.workspace.revealLeaf(leaf);
 			}
 		} catch (error) {
-			console.error('Failed to activate Task Timeline view:', error);
 			new Notice('Failed to open Task Timeline. Please try again.');
 		}
 	}

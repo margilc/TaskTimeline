@@ -2,6 +2,7 @@ import { App, Notice } from 'obsidian';
 import { IPersistentState, IVolatileState } from '../../interfaces/IAppState';
 import { ITask } from '../../interfaces/ITask';
 import { parseTaskFromContent } from '../utils/taskUtils';
+import { generateAvailableGroups } from '../utils/groupingUtils';
 
 export async function updateTasks(
     app: App, 
@@ -48,16 +49,37 @@ export async function updateTasks(
         }
         
     } catch (error) {
-        console.error('Failed to update tasks:', error);
         return {
             volatile: { ...currentVolatile, currentTasks: [] },
             persistent: currentPersistent
         };
     }
     
+    // Update group ordering if board grouping is active
+    let updatedPersistent = currentPersistent;
+    const currentGrouping = currentPersistent.boardGrouping;
+    const projectId = currentVolatile.selectedProject?.id;
+    
+    if (currentGrouping) {
+        const updatedAvailableGroups = generateAvailableGroups(
+            tasks, 
+            currentGrouping.groupBy, 
+            currentPersistent, 
+            projectId
+        );
+        
+        updatedPersistent = {
+            ...currentPersistent,
+            boardGrouping: {
+                ...currentGrouping,
+                availableGroups: updatedAvailableGroups
+            }
+        };
+    }
+    
     return {
         volatile: { ...currentVolatile, currentTasks: tasks },
-        persistent: currentPersistent
+        persistent: updatedPersistent
     };
 }
 
@@ -74,7 +96,6 @@ async function scanProjectFolder(app: App, projectFolder: any, tasks: ITask[]): 
             const task = parseTaskFromContent(fileContent, file.path);
             tasks.push(task);
         } catch (error) {
-            console.warn(`Failed to parse task file ${file.path}:`, error.message);
             new Notice(`Task parsing failed: ${file.name} - ${error.message}`, 5000);
         }
     }

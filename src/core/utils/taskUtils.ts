@@ -1,5 +1,12 @@
 import { ITask } from '../../interfaces/ITask';
 
+function generateTaskId(filePath: string): string {
+    // Use the file name without extension as the ID
+    // This ensures uniqueness since task files should have unique names
+    const fileName = filePath.split('/').pop() || filePath;
+    return fileName.replace(/\.md$/, '');
+}
+
 export function parseTaskFromContent(fileContent: string, filePath: string): ITask {
     const frontmatterRegex = /^---\n([\s\S]*?)\n---/;
     const frontmatterMatch = fileContent.match(frontmatterRegex);
@@ -17,6 +24,7 @@ export function parseTaskFromContent(fileContent: string, filePath: string): ITa
     const { totalSubtasks, completedSubtasks } = parseSubtasks(contentBody);
     
     const task: ITask = {
+        id: generateTaskId(filePath),
         name: frontmatter.name,
         start: frontmatter.start,
         end: frontmatter.end ?? '',

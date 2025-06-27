@@ -139,8 +139,6 @@ export class NavBar {
 		
 		// Copy to clipboard
 		navigator.clipboard.writeText(jsonString).then(() => {
-			console.log("📋 Alignment dump copied to clipboard!");
-			console.log("🐛 Alignment Dump:", alignmentDump);
 			
 			// Show temporary notification
 			const notification = document.createElement("div");
@@ -160,8 +158,6 @@ export class NavBar {
 				document.body.removeChild(notification);
 			}, 3000);
 		}).catch(err => {
-			console.error("Failed to copy to clipboard:", err);
-			console.log("🐛 Alignment Dump (copy manually):", jsonString);
 		});
 	}
 

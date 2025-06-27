@@ -16,7 +16,7 @@ describe('Layout Performance Testing', () => {
             persistent: {
                 currentDate: '2024-06-15', // Mid-year for good task coverage
                 currentTimeUnit: TimeUnit.DAY,
-                boardGrouping: { groupBy: 'none', availableGroups: [] },
+                boardGrouping: { groupBy: 'none', availableGroups: ['All Tasks'] },
                 settings: {
                     numberOfColumns: 8 // Maintain expected 8 columns for performance tests
                 }

@@ -76,8 +76,20 @@ export function BoardTaskGroup(
 	});
 
 	// Add click handler for group header
-	header.addEventListener('click', () => {
-		taskCreationHelper.openTaskModalForGroup(groupName, groupType);
+	header.addEventListener('click', (e) => {
+		// Only open task modal if not dragging
+		if (!header.classList.contains('dragging')) {
+			taskCreationHelper.openTaskModalForGroup(groupName, groupType);
+		}
+	});
+	
+	// Add row header drag functionality (future implementation)
+	// For now, just add visual feedback
+	header.addEventListener('mousedown', (e) => {
+		if (e.detail === 1) { // Single click
+			header.classList.add('dragging');
+			setTimeout(() => header.classList.remove('dragging'), 200);
+		}
 	});
 
 	header.style.gridColumn = "1";

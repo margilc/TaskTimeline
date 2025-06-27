@@ -68,7 +68,6 @@ Task description and notes go here.
 	try {
 		await app.vault.create(filePath, content);
 	} catch (error) {
-		console.error('Failed to create task file:', error);
 		if (error.message?.includes('already exists')) {
 			throw new Error(`A file named ${filename} already exists.`);
 		} else if (error.message?.includes('permission')) {

@@ -31,7 +31,7 @@ describe('Column Settings Validation', () => {
             persistent: {
                 currentDate: '2024-01-15',
                 currentTimeUnit: TimeUnit.DAY,
-                boardGrouping: { groupBy: 'none', availableGroups: [] },
+                boardGrouping: { groupBy: 'none', availableGroups: ['All Tasks'] },
                 settings: {
                     taskDirectory: 'tasks',
                     openByDefault: true,

@@ -45,7 +45,7 @@ export function createTestAppState(tasks: ITask[] = [], overrides: Partial<IAppS
             },
             colorVariable: 'none',
             colorMappings: {},
-            boardGrouping: { groupBy: 'none', availableGroups: [] },
+            boardGrouping: { groupBy: 'none', availableGroups: ['All Tasks'] },
             ...overrides.persistent
         },
         volatile: {

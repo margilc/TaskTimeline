@@ -1,11 +1,12 @@
 import { ITask } from '../../interfaces/ITask';
+import { IPersistentState } from '../../interfaces/IAppState';
 
 export function getGroupValue(task: ITask, groupBy: string): string {
     switch (groupBy) {
         case 'status':
             return task.status || 'No Status';
         case 'priority':
-            return task.priority ? `Priority ${task.priority}` : 'No Priority';
+            return task.priority ? task.priority.toString() : 'No Priority';
         case 'category':
             return task.category || 'No Category';
         default:
@@ -32,7 +33,12 @@ export function groupTasks(tasks: ITask[], groupBy: string): Record<string, ITas
     return grouped;
 }
 
-export function generateAvailableGroups(tasks: ITask[], groupBy: string): string[] {
+export function generateAvailableGroups(
+    tasks: ITask[], 
+    groupBy: string, 
+    persistent?: IPersistentState,
+    projectId?: string
+): string[] {
     if (groupBy === 'none' || !groupBy) {
         return ['All Tasks'];
     }
@@ -44,7 +50,15 @@ export function generateAvailableGroups(tasks: ITask[], groupBy: string): string
         uniqueGroups.add(groupValue);
     }
     
-    return Array.from(uniqueGroups).sort((a, b) => {
+    const discoveredGroups = Array.from(uniqueGroups);
+    
+    // If we have persistent state and project ID, use stable ordering
+    if (persistent && projectId) {
+        return getStableOrder(discoveredGroups, persistent, projectId, groupBy);
+    }
+    
+    // Fallback to dynamic sorting (legacy behavior)
+    return discoveredGroups.sort((a, b) => {
         if (groupBy === 'priority') {
             return sortPriorityGroups(a, b);
         }
@@ -55,10 +69,64 @@ export function generateAvailableGroups(tasks: ITask[], groupBy: string): string
     });
 }
 
+function getStableOrder(
+    discoveredGroups: string[], 
+    persistent: IPersistentState, 
+    projectId: string, 
+    groupBy: string
+): string[] {
+    const groupingOrderings = persistent.groupingOrderings || {};
+    const projectOrderings = groupingOrderings[projectId] || {};
+    const existingOrder = projectOrderings[groupBy] || [];
+    
+    const orderedGroups: string[] = [];
+    
+    // First, add all existing groups in their stored order
+    for (const group of existingOrder) {
+        if (discoveredGroups.includes(group)) {
+            orderedGroups.push(group);
+        }
+    }
+    
+    // Then, add any new groups that weren't in the stored order
+    const newGroups = discoveredGroups.filter(group => !existingOrder.includes(group));
+    
+    if (newGroups.length > 0) {
+        // Sort new groups appropriately and append
+        const sortedNewGroups = newGroups.sort((a, b) => {
+            if (groupBy === 'priority') {
+                return sortPriorityGroups(a, b);
+            }
+            if (groupBy === 'status') {
+                return sortStatusGroups(a, b);
+            }
+            return a.localeCompare(b);
+        });
+        
+        if (groupBy === 'status' || groupBy === 'priority') {
+            // For status and priority, we need to maintain the predefined order
+            // So re-sort the entire list
+            const allGroups = [...orderedGroups, ...sortedNewGroups];
+            return allGroups.sort((a, b) => {
+                if (groupBy === 'priority') {
+                    return sortPriorityGroups(a, b);
+                }
+                return sortStatusGroups(a, b);
+            });
+        } else {
+            // For categories, just append new ones alphabetically
+            orderedGroups.push(...sortedNewGroups);
+        }
+    }
+    
+    return orderedGroups;
+}
+
 function sortPriorityGroups(a: string, b: string): number {
     const getPriorityValue = (group: string): number => {
         if (group === 'No Priority') return -1;
-        const match = group.match(/Priority (\d+)/);
+        // Handle both old format "Priority 1" and new format "1"
+        const match = group.match(/(?:Priority )?(\d+)/);
         return match ? parseInt(match[1], 10) : -1;
     };
     

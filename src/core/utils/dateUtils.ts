@@ -17,7 +17,6 @@ export function addTime(date: Date, amount: number, unit: TimeUnit): Date {
 
 export function formatDateYYYYMMDD(date: Date): string {
   if (!date || !(date instanceof Date) || isNaN(date.getTime())) {
-    console.error("Invalid date provided to formatDateYYYYMMDD:", date);
     const today = new Date();
     const year = today.getFullYear();
     const month = (today.getMonth() + 1).toString().padStart(2, '0');
@@ -106,7 +105,6 @@ export function isDateInRange(date: Date, start: Date, end: Date, timeUnit: Time
       return dateMonthYear >= startMonthYear && dateMonthYear <= endMonthYear;
     }
   } catch (error) {
-    console.error("Error in isDateInRange:", error);
     return false;
   }
   

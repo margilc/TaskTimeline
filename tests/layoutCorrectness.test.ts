@@ -114,7 +114,7 @@ describe('Layout Correctness Testing', () => {
             persistent: {
                 currentDate,
                 currentTimeUnit: TimeUnit.DAY,
-                boardGrouping: { groupBy: 'none', availableGroups: [] },
+                boardGrouping: { groupBy: 'none', availableGroups: ['All Tasks'] },
                 settings: {
                     numberOfColumns: 8 // Maintain expected 8 columns for correctness tests
                 }

@@ -1,4 +1,5 @@
 export interface ITask {
+    id: string;        // Unique identifier derived from filePath
     name: string;
     start: string;
     end: string;
