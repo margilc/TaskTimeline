@@ -61,7 +61,6 @@ export interface IDragState {
     initialPosition?: { x: number, y: number };
     currentPosition?: { x: number, y: number };
     targetGrid?: { column: number, row: number, group: string };
-    ghostElement?: HTMLElement;
 }
 
 export interface IResizeState {
@@ -70,7 +69,6 @@ export interface IResizeState {
     resizeType?: 'start' | 'end';
     initialColumn?: number;
     targetColumn?: number;
-    previewElement?: HTMLElement;
 }
 
 export interface IDragOperation {

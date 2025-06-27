@@ -5,6 +5,7 @@ import { ITaskTimelineSettings } from "../../interfaces/ITaskTimelineSettings";
 import { AppStateManager } from "../../core/AppStateManager";
 import { ITask } from "../../interfaces/ITask";
 import { TaskCreationHelper } from "../../utils/taskCreationHelper";
+import { PluginEvent } from "../../enums/events";
 
 export function BoardTaskGroup(
 	groupName: string,
@@ -63,6 +64,9 @@ export function BoardTaskGroup(
 	const headerText = document.createElement("span");
 	headerText.textContent = groupName;
 	header.appendChild(headerText);
+	
+	// Add drag handle using same UI language as task cards
+	addGroupDragHandle(header, groupName, appStateManager);
 
 	// Add hover effects to header
 	header.addEventListener('mouseenter', () => {
@@ -83,14 +87,7 @@ export function BoardTaskGroup(
 		}
 	});
 	
-	// Add row header drag functionality (future implementation)
-	// For now, just add visual feedback
-	header.addEventListener('mousedown', (e) => {
-		if (e.detail === 1) { // Single click
-			header.classList.add('dragging');
-			setTimeout(() => header.classList.remove('dragging'), 200);
-		}
-	});
+	// Drag functionality is now handled by addGroupDragHandle
 
 	header.style.gridColumn = "1";
 	header.style.gridRow = `1 / span ${actualGridHeight}`;
@@ -128,4 +125,184 @@ export function BoardTaskGroup(
 	return container;
 }
 
+// Group Header Drag Implementation (same UI language as task cards)
+function addGroupDragHandle(header: HTMLElement, groupName: string, appStateManager: AppStateManager): void {
+	// Create drag handle element (same as task cards)
+	const dragHandle = document.createElement('div');
+	dragHandle.className = 'group-drag-handle';
+	dragHandle.innerHTML = '⋮⋮';
+	dragHandle.style.cssText = `
+		position: absolute;
+		top: 50%;
+		right: 28px;
+		transform: translateY(-50%);
+		width: 20px;
+		height: 20px;
+		display: none;
+		align-items: center;
+		justify-content: center;
+		cursor: grab;
+		line-height: 1;
+		z-index: 10;
+		pointer-events: auto;
+	`;
+	
+	header.appendChild(dragHandle);
+	
+	// Show/hide handle on hover (same as task cards)
+	header.addEventListener('mouseenter', () => {
+		dragHandle.style.display = 'flex';
+	});
+	
+	header.addEventListener('mouseleave', () => {
+		dragHandle.style.display = 'none';
+	});
+	
+	// Drag functionality
+	let isDragging = false;
+	
+	dragHandle.addEventListener('mousedown', (e: MouseEvent) => {
+		e.preventDefault();
+		e.stopPropagation();
+		
+		isDragging = true;
+		dragHandle.style.cursor = 'grabbing';
+		
+		// Create ghost element
+		const ghost = createGroupGhost(header, groupName);
+		document.body.appendChild(ghost);
+		
+		// Add dragging class to original header
+		header.classList.add('group-dragging');
+		
+		
+		// Add global mouse listeners
+		document.addEventListener('mousemove', handleMouseMove);
+		document.addEventListener('mouseup', handleMouseUp);
+	});
+	
+	function handleMouseMove(e: MouseEvent): void {
+		if (!isDragging) return;
+		
+		const mouseX = e.clientX;
+		const mouseY = e.clientY;
+		
+		// Visual updates only
+		requestAnimationFrame(() => {
+			// Update ghost position
+			const ghost = document.querySelector('.group-drag-ghost') as HTMLElement;
+			if (ghost) {
+				ghost.style.left = `${mouseX - 100}px`;
+				ghost.style.top = `${mouseY - 20}px`;
+			}
+			
+			// Highlight drop zones between group headers
+			highlightGroupDropZones(mouseY);
+		});
+	}
+	
+	function handleMouseUp(e: MouseEvent): void {
+		if (!isDragging) return;
+		
+		isDragging = false;
+		dragHandle.style.cursor = 'grab';
+		
+		// Remove visual feedback
+		header.classList.remove('group-dragging');
+		cleanupGroupDragVisuals();
+		
+		const targetIndex = calculateGroupDropIndex(e.clientY);
+		const sourceIndex = getGroupIndex(header);
+		
+		if (targetIndex !== -1 && targetIndex !== sourceIndex) {
+			appStateManager.emit(PluginEvent.GroupReorderPending, {
+				sourceIndex,
+				targetIndex,
+				groupName
+			});
+		}
+		
+		// Cleanup
+		document.removeEventListener('mousemove', handleMouseMove);
+		document.removeEventListener('mouseup', handleMouseUp);
+	}
+}
+
+// Helper functions for group dragging
+function createGroupGhost(originalHeader: HTMLElement, groupName: string): HTMLElement {
+	const ghost = originalHeader.cloneNode(true) as HTMLElement;
+	ghost.className = 'group-drag-ghost';
+	
+	// Remove any event listeners from the clone
+	const newGhost = ghost.cloneNode(true) as HTMLElement;
+	
+	// Position initially off-screen
+	newGhost.style.position = 'fixed';
+	newGhost.style.left = '-1000px';
+	newGhost.style.top = '-1000px';
+	newGhost.style.width = `${originalHeader.offsetWidth}px`;
+	newGhost.style.height = `${originalHeader.offsetHeight}px`;
+	newGhost.style.zIndex = '1001';
+	newGhost.style.pointerEvents = 'none';
+	
+	return newGhost;
+}
+
+function getGroupIndex(header: HTMLElement): number {
+	const allGroups = document.querySelectorAll('.group-header');
+	return Array.from(allGroups).indexOf(header);
+}
+
+function calculateGroupDropIndex(mouseY: number): number {
+	const allGroups = document.querySelectorAll('.group-header');
+	
+	for (let i = 0; i < allGroups.length; i++) {
+		const group = allGroups[i] as HTMLElement;
+		const rect = group.getBoundingClientRect();
+		const centerY = rect.top + rect.height / 2;
+		
+		if (mouseY < centerY) {
+			return i;
+		}
+	}
+	
+	return allGroups.length; // Drop at end
+}
+
+function highlightGroupDropZones(mouseY: number): void {
+	// Clear previous highlights
+	cleanupGroupHighlights();
+	
+	const allGroups = document.querySelectorAll('.group-header');
+	
+	for (let i = 0; i < allGroups.length; i++) {
+		const group = allGroups[i] as HTMLElement;
+		const rect = group.getBoundingClientRect();
+		const centerY = rect.top + rect.height / 2;
+		
+		if (mouseY < centerY) {
+			group.classList.add('group-drop-target-before');
+			break;
+		} else if (i === allGroups.length - 1) {
+			group.classList.add('group-drop-target-after');
+		}
+	}
+}
+
+function cleanupGroupHighlights(): void {
+	document.querySelectorAll('.group-drop-target-before, .group-drop-target-after').forEach(el => {
+		el.classList.remove('group-drop-target-before', 'group-drop-target-after');
+	});
+}
+
+function cleanupGroupDragVisuals(): void {
+	// Remove ghost element
+	const ghost = document.querySelector('.group-drag-ghost');
+	if (ghost) {
+		ghost.remove();
+	}
+	
+	// Clean up highlights
+	cleanupGroupHighlights();
+}
 

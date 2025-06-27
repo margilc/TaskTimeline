@@ -46,4 +46,8 @@ export enum PluginEvent {
     ResizeMoveDone = 'resize_move_done',
     ResizeEndPending = 'resize_end_pending',
     ResizeEndDone = 'resize_end_done',
+    
+    // Group reorder events
+    GroupReorderPending = 'group_reorder_pending',
+    GroupReorderDone = 'group_reorder_done',
 } 

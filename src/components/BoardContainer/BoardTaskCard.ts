@@ -305,15 +305,13 @@ function addInteractionHandlers(card: HTMLElement, task: ITask, appStateManager:
 		dragHandle.style.display = 'none';
 	});
 	
-	// Handle cursor changes based on mouse position (combined logic)
 	card.addEventListener('mousemove', (e: MouseEvent) => {
-		if (isDragging || isResizing) return; // Don't change cursor during operations
+		if (isDragging || isResizing) return;
 		
 		const rect = card.getBoundingClientRect();
-		const isLeftBorder = e.clientX - rect.left <= 8;  // Slightly bigger resize area
-		const isRightBorder = rect.right - e.clientX <= 8;  // Slightly bigger resize area
+		const isLeftBorder = e.clientX - rect.left <= 8;
+		const isRightBorder = rect.right - e.clientX <= 8;
 		
-		// Check if mouse is over drag handle
 		const handleRect = dragHandle.getBoundingClientRect();
 		const isOverHandle = dragHandle.style.display === 'flex' && 
 			e.clientX >= handleRect.left && e.clientX <= handleRect.right &&
@@ -400,14 +398,13 @@ function addInteractionHandlers(card: HTMLElement, task: ITask, appStateManager:
 		document.removeEventListener('mouseup', handleMouseUp);
 	}
 	
-	// Resize functionality on card borders
 	card.addEventListener('mousedown', (e: MouseEvent) => {
 		const rect = card.getBoundingClientRect();
-		const isLeftBorder = e.clientX - rect.left <= 8;  // Slightly bigger resize area
-		const isRightBorder = rect.right - e.clientX <= 8;  // Slightly bigger resize area
+		const isLeftBorder = e.clientX - rect.left <= 8;
+		const isRightBorder = rect.right - e.clientX <= 8;
 		
 		if (!isLeftBorder && !isRightBorder) {
-			return; // Let drag handler take over
+			return;
 		}
 		
 		e.preventDefault();

@@ -58,14 +58,13 @@ export async function updateTasks(
     // Update group ordering if board grouping is active
     let updatedPersistent = currentPersistent;
     const currentGrouping = currentPersistent.boardGrouping;
-    const projectId = currentVolatile.selectedProject?.id;
     
     if (currentGrouping) {
         const updatedAvailableGroups = generateAvailableGroups(
             tasks, 
             currentGrouping.groupBy, 
             currentPersistent, 
-            projectId
+            currentProjectName
         );
         
         updatedPersistent = {

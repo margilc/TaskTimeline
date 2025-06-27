@@ -6,5 +6,6 @@
 	"author": "Mario Gilcher",
 	"authorUrl": "https://github.com/margilc",
 	"fundingUrl": "https://github.com/sponsors/margilc",
-	"isDesktopOnly": false
+	"isDesktopOnly": false,
+	"version": "1.0.767"
 }

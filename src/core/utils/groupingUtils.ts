@@ -52,12 +52,10 @@ export function generateAvailableGroups(
     
     const discoveredGroups = Array.from(uniqueGroups);
     
-    // If we have persistent state and project ID, use stable ordering
     if (persistent && projectId) {
         return getStableOrder(discoveredGroups, persistent, projectId, groupBy);
     }
     
-    // Fallback to dynamic sorting (legacy behavior)
     return discoveredGroups.sort((a, b) => {
         if (groupBy === 'priority') {
             return sortPriorityGroups(a, b);
@@ -78,6 +76,15 @@ function getStableOrder(
     const groupingOrderings = persistent.groupingOrderings || {};
     const projectOrderings = groupingOrderings[projectId] || {};
     const existingOrder = projectOrderings[groupBy] || [];
+    
+    if ((groupBy === 'status' || groupBy === 'priority') && existingOrder.length === 0) {
+        return discoveredGroups.sort((a, b) => {
+            if (groupBy === 'priority') {
+                return sortPriorityGroups(a, b);
+            }
+            return sortStatusGroups(a, b);
+        });
+    }
     
     const orderedGroups: string[] = [];
     
@@ -107,12 +114,13 @@ function getStableOrder(
             // For status and priority, we need to maintain the predefined order
             // So re-sort the entire list
             const allGroups = [...orderedGroups, ...sortedNewGroups];
-            return allGroups.sort((a, b) => {
+            const finalOrder = allGroups.sort((a, b) => {
                 if (groupBy === 'priority') {
                     return sortPriorityGroups(a, b);
                 }
                 return sortStatusGroups(a, b);
             });
+            return finalOrder;
         } else {
             // For categories, just append new ones alphabetically
             orderedGroups.push(...sortedNewGroups);
@@ -142,8 +150,8 @@ function sortPriorityGroups(a: string, b: string): number {
 
 function sortStatusGroups(a: string, b: string): number {
     const statusOrder = [
-        'Not Started', 'In Progress', 'Blocked', 'Review', 
-        'Completed', 'Cancelled', 'No Status'
+        'To Do', 'Not Started', 'In Progress', 'Blocked', 'Review', 
+        'Done', 'Completed', 'Cancelled', 'No Status'
     ];
     
     const indexA = statusOrder.indexOf(a);

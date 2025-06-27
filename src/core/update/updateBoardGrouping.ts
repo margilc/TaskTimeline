@@ -4,8 +4,10 @@ import { generateAvailableGroups } from '../utils/groupingUtils';
 
 export function updateBoardGrouping(app: App, currentState: IAppState, groupBy: string): IAppState {
     const tasks = currentState.volatile.currentTasks || [];
-    const projectId = currentState.volatile.selectedProject?.id;
-    const availableGroups = generateAvailableGroups(tasks, groupBy, currentState.persistent, projectId);
+    const currentProjectName = currentState.persistent.currentProjectName;
+    
+    // Always use currentProjectName as the project identifier for grouping ordering
+    const availableGroups = generateAvailableGroups(tasks, groupBy, currentState.persistent, currentProjectName);
     
     return {
         ...currentState,

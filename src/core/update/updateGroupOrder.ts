@@ -110,3 +110,59 @@ function sortStatusGroups(a: string, b: string): number {
     
     return a.localeCompare(b);
 }
+
+export function updateGroupOrder(
+    app: App,
+    persistent: IPersistentState,
+    volatile: IVolatileState,
+    reorderData: { sourceIndex: number, targetIndex: number, groupName: string }
+): IAppState {
+    const newPersistent = { ...persistent };
+    
+    // Get current project and grouping info
+    const currentProject = persistent.currentProjectName;
+    const boardGrouping = persistent.boardGrouping;
+    const groupBy = boardGrouping?.groupBy || 'status';
+    
+    if (!currentProject || !groupBy) {
+        return { persistent, volatile };
+    }
+    
+    if (!newPersistent.groupingOrderings) {
+        newPersistent.groupingOrderings = {};
+    }
+    if (!newPersistent.groupingOrderings[currentProject]) {
+        newPersistent.groupingOrderings[currentProject] = {};
+    }
+    
+    let currentOrder: string[];
+    if (newPersistent.groupingOrderings[currentProject][groupBy]) {
+        currentOrder = [...newPersistent.groupingOrderings[currentProject][groupBy]];
+    } else {
+        currentOrder = volatile.boardLayout?.taskGrids?.map(grid => grid.group) || [];
+    }
+    
+    if (currentOrder.length === 0) {
+        return { persistent, volatile };
+    }
+    
+    if (reorderData.sourceIndex < 0 || reorderData.sourceIndex >= currentOrder.length ||
+        reorderData.targetIndex < 0 || reorderData.targetIndex > currentOrder.length) {
+        return { persistent, volatile };
+    }
+    
+    const newOrder = [...currentOrder];
+    const [movedGroup] = newOrder.splice(reorderData.sourceIndex, 1);
+    newOrder.splice(reorderData.targetIndex, 0, movedGroup);
+    
+    newPersistent.groupingOrderings[currentProject][groupBy] = newOrder;
+    
+    if (newPersistent.boardGrouping && newPersistent.boardGrouping.groupBy === groupBy) {
+        newPersistent.boardGrouping = {
+            ...newPersistent.boardGrouping,
+            availableGroups: newOrder
+        };
+    }
+    
+    return { persistent: newPersistent, volatile };
+}

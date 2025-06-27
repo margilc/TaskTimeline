@@ -15,6 +15,7 @@ import { updateSettings } from './update/updateSettings';
 import { createTask } from './update/createTask';
 import { updateDragStart, updateDragMove, updateDragEnd } from './update/updateDragState';
 import { updateResizeStart, updateResizeMove, updateResizeEnd } from './update/updateResizeState';
+import { updateGroupOrder } from './update/updateGroupOrder';
 import { DEFAULT_COLOR, ColorVariable } from './utils/colorUtils';
 import { calculateDefaultViewport } from './utils/timelineUtils';
 
@@ -60,6 +61,9 @@ export class AppStateManager extends Component {
         this.events.on(PluginEvent.ResizeStartPending, this.handleResizeStartPending.bind(this));
         this.events.on(PluginEvent.ResizeMovePending, this.handleResizeMovePending.bind(this));
         this.events.on(PluginEvent.ResizeEndPending, this.handleResizeEndPending.bind(this));
+        
+        // Group reorder events
+        this.events.on(PluginEvent.GroupReorderPending, this.handleGroupReorderPending.bind(this));
     }
 
 
@@ -291,10 +295,13 @@ export class AppStateManager extends Component {
             
             await this.saveData(this.state.persistent);
             
+            // Clear layout cache when grouping changes to prevent stale cached layouts
+            clearLayoutCache();
+            
             this.events.trigger(PluginEvent.UpdateBoardGroupingDone);
             this.events.trigger(PluginEvent.AppStateUpdated, this.state);
             
-            // Trigger layout update after grouping changes
+            // Trigger layout update to reflect the new grouping
             this.events.trigger(PluginEvent.UpdateLayoutPending);
         } catch (error) {
         }
@@ -431,6 +438,26 @@ export class AppStateManager extends Component {
             // Reload tasks after file modification to reflect changes
             this.events.trigger(PluginEvent.UpdateTasksPending);
         } catch (error) {
+        }
+    }
+    
+    private async handleGroupReorderPending(reorderData: any): Promise<void> {
+        try {
+            const result = updateGroupOrder(this.app, this.state.persistent, this.state.volatile, reorderData);
+            
+            this.state.persistent = result.persistent;
+            this.state.volatile = result.volatile;
+            
+            this.events.trigger(PluginEvent.GroupReorderDone);
+            this.events.trigger(PluginEvent.AppStateUpdated, this.state);
+            
+            // Clear layout cache to force re-render with new group order
+            clearLayoutCache();
+            
+            // Trigger layout update to reflect the new group order
+            this.events.trigger(PluginEvent.UpdateLayoutPending);
+        } catch (error) {
+            console.error('Error handling group reorder:', error);
         }
     }
 
