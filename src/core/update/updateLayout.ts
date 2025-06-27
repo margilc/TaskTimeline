@@ -24,12 +24,22 @@ export function updateLayout(app: App, currentState: IAppState): IAppState {
     let endDate: Date;
     
     if (timelineViewport) {
-        // Use the snapped viewport start date, but calculate end based on numberOfColumns
-        startDate = new Date(timelineViewport.localMinDate);
+        // Use custom viewport but snap to proper time unit boundaries
+        const customStart = new Date(timelineViewport.localMinDate);
+        
+        // Snap start date to proper time unit boundary
+        if (timeUnit === TimeUnit.MONTH) {
+            startDate = new Date(Date.UTC(customStart.getUTCFullYear(), customStart.getUTCMonth(), 1));
+        } else if (timeUnit === TimeUnit.WEEK) {
+            startDate = getWeekStart(customStart);
+        } else {
+            startDate = normalizeDate(customStart);
+        }
+        
         endDate = addTime(startDate, numberOfColumns - 1, timeUnit);
         endDate = normalizeDate(endDate);
     } else {
-        // Fallback to original logic if no viewport
+        // Calculate viewport with proper time unit boundaries
         const viewportCenter = currentDate;
         const pastUnits = Math.floor((numberOfColumns - 1) / 2);
         const futureUnits = numberOfColumns - 1 - pastUnits;
@@ -38,11 +48,15 @@ export function updateLayout(app: App, currentState: IAppState): IAppState {
             startDate = normalizeDate(addTime(viewportCenter, -pastUnits, TimeUnit.DAY));
             endDate = normalizeDate(addTime(viewportCenter, futureUnits, TimeUnit.DAY));
         } else if (timeUnit === TimeUnit.WEEK) {
-            startDate = normalizeDate(addTime(viewportCenter, -pastUnits, TimeUnit.WEEK));
-            endDate = normalizeDate(addTime(viewportCenter, futureUnits, TimeUnit.WEEK));
+            // Calculate week boundaries properly
+            const centerWeekStart = getWeekStart(viewportCenter);
+            startDate = normalizeDate(addTime(centerWeekStart, -pastUnits, TimeUnit.WEEK));
+            endDate = normalizeDate(addTime(centerWeekStart, futureUnits, TimeUnit.WEEK));
         } else if (timeUnit === TimeUnit.MONTH) {
-            startDate = normalizeDate(addTime(viewportCenter, -pastUnits, TimeUnit.MONTH));
-            endDate = normalizeDate(addTime(viewportCenter, futureUnits, TimeUnit.MONTH));
+            // Calculate month boundaries properly - start from 1st of month
+            const centerMonthStart = new Date(viewportCenter.getFullYear(), viewportCenter.getMonth(), 1);
+            startDate = normalizeDate(addTime(centerMonthStart, -pastUnits, TimeUnit.MONTH));
+            endDate = normalizeDate(addTime(centerMonthStart, futureUnits, TimeUnit.MONTH));
         } else {
             startDate = normalizeDate(addTime(viewportCenter, -pastUnits, TimeUnit.DAY));
             endDate = normalizeDate(addTime(viewportCenter, futureUnits, TimeUnit.DAY));
@@ -228,12 +242,15 @@ function calculateTaskPositions(tasks: ITask[], columnHeaders: Array<{date: Date
     for (const task of sortedTasks) {
         const position = findTaskPosition(task, columnHeaders, [], timeUnit);
         if (position) {
+            // Task is visible - position it and include in taskGrids
             const row = findAvailableRowOptimized(occupiedRows, position.xStart, position.xEnd);
             const finalPosition = { ...position, y: row };
             
             positionedTasks.push({ ...task, ...finalPosition });
             markOccupiedOptimized(occupiedRows, position.xStart, position.xEnd, row);
         }
+        // Tasks outside viewport are not included in taskGrids
+        // They remain available in volatile.currentTasks
     }
     
     return positionedTasks;
@@ -280,8 +297,8 @@ function isTaskInColumn(taskStart: Date, taskEnd: Date, columnDate: Date, timeUn
         
         return !(normalizedTaskEnd < columnWeekStart || normalizedTaskStart > columnWeekEnd);
     } else if (timeUnit === TimeUnit.MONTH) {
-        const columnMonthStart = new Date(normalizedColumnDate.getFullYear(), normalizedColumnDate.getMonth(), 1);
-        const columnMonthEnd = new Date(normalizedColumnDate.getFullYear(), normalizedColumnDate.getMonth() + 1, 0);
+        const columnMonthStart = new Date(Date.UTC(normalizedColumnDate.getUTCFullYear(), normalizedColumnDate.getUTCMonth(), 1));
+        const columnMonthEnd = new Date(Date.UTC(normalizedColumnDate.getUTCFullYear(), normalizedColumnDate.getUTCMonth() + 1, 0));
         
         return !(normalizedTaskEnd < columnMonthStart || normalizedTaskStart > columnMonthEnd);
     }
@@ -291,9 +308,9 @@ function isTaskInColumn(taskStart: Date, taskEnd: Date, columnDate: Date, timeUn
 
 function getWeekStart(date: Date): Date {
     const d = new Date(date);
-    const day = d.getDay();
-    const diff = d.getDate() - day + (day === 0 ? -6 : 1);
-    return new Date(d.setDate(diff));
+    const day = d.getUTCDay();
+    const diff = d.getUTCDate() - day + (day === 0 ? -6 : 1);
+    return new Date(d.setUTCDate(diff));
 }
 
 function findAvailableRow(occupiedRows: Array<Array<boolean>>, xStart: number, xEnd: number): number {

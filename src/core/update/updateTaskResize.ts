@@ -2,6 +2,7 @@ import { App, TFile } from 'obsidian';
 import { IAppState, IPersistentState, IVolatileState, IResizeOperation } from '../../interfaces/IAppState';
 import { ITask } from '../../interfaces/ITask';
 import { TimeUnit } from '../../enums/TimeUnit';
+import { renameTaskFileForNewStartDate } from '../utils/fileRenameUtils';
 
 export async function updateTaskResize(
     app: App,
@@ -32,6 +33,13 @@ export async function updateTaskResize(
         // Update task frontmatter
         await updateTaskResizeFrontmatter(app, task, newDates);
         
+        // Check if file needs to be renamed due to start date change
+        const oldStartDate = task.start;
+        const newStartDate = newDates.start;
+        
+        if (oldStartDate !== newStartDate) {
+            await renameTaskFileForNewStartDate(app, task, newStartDate);
+        }
         
         // Trigger task reload to reflect changes
         return { persistent, volatile };
@@ -98,7 +106,14 @@ function calculateResizedDates(
 function calculateDateForTimeUnit(date: Date, timeUnit: string, edge: 'start' | 'end'): Date {
     switch (timeUnit) {
         case TimeUnit.DAY:
-            return new Date(date);
+            // For day units, normalize to start/end of day
+            const dayDate = new Date(date);
+            if (edge === 'start') {
+                dayDate.setUTCHours(0, 0, 0, 0);
+            } else {
+                dayDate.setUTCHours(23, 59, 59, 999);
+            }
+            return dayDate;
             
         case TimeUnit.WEEK:
             const weekDate = new Date(date);
@@ -108,20 +123,26 @@ function calculateDateForTimeUnit(date: Date, timeUnit: string, edge: 'start' | 
                 // Start of week (Monday)
                 const daysToMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
                 weekDate.setUTCDate(weekDate.getUTCDate() - daysToMonday);
+                weekDate.setUTCHours(0, 0, 0, 0);
             } else {
                 // End of week (Sunday)
                 const daysToSunday = dayOfWeek === 0 ? 0 : 7 - dayOfWeek;
                 weekDate.setUTCDate(weekDate.getUTCDate() + daysToSunday);
+                weekDate.setUTCHours(23, 59, 59, 999);
             }
             return weekDate;
             
         case TimeUnit.MONTH:
             if (edge === 'start') {
                 // Start of month
-                return new Date(date.getUTCFullYear(), date.getUTCMonth(), 1);
+                const monthStart = new Date(date.getUTCFullYear(), date.getUTCMonth(), 1);
+                monthStart.setUTCHours(0, 0, 0, 0);
+                return monthStart;
             } else {
-                // End of month
-                return new Date(date.getUTCFullYear(), date.getUTCMonth() + 1, 0);
+                // End of month (last day)
+                const monthEnd = new Date(date.getUTCFullYear(), date.getUTCMonth() + 1, 0);
+                monthEnd.setUTCHours(23, 59, 59, 999);
+                return monthEnd;
             }
             
         default:
@@ -214,3 +235,4 @@ function updateOrAddFrontmatterField(lines: string[], field: string, value: stri
     // Add new field if not found
     lines.push(`${field}: ${value}`);
 }
+

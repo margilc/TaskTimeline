@@ -152,14 +152,6 @@ export function BoardTaskCard(
 		}
 	});
 
-	card.addEventListener("click", async (e) => {
-		e.stopPropagation();
-
-		if (task.filePath) {
-			openTaskFile(task.filePath);
-		} else {
-		}
-	});
 
 	return card;
 }
@@ -273,6 +265,7 @@ function addInteractionHandlers(card: HTMLElement, task: ITask, appStateManager:
 	let isResizing = false;
 	let resizeType: 'start' | 'end' | null = null;
 	let startX = 0;
+	let justFinishedResize = false;
 	// Create drag handle element
 	const dragHandle = document.createElement('div');
 	dragHandle.className = 'task-drag-handle';
@@ -303,6 +296,21 @@ function addInteractionHandlers(card: HTMLElement, task: ITask, appStateManager:
 	
 	card.addEventListener('mouseleave', () => {
 		dragHandle.style.display = 'none';
+	});
+	
+	// Click handler to open task file
+	card.addEventListener("click", async (e) => {
+		e.stopPropagation();
+
+		// Don't open file if we just finished a resize operation
+		if (justFinishedResize) {
+			justFinishedResize = false;
+			return;
+		}
+
+		if (task.filePath) {
+			openTaskFile(task.filePath);
+		}
 	});
 	
 	card.addEventListener('mousemove', (e: MouseEvent) => {
@@ -454,6 +462,10 @@ function addInteractionHandlers(card: HTMLElement, task: ITask, appStateManager:
 	function handleResizeUp(e: MouseEvent): void {
 		if (!isResizing || !resizeType) return;
 		
+		// Prevent click event from firing after resize
+		e.preventDefault();
+		e.stopPropagation();
+		
 		const targetColumn = calculateColumnFromX(e.clientX);
 		
 		// Emit resize end event
@@ -469,6 +481,7 @@ function addInteractionHandlers(card: HTMLElement, task: ITask, appStateManager:
 		isResizing = false;
 		resizeType = null;
 		card.style.cursor = 'pointer';
+		justFinishedResize = true;
 		
 		// Remove visual feedback
 		card.classList.remove('resizing');
@@ -476,6 +489,11 @@ function addInteractionHandlers(card: HTMLElement, task: ITask, appStateManager:
 		
 		document.removeEventListener('mousemove', handleResizeMove);
 		document.removeEventListener('mouseup', handleResizeUp);
+		
+		// Reset the flag after a short delay to allow normal clicks again
+		setTimeout(() => {
+			justFinishedResize = false;
+		}, 50);
 	}
 }
 
