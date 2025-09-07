@@ -656,7 +656,7 @@ export class AppStateManager extends Component {
     }
     
     public getCurrentDate(): string {
-        return this.state.persistent.currentDate || new Date().toISOString();
+        return new Date().toISOString();
     }
     
     public getTimelineViewport(): { localMinDate: string, localMaxDate: string } | null {
