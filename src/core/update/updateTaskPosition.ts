@@ -1,8 +1,9 @@
-import { App, TFile } from 'obsidian';
+import { App } from 'obsidian';
 import { IAppState, IPersistentState, IVolatileState, IDragOperation } from '../../interfaces/IAppState';
 import { ITask } from '../../interfaces/ITask';
 import { TimeUnit } from '../../enums/TimeUnit';
 import { renameTaskFileForNewStartDate } from '../utils/fileRenameUtils';
+import { updateTaskFrontmatter } from '../utils/frontmatterUtils';
 
 function findPositionedTask(taskId: string, volatile: IVolatileState): any | null {
     if (!volatile.boardLayout?.taskGrids) {
@@ -54,8 +55,17 @@ export async function updateTaskPosition(
         // Determine new grouping variable value
         const newGroupingValue = dragOperation.targetPosition.group;
         
-        // Update task frontmatter
-        await updateTaskFrontmatter(app, task, newDates, newGroupingValue, persistent);
+        // Update task frontmatter using Obsidian's processFrontMatter API
+        const groupBy = persistent.boardGrouping?.groupBy;
+        const updates: Record<string, string | undefined> = {
+            start: newDates.start,
+            end: newDates.end
+        };
+        // Only update grouping variable if it's a valid grouping field
+        if (groupBy && groupBy !== 'none') {
+            updates[groupBy] = newGroupingValue;
+        }
+        await updateTaskFrontmatter(app, task.filePath, updates);
         
         // Check if file needs to be renamed due to start date change
         const oldStartDate = task.start;
@@ -137,95 +147,3 @@ function formatDateForFrontmatter(date: Date): string {
     const day = String(date.getUTCDate()).padStart(2, '0');
     return `${year}-${month}-${day}`;
 }
-
-async function updateTaskFrontmatter(
-    app: App,
-    task: ITask,
-    newDates: { start: string, end?: string },
-    newGroupingValue: string,
-    persistent: IPersistentState
-): Promise<void> {
-    const file = app.vault.getAbstractFileByPath(task.filePath);
-    if (!file || !(file instanceof TFile)) {
-        throw new Error(`File not found: ${task.filePath}`);
-    }
-    
-    const content = await app.vault.read(file);
-    const lines = content.split('\n');
-    
-    // Find frontmatter boundaries
-    let frontmatterStart = -1;
-    let frontmatterEnd = -1;
-    
-    for (let i = 0; i < lines.length; i++) {
-        if (lines[i].trim() === '---') {
-            if (frontmatterStart === -1) {
-                frontmatterStart = i;
-            } else {
-                frontmatterEnd = i;
-                break;
-            }
-        }
-    }
-    
-    if (frontmatterStart === -1 || frontmatterEnd === -1) {
-        throw new Error('Task file does not have valid YAML frontmatter');
-    }
-    
-    // Parse and update frontmatter
-    const frontmatterLines = lines.slice(frontmatterStart + 1, frontmatterEnd);
-    const updatedFrontmatter = updateFrontmatterLines(frontmatterLines, newDates, newGroupingValue, persistent);
-    
-    // Reconstruct file content
-    const newLines = [
-        ...lines.slice(0, frontmatterStart + 1),
-        ...updatedFrontmatter,
-        ...lines.slice(frontmatterEnd)
-    ];
-    
-    const newContent = newLines.join('\n');
-    await app.vault.modify(file, newContent);
-}
-
-function updateFrontmatterLines(
-    frontmatterLines: string[],
-    newDates: { start: string, end?: string },
-    newGroupingValue: string,
-    persistent: IPersistentState
-): string[] {
-    const updated = [...frontmatterLines];
-    const groupBy = persistent.boardGrouping?.groupBy;
-    
-    // Update start date
-    updateOrAddFrontmatterField(updated, 'start', newDates.start);
-    
-    // Update end date if provided
-    if (newDates.end) {
-        updateOrAddFrontmatterField(updated, 'end', newDates.end);
-    }
-    
-    // Update grouping variable if different from current
-    if (groupBy && groupBy !== 'none') {
-        updateOrAddFrontmatterField(updated, groupBy, newGroupingValue);
-    }
-    
-    return updated;
-}
-
-function updateOrAddFrontmatterField(lines: string[], field: string, value: string): void {
-    // Find existing field
-    for (let i = 0; i < lines.length; i++) {
-        const line = lines[i];
-        const fieldPattern = new RegExp(`^${field}:\\s*`);
-        
-        if (fieldPattern.test(line)) {
-            // Update existing field
-            lines[i] = `${field}: ${value}`;
-            return;
-        }
-    }
-    
-    // Add new field if not found
-    lines.push(`${field}: ${value}`);
-}
-

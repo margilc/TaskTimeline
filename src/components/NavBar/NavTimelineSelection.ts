@@ -11,21 +11,26 @@ export class NavTimelineSelection {
     private navMinimap: NavMinimap | null = null;
     private navTimeSlider: NavTimeSlider | null = null;
 
+    // Bound handlers for proper event listener cleanup
+    private readonly boundHandleTasksUpdated = this.handleTasksUpdated.bind(this);
+    private readonly boundHandleTimeUnitUpdated = this.handleTimeUnitUpdated.bind(this);
+    private readonly boundRender = this.render.bind(this);
+
     constructor(container: HTMLElement, appStateManager: AppStateManager) {
         this.container = container;
         this.appStateManager = appStateManager;
         this.container.className = "nav-timeline-selection";
-        
+
         this.setupEventListeners();
         this.render();
     }
 
     private setupEventListeners(): void {
-        this.appStateManager.getEvents().on(PluginEvent.UpdateTasksDone, this.handleTasksUpdated.bind(this));
-        this.appStateManager.getEvents().on(PluginEvent.UpdateTimeUnitDone, this.handleTimeUnitUpdated.bind(this));
-        this.appStateManager.getEvents().on(PluginEvent.UpdateCurrentDateDone, this.render.bind(this));
-        this.appStateManager.getEvents().on(PluginEvent.UpdateTimelineViewportDone, this.render.bind(this));
-        this.appStateManager.getEvents().on(PluginEvent.UpdateMinimapDataDone, this.render.bind(this));
+        this.appStateManager.getEvents().on(PluginEvent.UpdateTasksDone, this.boundHandleTasksUpdated);
+        this.appStateManager.getEvents().on(PluginEvent.UpdateTimeUnitDone, this.boundHandleTimeUnitUpdated);
+        this.appStateManager.getEvents().on(PluginEvent.UpdateCurrentDateDone, this.boundRender);
+        this.appStateManager.getEvents().on(PluginEvent.UpdateTimelineViewportDone, this.boundRender);
+        this.appStateManager.getEvents().on(PluginEvent.UpdateMinimapDataDone, this.boundRender);
     }
 
     private async handleTasksUpdated(): Promise<void> {
@@ -93,11 +98,11 @@ export class NavTimelineSelection {
     }
 
     public destroy(): void {
-        this.appStateManager.getEvents().off(PluginEvent.UpdateTasksDone, this.handleTasksUpdated.bind(this));
-        this.appStateManager.getEvents().off(PluginEvent.UpdateTimeUnitDone, this.handleTimeUnitUpdated.bind(this));
-        this.appStateManager.getEvents().off(PluginEvent.UpdateCurrentDateDone, this.render.bind(this));
-        this.appStateManager.getEvents().off(PluginEvent.UpdateTimelineViewportDone, this.render.bind(this));
-        this.appStateManager.getEvents().off(PluginEvent.UpdateMinimapDataDone, this.render.bind(this));
+        this.appStateManager.getEvents().off(PluginEvent.UpdateTasksDone, this.boundHandleTasksUpdated);
+        this.appStateManager.getEvents().off(PluginEvent.UpdateTimeUnitDone, this.boundHandleTimeUnitUpdated);
+        this.appStateManager.getEvents().off(PluginEvent.UpdateCurrentDateDone, this.boundRender);
+        this.appStateManager.getEvents().off(PluginEvent.UpdateTimelineViewportDone, this.boundRender);
+        this.appStateManager.getEvents().off(PluginEvent.UpdateMinimapDataDone, this.boundRender);
 
         if (this.navMinimap) {
             this.navMinimap.destroy();

@@ -27,6 +27,8 @@ export interface IVolatileState {
     // Navigation data
     availableProjects?: string[];
     currentTasks?: any[];
+    // Version counter for O(1) cache key generation
+    tasksVersion?: number;
     boardLayout?: {
         columnHeaders: Array<{date: Date, label: string, index: number}>;
         taskGrids: Array<{group: string, tasks: any[]}>;

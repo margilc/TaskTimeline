@@ -63,7 +63,8 @@ export function updateLayout(app: App, currentState: IAppState): IAppState {
         }
     }
     
-    const cacheKey = generateCacheKey(tasks, timeUnit, currentDateStr, currentState.volatile.timelineViewport, currentState.persistent.boardGrouping, numberOfColumns);
+    const tasksVersion = currentState.volatile.tasksVersion || 0;
+    const cacheKey = generateCacheKey(tasksVersion, timeUnit, currentDateStr, currentState.volatile.timelineViewport, currentState.persistent.boardGrouping, numberOfColumns);
     
     if (layoutCache.has(cacheKey)) {
         const cached = layoutCache.get(cacheKey);
@@ -108,11 +109,11 @@ export function updateLayout(app: App, currentState: IAppState): IAppState {
     };
 }
 
-function generateCacheKey(tasks: ITask[], timeUnit: TimeUnit, currentDateStr: string | undefined, viewport: any, grouping: any, numberOfColumns: number): string {
-    const taskKey = tasks.map(t => `${t.filePath}:${t.start}:${t.end}`).join(',');
+// O(1) cache key generation using version counter instead of O(n) task iteration
+function generateCacheKey(tasksVersion: number, timeUnit: TimeUnit, currentDateStr: string | undefined, viewport: any, grouping: any, numberOfColumns: number): string {
     const viewportKey = viewport ? `${viewport.localMinDate}:${viewport.localMaxDate}` : 'default';
     const groupingKey = grouping ? `${grouping.groupBy}:${grouping.availableGroups?.join(',')}` : 'none';
-    return `${taskKey}:${timeUnit}:${currentDateStr}:${viewportKey}:${groupingKey}:${numberOfColumns}`;
+    return `v${tasksVersion}:${timeUnit}:${currentDateStr}:${viewportKey}:${groupingKey}:${numberOfColumns}`;
 }
 
 function generateColumnHeaders(startDate: Date, endDate: Date, timeUnit: TimeUnit, targetColumns?: number): Array<{date: Date, label: string, index: number, isEmphasized: boolean}> {

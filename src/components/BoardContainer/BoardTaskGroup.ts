@@ -19,7 +19,8 @@ export function BoardTaskGroup(
 	settings: ITaskTimelineSettings,
 	appStateManager: AppStateManager,
 	app: App,
-	isDebugMode = false
+	isDebugMode = false,
+	sharedTooltip: HTMLElement
 ): HTMLElement {
 	const container = document.createElement("div");
 	container.className = isDebugMode
@@ -101,7 +102,7 @@ export function BoardTaskGroup(
 	const occupiedCells = new Set<string>();
 
 	tasks.forEach((task) => {
-		const card = BoardTaskCard(task, settings, appStateManager, isDebugMode);
+		const card = BoardTaskCard(task, settings, appStateManager, isDebugMode, sharedTooltip);
 
 		const startX = (task.xStart ?? 1);
 		const endX = (task.xEnd ?? startX);

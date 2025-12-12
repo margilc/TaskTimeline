@@ -9,6 +9,8 @@ import { AppStateManager } from '../../core/AppStateManager';
 export class DebugEventListener {
     private appStateManager: AppStateManager;
     private eventCount: number = 0;
+    // Store handler references for proper cleanup
+    private eventHandlers: Map<string, (...args: any[]) => void> = new Map();
 
     constructor(appStateManager: AppStateManager) {
         this.appStateManager = appStateManager;
@@ -19,9 +21,11 @@ export class DebugEventListener {
         // Listen to all events from the PluginEvent enum on AppStateManager
         const events = this.appStateManager.getEvents();
         Object.values(PluginEvent).forEach(eventName => {
-            events.on(eventName, (...args: any[]) => {
+            const handler = (...args: any[]) => {
                 this.logEvent(eventName, args);
-            });
+            };
+            this.eventHandlers.set(eventName, handler);
+            events.on(eventName, handler);
         });
     }
 
@@ -44,11 +48,11 @@ export class DebugEventListener {
     }
 
     public destroy(): void {
-        // Clean up all event listeners  
+        // Clean up all event listeners using stored handler references
         const events = this.appStateManager.getEvents();
-        Object.values(PluginEvent).forEach(eventName => {
-            events.off(eventName, this.logEvent.bind(this));
+        this.eventHandlers.forEach((handler, eventName) => {
+            events.off(eventName, handler);
         });
-        
+        this.eventHandlers.clear();
     }
 } 

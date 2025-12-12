@@ -9,6 +9,9 @@ export class NavColorMapSelection {
     private variableDropdown: DropdownComponent;
     private colorPickersContainer: HTMLElement;
 
+    // Bound handlers for proper event listener cleanup
+    private readonly boundRender = this.render.bind(this);
+
     constructor(container: HTMLElement, appStateManager: AppStateManager) {
         this.container = container;
         this.appStateManager = appStateManager;
@@ -17,8 +20,8 @@ export class NavColorMapSelection {
     }
 
     private setupEventListeners(): void {
-        this.appStateManager.getEvents().on(PluginEvent.UpdateTasksDone, this.render.bind(this));
-        this.appStateManager.getEvents().on(PluginEvent.UpdateColorMappingsDone, this.render.bind(this));
+        this.appStateManager.getEvents().on(PluginEvent.UpdateTasksDone, this.boundRender);
+        this.appStateManager.getEvents().on(PluginEvent.UpdateColorMappingsDone, this.boundRender);
     }
 
     private render(): void {
@@ -166,7 +169,7 @@ export class NavColorMapSelection {
     }
 
     public destroy(): void {
-        this.appStateManager.getEvents().off(PluginEvent.UpdateTasksDone, this.render.bind(this));
-        this.appStateManager.getEvents().off(PluginEvent.UpdateColorMappingsDone, this.render.bind(this));
+        this.appStateManager.getEvents().off(PluginEvent.UpdateTasksDone, this.boundRender);
+        this.appStateManager.getEvents().off(PluginEvent.UpdateColorMappingsDone, this.boundRender);
     }
 }

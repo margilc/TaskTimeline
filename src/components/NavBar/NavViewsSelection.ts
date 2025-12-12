@@ -21,6 +21,9 @@ export class NavViewsSelection {
     private currentView: string;
     private buttons: Map<string, HTMLButtonElement>;
 
+    // Bound handlers for proper event listener cleanup
+    private readonly boundRender = this.render.bind(this);
+
     constructor(container: HTMLElement, appStateManager: AppStateManager) {
         this.container = container;
         this.appStateManager = appStateManager;
@@ -32,13 +35,13 @@ export class NavViewsSelection {
             { value: "MonthView", label: "Month" },
         ];
         this.buttons = new Map();
-        
+
         this.setupEventListeners();
         this.render();
     }
 
     private setupEventListeners(): void {
-        this.appStateManager.getEvents().on(PluginEvent.UpdateTimeUnitDone, this.render.bind(this));
+        this.appStateManager.getEvents().on(PluginEvent.UpdateTimeUnitDone, this.boundRender);
     }
 
     private render(): void {
@@ -81,6 +84,6 @@ export class NavViewsSelection {
     }
 
     public destroy(): void {
-        this.appStateManager.getEvents().off(PluginEvent.UpdateTimeUnitDone, this.render.bind(this));
+        this.appStateManager.getEvents().off(PluginEvent.UpdateTimeUnitDone, this.boundRender);
     }
 }

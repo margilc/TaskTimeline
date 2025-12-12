@@ -5,18 +5,21 @@ export class NavMinimap {
     private container: HTMLElement;
     private appStateManager: AppStateManager;
 
+    // Bound handlers for proper event listener cleanup
+    private readonly boundRender = this.render.bind(this);
+
     constructor(container: HTMLElement, appStateManager: AppStateManager) {
         this.container = container;
         this.appStateManager = appStateManager;
         this.container.className = "nav-minimap";
-        
+
         this.setupEventListeners();
         this.render();
     }
 
     private setupEventListeners(): void {
-        this.appStateManager.getEvents().on(PluginEvent.UpdateMinimapDataDone, this.render.bind(this));
-        this.appStateManager.getEvents().on(PluginEvent.UpdateSnappedDateBoundariesDone, this.render.bind(this));
+        this.appStateManager.getEvents().on(PluginEvent.UpdateMinimapDataDone, this.boundRender);
+        this.appStateManager.getEvents().on(PluginEvent.UpdateSnappedDateBoundariesDone, this.boundRender);
     }
 
     private render(): void {
@@ -96,7 +99,7 @@ export class NavMinimap {
     }
 
     public destroy(): void {
-        this.appStateManager.getEvents().off(PluginEvent.UpdateMinimapDataDone, this.render.bind(this));
-        this.appStateManager.getEvents().off(PluginEvent.UpdateSnappedDateBoundariesDone, this.render.bind(this));
+        this.appStateManager.getEvents().off(PluginEvent.UpdateMinimapDataDone, this.boundRender);
+        this.appStateManager.getEvents().off(PluginEvent.UpdateSnappedDateBoundariesDone, this.boundRender);
     }
 } 

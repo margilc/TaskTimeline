@@ -11,20 +11,23 @@ export class NavTimeSlider {
     private dragState: { isDragging: boolean; startX: number; startLeftPercent: number; trackWidth: number } | null = null;
     private animationFrameId: number | null = null;
 
+    // Bound handlers for proper event listener cleanup
+    private readonly boundRender = this.render.bind(this);
+
     constructor(container: HTMLElement, appStateManager: AppStateManager) {
         this.container = container;
         this.appStateManager = appStateManager;
         this.container.className = "nav-time-slider";
-        
+
         this.setupEventListeners();
         this.render();
     }
 
     private setupEventListeners(): void {
-        this.appStateManager.getEvents().on(PluginEvent.UpdateTimelineViewportDone, this.render.bind(this));
-        this.appStateManager.getEvents().on(PluginEvent.UpdateCurrentDateDone, this.render.bind(this));
-        this.appStateManager.getEvents().on(PluginEvent.UpdateTimeUnitDone, this.render.bind(this));
-        this.appStateManager.getEvents().on(PluginEvent.UpdateSnappedDateBoundariesDone, this.render.bind(this));
+        this.appStateManager.getEvents().on(PluginEvent.UpdateTimelineViewportDone, this.boundRender);
+        this.appStateManager.getEvents().on(PluginEvent.UpdateCurrentDateDone, this.boundRender);
+        this.appStateManager.getEvents().on(PluginEvent.UpdateTimeUnitDone, this.boundRender);
+        this.appStateManager.getEvents().on(PluginEvent.UpdateSnappedDateBoundariesDone, this.boundRender);
     }
 
     private render(): void {
@@ -366,14 +369,14 @@ export class NavTimeSlider {
     }
 
     public destroy(): void {
-        this.appStateManager.getEvents().off(PluginEvent.UpdateTimelineViewportDone, this.render.bind(this));
-        this.appStateManager.getEvents().off(PluginEvent.UpdateCurrentDateDone, this.render.bind(this));
-        this.appStateManager.getEvents().off(PluginEvent.UpdateTimeUnitDone, this.render.bind(this));
-        this.appStateManager.getEvents().off(PluginEvent.UpdateSnappedDateBoundariesDone, this.render.bind(this));
+        this.appStateManager.getEvents().off(PluginEvent.UpdateTimelineViewportDone, this.boundRender);
+        this.appStateManager.getEvents().off(PluginEvent.UpdateCurrentDateDone, this.boundRender);
+        this.appStateManager.getEvents().off(PluginEvent.UpdateTimeUnitDone, this.boundRender);
+        this.appStateManager.getEvents().off(PluginEvent.UpdateSnappedDateBoundariesDone, this.boundRender);
 
         document.removeEventListener('mousemove', this.handleMouseMove);
         document.removeEventListener('mouseup', this.handleMouseUp);
-        
+
         if (this.animationFrameId !== null) {
             cancelAnimationFrame(this.animationFrameId);
             this.animationFrameId = null;
