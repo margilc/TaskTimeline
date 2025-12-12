@@ -77,12 +77,13 @@ function getStableOrder(
     const projectOrderings = groupingOrderings[projectId] || {};
     const existingOrder = projectOrderings[groupBy] || [];
     
-    if ((groupBy === 'status' || groupBy === 'priority') && existingOrder.length === 0) {
+    // If there is no stored order yet, use the default ordering for this groupBy.
+    // Once the user has a stored order (via drag-reorder), that order is authoritative.
+    if (existingOrder.length === 0) {
         return discoveredGroups.sort((a, b) => {
-            if (groupBy === 'priority') {
-                return sortPriorityGroups(a, b);
-            }
-            return sortStatusGroups(a, b);
+            if (groupBy === 'priority') return sortPriorityGroups(a, b);
+            if (groupBy === 'status') return sortStatusGroups(a, b);
+            return a.localeCompare(b);
         });
     }
     
@@ -99,32 +100,14 @@ function getStableOrder(
     const newGroups = discoveredGroups.filter(group => !existingOrder.includes(group));
     
     if (newGroups.length > 0) {
-        // Sort new groups appropriately and append
+        // Sort only the newly discovered groups, then append to the end.
+        // Important: do NOT re-sort the whole list, or it will override user drag order.
         const sortedNewGroups = newGroups.sort((a, b) => {
-            if (groupBy === 'priority') {
-                return sortPriorityGroups(a, b);
-            }
-            if (groupBy === 'status') {
-                return sortStatusGroups(a, b);
-            }
+            if (groupBy === 'priority') return sortPriorityGroups(a, b);
+            if (groupBy === 'status') return sortStatusGroups(a, b);
             return a.localeCompare(b);
         });
-        
-        if (groupBy === 'status' || groupBy === 'priority') {
-            // For status and priority, we need to maintain the predefined order
-            // So re-sort the entire list
-            const allGroups = [...orderedGroups, ...sortedNewGroups];
-            const finalOrder = allGroups.sort((a, b) => {
-                if (groupBy === 'priority') {
-                    return sortPriorityGroups(a, b);
-                }
-                return sortStatusGroups(a, b);
-            });
-            return finalOrder;
-        } else {
-            // For categories, just append new ones alphabetically
-            orderedGroups.push(...sortedNewGroups);
-        }
+        orderedGroups.push(...sortedNewGroups);
     }
     
     return orderedGroups;

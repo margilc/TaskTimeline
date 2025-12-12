@@ -29,6 +29,14 @@ export function getStableGroupOrder(
     
     const existingOrder = newPersistent.groupingOrderings[projectId][groupBy];
     const orderedGroups: string[] = [];
+
+    // If there is no stored order yet, initialize from the default ordering for this groupBy.
+    // Once the user has a stored order (via drag-reorder), that order is authoritative.
+    if (!existingOrder || existingOrder.length === 0) {
+        const defaultOrder = sortGroupsByType([...discoveredGroups], groupBy);
+        newPersistent.groupingOrderings[projectId][groupBy] = [...defaultOrder];
+        return { persistent: newPersistent, orderedGroups: defaultOrder };
+    }
     
     // First, add all existing groups in their current order
     for (const group of existingOrder) {
@@ -43,17 +51,10 @@ export function getStableGroupOrder(
     if (newGroups.length > 0) {
         // Sort new groups using the same logic as before
         const sortedNewGroups = sortGroupsByType(newGroups, groupBy);
-        
-        // Insert new groups in appropriate positions based on type
-        if (groupBy === 'status' || groupBy === 'priority') {
-            // For status and priority, maintain the predefined order
-            const fullSortedList = sortGroupsByType([...orderedGroups, ...sortedNewGroups], groupBy);
-            orderedGroups.length = 0;
-            orderedGroups.push(...fullSortedList);
-        } else {
-            // For categories and others, append alphabetically
-            orderedGroups.push(...sortedNewGroups);
-        }
+
+        // Append only newly discovered groups; do NOT re-sort the whole list,
+        // or it will override user drag order.
+        orderedGroups.push(...sortedNewGroups);
         
         // Update persistent state with new order
         newPersistent.groupingOrderings[projectId][groupBy] = [...orderedGroups];

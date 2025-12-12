@@ -254,6 +254,16 @@ export class BoardContainer {
             }
         });
 
+        // Ensure DOM order matches the taskGrids order.
+        // Replacing existing group nodes keeps their previous position, so we explicitly reorder here.
+        for (const taskGrid of boardLayout.taskGrids) {
+            const groupName = taskGrid.group;
+            const groupEl = this.groupElements.get(groupName);
+            if (groupEl) {
+                this.groupsContainer.appendChild(groupEl);
+            }
+        }
+
         // Remove stale groups that no longer exist
         for (const [groupName, element] of this.groupElements.entries()) {
             if (!currentGroupNames.has(groupName)) {

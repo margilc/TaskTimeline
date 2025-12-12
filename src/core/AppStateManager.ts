@@ -530,6 +530,9 @@ export class AppStateManager extends Component {
             
             this.state.persistent = result.persistent;
             this.state.volatile = result.volatile;
+
+            // Persist group order changes immediately so they survive reloads.
+            await this.saveData(this.state.persistent);
             
             this.events.trigger(PluginEvent.GroupReorderDone);
             this.events.trigger(PluginEvent.AppStateUpdated, this.state);
