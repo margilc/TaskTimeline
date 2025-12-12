@@ -706,15 +706,18 @@ select:focus,
   color: var(--tt-text);
 }
 
-/* Dark mode: More subtle borders for cells and headers */
+/* Dark mode: More subtle borders for cells and headers with consistent margin */
 body.theme-dark .board-cell,
-body.theme-dark .group-header {
+body.theme-dark .group-header,
+body.theme-dark .board-grouping-selection {
   background-color: var(--background-secondary);
   border: 1px solid rgba(255, 255, 255, 0.12);
+  margin: 3px;
 }
 
 body.theme-dark .timeline-header-cell {
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  margin: 3px;
 }
 
 .board-cell {
@@ -778,16 +781,17 @@ body.theme-dark .timeline-header-cell {
   border-color: var(--tt-border-hover);
 }
 
-/* Dark mode: Enhanced card visibility with subtle glow */
+/* Dark mode: Enhanced card visibility with actual margin for spacing */
 body.theme-dark .task-timeline-task {
   background-color: var(--background-secondary);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  margin: 3px;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
 }
 
 body.theme-dark .task-timeline-task:hover {
-  border-color: rgba(255, 255, 255, 0.2);
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.3);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
 }
 
 .task-timeline-card-name {
@@ -834,6 +838,17 @@ body.theme-dark .task-timeline-task:hover {
 .task-timeline-subtask-box.completed {
   background-color: var(--color-grey-600);
   border-color: var(--color-grey-600);
+}
+
+/* Dark mode: Make subtask checkboxes visible */
+body.theme-dark .task-timeline-subtask-box {
+  border: none;
+  background-color: rgba(255, 255, 255, 0.2);
+}
+
+body.theme-dark .task-timeline-subtask-box.completed {
+  background-color: rgba(60, 60, 60, 1);
+  border: none;
 }
 
 /* Task Colors (Removed - now applied via inline styles based on settings) */
