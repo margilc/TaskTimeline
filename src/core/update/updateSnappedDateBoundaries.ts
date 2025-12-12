@@ -1,5 +1,6 @@
 import { App } from 'obsidian';
 import { IAppState } from '../../interfaces/IAppState';
+import { TimeUnit } from '../../enums/TimeUnit';
 
 export function updateSnappedDateBoundaries(
     app: App,
@@ -7,21 +8,21 @@ export function updateSnappedDateBoundaries(
 ): IAppState {
     const globalMinDate = new Date(currentState.persistent.settings?.globalMinDate || new Date().toISOString());
     const globalMaxDate = new Date(currentState.persistent.settings?.globalMaxDate || new Date().toISOString());
-    const timeUnit = currentState.persistent.currentTimeUnit || 'DAY';
+    const timeUnit = (currentState.persistent.currentTimeUnit as TimeUnit) || TimeUnit.DAY;
 
     let globalMinDateSnapped: Date;
     let globalMaxDateSnapped: Date;
 
     switch (timeUnit) {
-        case 'DAY':
+        case TimeUnit.DAY:
             globalMinDateSnapped = new Date(globalMinDate);
             globalMinDateSnapped.setUTCHours(0, 0, 0, 0);
-            
+
             globalMaxDateSnapped = new Date(globalMaxDate);
             globalMaxDateSnapped.setUTCHours(23, 59, 59, 999);
             break;
 
-        case 'WEEK':
+        case TimeUnit.WEEK:
             globalMinDateSnapped = new Date(globalMinDate);
             const dayOfWeek = globalMinDateSnapped.getUTCDay();
             const daysToMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
@@ -35,7 +36,7 @@ export function updateSnappedDateBoundaries(
             globalMaxDateSnapped.setUTCHours(23, 59, 59, 999);
             break;
 
-        case 'MONTH':
+        case TimeUnit.MONTH:
         default:
             globalMinDateSnapped = new Date(globalMinDate);
             globalMinDateSnapped.setUTCDate(1);

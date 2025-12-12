@@ -30,7 +30,6 @@ export function BoardTaskCard(
 		} else {
 			card.style.backgroundColor = taskColor;
 			card.style.borderLeft = `4px solid var(--color-white)`;
-			card.style.padding = "var(--spacing-md) var(--spacing-md) var(--spacing-md) var(--spacing-md)";
 		}
 	}
 

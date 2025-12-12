@@ -1,7 +1,6 @@
 import { AppStateManager } from '../../core/AppStateManager';
 import { PluginEvent } from '../../enums/events';
-import { TimeUnit } from "../../enums/TimeUnit";
-import { generateTimeMarkersWithMetadata, snapViewportToTimeUnit } from '../../core/utils/timelineUtils';
+import { snapViewportToTimeUnit } from '../../core/utils/timelineUtils';
 
 export class NavTimeSlider {
     private container: HTMLElement;
@@ -65,36 +64,10 @@ export class NavTimeSlider {
         this.track = document.createElement("div");
         this.track.className = "slider-track";
 
-        this.createTickMarks(globalMinDate, globalMaxDate, globalDurationMs);
         this.createCurrentDateIndicator(currentDate, globalMinDate, globalDurationMs);
         this.createViewportSelector(viewportMinDate, viewportMaxDate, globalMinDate, globalDurationMs);
 
         this.container.appendChild(this.track);
-    }
-
-    private createTickMarks(globalMinDate: Date, globalMaxDate: Date, globalDurationMs: number): void {
-        if (!this.track) return;
-
-        const timeUnit = this.appStateManager.getCurrentTimeUnit();
-        const markers = generateTimeMarkersWithMetadata(globalMinDate.toISOString(), globalMaxDate.toISOString(), timeUnit);
-
-        const tickContainer = document.createElement("div");
-        tickContainer.className = "slider-tick-marks-container";
-
-        markers.forEach(marker => {
-            const date = new Date(marker.date);
-            const timeSinceStartMs = date.getTime() - globalMinDate.getTime();
-            const positionPercent = (timeSinceStartMs / globalDurationMs) * 100;
-
-            if (positionPercent >= 0 && positionPercent <= 100) {
-                const tick = document.createElement("div");
-                tick.className = marker.type === 'emphasized' ? "slider-tick-mark emphasized" : "slider-tick-mark";
-                tick.style.left = `${positionPercent}%`;
-                tickContainer.appendChild(tick);
-            }
-        });
-
-        this.track.appendChild(tickContainer);
     }
 
     private createCurrentDateIndicator(currentDate: Date, globalMinDate: Date, globalDurationMs: number): void {

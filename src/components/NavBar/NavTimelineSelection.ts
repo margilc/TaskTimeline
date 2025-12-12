@@ -3,7 +3,7 @@ import { PluginEvent } from '../../enums/events';
 import { TimeUnit } from "../../enums/TimeUnit";
 import { NavMinimap } from "./NavMinimap";
 import { NavTimeSlider } from "./NavTimeSlider";
-import { calculateDefaultViewport } from '../../core/utils/timelineUtils';
+import { calculateDefaultViewport, generateTimeMarkersWithMetadata } from '../../core/utils/timelineUtils';
 
 export class NavTimelineSelection {
     private container: HTMLElement;
@@ -54,7 +54,7 @@ export class NavTimelineSelection {
 
         const state = this.appStateManager.getState();
         const settings = state.persistent.settings;
-        
+
         // Validate timeline data
         if (!settings?.globalMinDate || !settings?.globalMaxDate) {
             this.container.textContent = "Timeline data unavailable.";
@@ -63,7 +63,7 @@ export class NavTimelineSelection {
 
         const globalMinDate = new Date(settings.globalMinDate);
         const globalMaxDate = new Date(settings.globalMaxDate);
-        
+
         if (globalMinDate >= globalMaxDate) {
             this.container.textContent = "Invalid timeline date range.";
             return;
@@ -79,22 +79,115 @@ export class NavTimelineSelection {
             return; // Will re-render when viewport is set
         }
 
-        // Create title
+        // 1. Title
         const titleElement = document.createElement("h3");
         titleElement.textContent = "Timeline";
         this.container.appendChild(titleElement);
 
-        // Create minimap container
+        // 2. Track container (minimap as base, slider overlayed on top)
+        const trackContainer = document.createElement("div");
+        trackContainer.className = "nav-timeline-track-container";
+
+        // 3. Minimap FIRST (base layer)
         const minimapContainer = document.createElement("div");
         minimapContainer.className = "nav-minimap-container";
         this.navMinimap = new NavMinimap(minimapContainer, this.appStateManager);
-        this.container.appendChild(minimapContainer);
+        trackContainer.appendChild(minimapContainer);
 
-        // Create time slider container
+        // 4. Slider SECOND (overlayed on top of minimap)
         const sliderContainer = document.createElement("div");
         sliderContainer.className = "nav-timeslider-container";
         this.navTimeSlider = new NavTimeSlider(sliderContainer, this.appStateManager);
-        this.container.appendChild(sliderContainer);
+        trackContainer.appendChild(sliderContainer);
+
+        this.container.appendChild(trackContainer);
+
+        // 5. Axis (tick marks + labels) LAST
+        const axisContainer = document.createElement("div");
+        axisContainer.className = "nav-timeline-axis";
+        this.createAxis(axisContainer);
+        this.container.appendChild(axisContainer);
+    }
+
+    private createAxis(container: HTMLElement): void {
+        const state = this.appStateManager.getState();
+
+        if (!state.volatile.globalMinDateSnapped || !state.volatile.globalMaxDateSnapped) {
+            return;
+        }
+
+        const globalMinDate = new Date(state.volatile.globalMinDateSnapped);
+        const globalMaxDate = new Date(state.volatile.globalMaxDateSnapped);
+        const globalDurationMs = globalMaxDate.getTime() - globalMinDate.getTime();
+
+        if (globalDurationMs <= 0) return;
+
+        // --- Tick marks ---
+        const tickContainer = document.createElement("div");
+        tickContainer.className = "axis-tick-marks-container";
+
+        const timeUnit = this.appStateManager.getCurrentTimeUnit();
+        const markers = generateTimeMarkersWithMetadata(
+            globalMinDate.toISOString(),
+            globalMaxDate.toISOString(),
+            timeUnit
+        );
+
+        markers.forEach(marker => {
+            const date = new Date(marker.date);
+            const positionPercent = ((date.getTime() - globalMinDate.getTime()) / globalDurationMs) * 100;
+
+            if (positionPercent >= 0 && positionPercent <= 100) {
+                const tick = document.createElement("div");
+                tick.className = marker.type === 'emphasized'
+                    ? "axis-tick-mark emphasized"
+                    : "axis-tick-mark";
+                tick.style.left = `${positionPercent}%`;
+                tickContainer.appendChild(tick);
+            }
+        });
+
+        container.appendChild(tickContainer);
+
+        // --- Labels at fixed percentages ---
+        const labelsContainer = document.createElement("div");
+        labelsContainer.className = "axis-labels-container";
+
+        const labelConfigs = [
+            { percent: 0, align: 'left' },
+            { percent: 25, align: 'center' },
+            { percent: 50, align: 'center' },
+            { percent: 75, align: 'center' },
+            { percent: 100, align: 'right' }
+        ];
+
+        labelConfigs.forEach(({ percent, align }) => {
+            const dateMs = globalMinDate.getTime() + (percent / 100) * globalDurationMs;
+            const date = new Date(dateMs);
+
+            const label = document.createElement("div");
+            label.className = `axis-label axis-label-${align}`;
+            label.textContent = this.formatDateLabel(date);
+
+            if (align === 'left') {
+                label.style.left = '0';
+            } else if (align === 'right') {
+                label.style.right = '0';
+            } else {
+                label.style.left = `${percent}%`;
+            }
+
+            labelsContainer.appendChild(label);
+        });
+
+        container.appendChild(labelsContainer);
+    }
+
+    private formatDateLabel(date: Date): string {
+        const day = date.getUTCDate().toString().padStart(2, '0');
+        const month = (date.getUTCMonth() + 1).toString().padStart(2, '0');
+        const year = date.getUTCFullYear();
+        return `${day}/${month}/${year}`;
     }
 
     public destroy(): void {
