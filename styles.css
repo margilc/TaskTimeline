@@ -571,7 +571,6 @@ select:focus,
   top: 0;
   z-index: 10;
   background-color: var(--color-white);
-  box-shadow: 0 2px 4px rgba(0,0,0,0.08);
 }
 
 .board-column-headers {
@@ -594,7 +593,6 @@ select:focus,
   position: relative;
   z-index: 20; /* Highest - must be above header row AND first column */
   background-color: var(--color-grey-200);
-  box-shadow: 2px 2px 4px rgba(0,0,0,0.1);
 }
 
 /* Shared cell styles */
@@ -625,7 +623,6 @@ select:focus,
   position: relative;
   z-index: 5;
   font-weight: bold;
-  box-shadow: 2px 0 4px rgba(0,0,0,0.08);
 }
 
 /* Empty Cell */
