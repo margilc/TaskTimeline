@@ -216,7 +216,7 @@ export function createEmptyStateElement(message: string, className: string = 'em
     element.style.alignItems = 'center';
     element.style.justifyContent = 'center';
     element.style.padding = '2rem';
-    element.style.color = '#666';
+    element.style.color = 'var(--text-muted)';
     element.style.fontStyle = 'italic';
     
     return element;

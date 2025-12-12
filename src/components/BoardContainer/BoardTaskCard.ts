@@ -29,7 +29,12 @@ export function BoardTaskCard(
 			card.style.display = "none";
 		} else {
 			card.style.backgroundColor = taskColor;
-			card.style.borderLeft = `4px solid var(--color-white)`;
+			card.style.borderLeft = `4px solid var(--tt-border)`;
+			// Improve readability on custom colors by choosing a contrasting text color.
+			const contrastText = getContrastingTextColor(taskColor);
+			if (contrastText) {
+				card.style.color = contrastText;
+			}
 		}
 	}
 
@@ -86,6 +91,29 @@ export function BoardTaskCard(
 	});
 
 	return card;
+}
+
+function getContrastingTextColor(color: string): string | null {
+	// Only handle hex colors; if user provides something else, fall back to CSS.
+	const hex = color.trim();
+	const match = hex.match(/^#([0-9a-fA-F]{6})$/);
+	if (!match) return null;
+
+	const r = parseInt(match[1].slice(0, 2), 16);
+	const g = parseInt(match[1].slice(2, 4), 16);
+	const b = parseInt(match[1].slice(4, 6), 16);
+
+	// Relative luminance (sRGB)
+	const srgbToLin = (c: number) => {
+		const s = c / 255;
+		return s <= 0.04045 ? s / 12.92 : Math.pow((s + 0.055) / 1.055, 2.4);
+	};
+	const L = 0.2126 * srgbToLin(r) + 0.7152 * srgbToLin(g) + 0.0722 * srgbToLin(b);
+
+	// Use white text on dark colors, near-black text on light colors.
+	// Do NOT use theme text tokens here because the background is user-selected and may
+	// not match the theme's base background (e.g. white card on dark theme).
+	return L < 0.45 ? '#ffffff' : '#111111';
 }
 
 // Safe tooltip content builder - uses textContent instead of innerHTML (XSS prevention)

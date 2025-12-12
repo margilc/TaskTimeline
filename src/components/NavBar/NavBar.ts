@@ -54,13 +54,7 @@ export class NavBar {
 		// Debug dump button
 		const debugButton = document.createElement("button");
 		debugButton.textContent = "🐛 Dump State";
-		debugButton.style.backgroundColor = "#e74c3c";
-		debugButton.style.color = "white";
-		debugButton.style.border = "none";
-		debugButton.style.padding = "4px 8px";
-		debugButton.style.cursor = "pointer";
-		debugButton.style.fontSize = "12px";
-		debugButton.style.borderRadius = "3px";
+		debugButton.className = "tt-debug-dump-btn";
 		debugButton.addEventListener("click", () => this.dumpAppState());
 		
 		this.navSettings = new NavSettings(this.app, this.appStateManager);
@@ -175,11 +169,10 @@ export class NavBar {
 			// Show temporary notification
 			const notification = document.createElement("div");
 			notification.textContent = "✅ Debug dump (tasks + layout) copied to clipboard!";
+			notification.className = "tt-toast tt-toast--success";
 			notification.style.position = "fixed";
 			notification.style.top = "20px";
 			notification.style.right = "20px";
-			notification.style.backgroundColor = "#27ae60";
-			notification.style.color = "white";
 			notification.style.padding = "10px 15px";
 			notification.style.borderRadius = "5px";
 			notification.style.zIndex = "9999";

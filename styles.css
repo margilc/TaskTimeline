@@ -2,16 +2,16 @@
    VARIABLES
    ================= */
 :root {
-  /* Colors */
-  --color-white: #ffffff;
-  --color-grey-100: #f5f5f5; /* Light grey for background */
-  --color-grey-200: #e9e9e9; /* Hover background */
-  --color-grey-300: #d4d4d4; /* Border color */
-  --color-grey-400: #b0b0b0; /* Hover border color */
-  --color-grey-500: #808080; /* Arrow color */
-  --color-grey-600: #555555;
-  --color-grey-700: #333333; /* Text color */
-  --color-black: #000000;
+  /* Colors (derive from Obsidian theme variables so dark mode works automatically) */
+  --color-white: var(--background-primary);
+  --color-grey-100: var(--background-secondary);
+  --color-grey-200: var(--background-secondary-alt, var(--background-secondary));
+  --color-grey-300: var(--background-modifier-border);
+  --color-grey-400: var(--background-modifier-border-hover, var(--background-modifier-border));
+  --color-grey-500: var(--text-muted); /* Also used for dropdown arrow + subtle borders */
+  --color-grey-600: var(--text-muted);
+  --color-grey-700: var(--text-normal); /* Text color */
+  --color-black: var(--text-normal);
 
   /* Spacing */
   --spacing-xs: 4px;
@@ -25,16 +25,86 @@
   
   /* Additional colors */
   --color-accent: var(--interactive-accent);
+  --color-accent-rgb: var(--interactive-accent-rgb);
   --color-error: #e74c3c;
-  
-  /* Obsidian theme integration */
-  --background-primary: var(--color-white);
-  --background-modifier-border: var(--color-grey-300);
-  --text-normal: var(--color-grey-700);
-  --interactive-normal: var(--color-grey-100);
-  --interactive-hover: var(--color-grey-200);
-  --interactive-accent: var(--color-grey-700);
-  --text-on-accent: var(--color-white);
+
+  /* TaskTimeline semantic system (high contrast) */
+  /* Layers: bg < controls/headers < cards */
+  --tt-bg: var(--background-primary);
+  --tt-surface-1: var(--background-secondary);
+  --tt-surface-1-hover: var(--background-secondary-alt, var(--background-secondary));
+  --tt-surface-2: var(--background-secondary-alt, var(--background-secondary));
+  --tt-surface-2-hover: var(--background-modifier-hover, var(--background-secondary-alt, var(--background-secondary)));
+
+  --tt-border: var(--background-modifier-border);
+  --tt-border-hover: var(--background-modifier-border-hover, var(--background-modifier-border));
+  --tt-border-strong: var(--text-muted);
+
+  --tt-text: var(--text-normal);
+  --tt-text-muted: var(--text-muted);
+  --tt-text-on-accent: var(--text-on-accent);
+
+  --tt-accent: var(--interactive-accent);
+  --tt-accent-rgb: var(--interactive-accent-rgb);
+
+  --tt-button-bg: var(--tt-surface-1);
+  --tt-button-bg-hover: var(--tt-surface-1-hover);
+  --tt-button-active-bg: var(--tt-accent);
+  --tt-button-active-text: var(--tt-text-on-accent);
+
+  --tt-shadow-1: 0 6px 18px rgba(0, 0, 0, 0.25);
+
+  /* Timeline ticks and labels (light mode defaults) */
+  --tt-tick-color: var(--text-muted);
+  --tt-tick-emphasized: var(--text-normal);
+  --tt-timeline-label: var(--text-muted);
+}
+
+/* Dark mode: Use Obsidian's native variables with rgba overlays for subtle contrast */
+body.theme-dark {
+  --tt-bg: var(--background-primary);
+
+  /* Subtle elevation - use native theme variables */
+  --tt-surface-1: var(--background-secondary);
+  --tt-surface-1-hover: var(--background-secondary-alt, var(--background-secondary));
+  --tt-surface-2: var(--background-secondary-alt, var(--background-secondary));
+  --tt-surface-2-hover: var(--background-modifier-hover);
+
+  /* Borders - rgba white for visibility without harshness */
+  --tt-border: rgba(255, 255, 255, 0.12);
+  --tt-border-hover: rgba(255, 255, 255, 0.20);
+  --tt-border-strong: rgba(255, 255, 255, 0.25);
+
+  /* Enhanced shadow for depth - includes subtle glow */
+  --tt-shadow-1: 0 4px 12px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.08);
+
+  /* Timeline ticks and labels - explicit visibility */
+  --tt-tick-color: rgba(255, 255, 255, 0.35);
+  --tt-tick-emphasized: rgba(255, 255, 255, 0.65);
+  --tt-timeline-label: rgba(255, 255, 255, 0.7);
+}
+
+body.theme-light {
+  --tt-bg: var(--background-primary);
+  --tt-surface-1: color-mix(in srgb, var(--background-primary) 86%, black 14%);
+  --tt-surface-1-hover: color-mix(in srgb, var(--background-primary) 82%, black 18%);
+  --tt-surface-2: color-mix(in srgb, var(--background-primary) 78%, black 22%);
+  --tt-surface-2-hover: color-mix(in srgb, var(--background-primary) 74%, black 26%);
+
+  --tt-border: color-mix(in srgb, var(--background-primary) 60%, black 40%);
+  --tt-border-hover: color-mix(in srgb, var(--background-primary) 50%, black 50%);
+  --tt-border-strong: color-mix(in srgb, var(--background-primary) 35%, black 65%);
+
+  --tt-shadow-1: 0 10px 22px rgba(0, 0, 0, 0.18);
+}
+
+/* Dark mode: SVG dropdown icons - lighter fill for visibility */
+body.theme-dark .nav-dropdown-control,
+body.theme-dark .nav-projects-select,
+body.theme-dark .board-grouping-select,
+body.theme-dark .nav-color-value-select,
+body.theme-dark .nav-color-map-selection .dropdown {
+  background-image: url("data:image/svg+xml;utf8,<svg fill='%23a0a0a0' height='24' viewBox='0 0 24 24' width='24' xmlns='http://www.w3.org/2000/svg'><path d='M7 10l5 5 5-5z'/><path d='M0 0h24v24H0z' fill='none'/></svg>") !important;
 }
 
 /* =================
@@ -54,7 +124,7 @@
   flex-direction: column;
   overflow: hidden; /* Changed: don't scroll here, let board-content handle it */
   padding: var(--spacing-sm);
-  background-color: var(--color-white);
+  background-color: var(--tt-bg);
 }
 
 .board-content {
@@ -170,23 +240,24 @@
   appearance: none !important;
   box-sizing: border-box !important;
   border-radius: 0 !important;
-  border: 1px solid var(--color-white) !important;
-  background-color: var(--color-grey-200) !important;
+  border: 1px solid var(--background-modifier-border) !important;
+  background-color: var(--tt-button-bg) !important;
   box-shadow: none !important;
   margin: 0 !important;
   font-size: 14px !important;
-  color: var(--text-normal) !important;
+  color: var(--tt-text) !important;
   cursor: pointer;
   transition: border-color 0.2s ease !important;
   outline: none;
 }
 
 .nav-control-base:hover {
-  border-color: var(--color-grey-400) !important;
+  border-color: var(--tt-border-hover) !important;
+  background-color: var(--tt-button-bg-hover) !important;
 }
 
 .nav-control-base:focus {
-  border-color: var(--color-grey-400) !important;
+  border-color: var(--tt-border-hover) !important;
 }
 
 /* =================
@@ -212,12 +283,12 @@
   appearance: none !important;
   box-sizing: border-box !important;
   border-radius: 0 !important;
-  border: 1px solid var(--color-white) !important;
-  background-color: var(--color-grey-200) !important;
+  border: 1px solid var(--background-modifier-border) !important;
+  background-color: var(--tt-button-bg) !important;
   box-shadow: none !important;
   margin: 0 !important;
   font-size: 14px !important;
-  color: var(--text-normal) !important;
+  color: var(--tt-text) !important;
   cursor: pointer;
   transition: border-color 0.2s ease !important;
   outline: none;
@@ -234,7 +305,7 @@
 }
 
 .board-grouping-select {
-  border: var(--card-border-width) solid var(--color-white) !important;
+  border: 2px solid var(--tt-border) !important;
 }
 
 .nav-projects-select {
@@ -256,12 +327,12 @@
   appearance: none !important;
   box-sizing: border-box !important;
   border-radius: 0 !important;
-  border: 1px solid var(--color-white) !important;
-  background-color: var(--color-grey-200) !important;
+  border: 2px solid var(--tt-border) !important;
+  background-color: var(--tt-button-bg) !important;
   box-shadow: none !important;
   margin: 0 !important;
   font-size: 14px !important;
-  color: var(--text-normal) !important;
+  color: var(--tt-text) !important;
   cursor: pointer;
   transition: border-color 0.2s ease !important;
   outline: none;
@@ -284,10 +355,39 @@
 }
 
 .nav-view-button.is-active {
-  background-color: var(--color-grey-600) !important; /* Dark grey for active */
-  color: var(--text-on-accent); /* White text for active */
+  background-color: var(--tt-button-active-bg) !important;
+  color: var(--tt-button-active-text) !important;
   font-weight: bold; /* Optional: make active text bold */
-  border-color: var(--color-grey-600) !important;
+  border-color: var(--tt-button-active-bg) !important;
+  box-shadow: var(--tt-shadow-1);
+}
+
+/* High-contrast dump-state button */
+.tt-debug-dump-btn {
+  background-color: var(--background-modifier-error, #e74c3c);
+  color: var(--text-on-accent, #ffffff);
+  border: 2px solid var(--tt-border);
+  padding: 4px 8px;
+  cursor: pointer;
+  font-size: 12px;
+  border-radius: 3px;
+  box-shadow: var(--tt-shadow-1);
+}
+
+.tt-debug-dump-btn:hover {
+  border-color: var(--tt-border-hover);
+  filter: brightness(1.05);
+}
+
+/* Toasts / notifications */
+.tt-toast {
+  border: 2px solid var(--tt-border);
+  box-shadow: var(--tt-shadow-1);
+}
+
+.tt-toast--success {
+  background-color: var(--background-modifier-success, #27ae60);
+  color: var(--text-on-accent, #ffffff);
 }
 
 select option {
@@ -325,8 +425,8 @@ select:focus,
 .suggestion-container, 
 .popover {
   box-shadow: 0 1px 3px rgba(0,0,0,0.1) !important;
-  background-color: var(--color-grey-100) !important;
-  border: 1px solid var(--color-grey-300) !important;
+  background-color: var(--background-secondary) !important;
+  border: 1px solid var(--background-modifier-border) !important;
 }
 
 /* =================
@@ -419,7 +519,7 @@ select:focus,
   width: 100%;
   height: 20px;
   display: flex;
-  background-color: var(--color-white);
+  background-color: var(--background-primary);
   border: 1px solid var(--color-grey-300);
   border-radius: var(--border-radius);
   transition: background-color 0.01s ease-out, border-color 0.01s ease-out; /* Near-instant hover */
@@ -454,7 +554,7 @@ select:focus,
   width: 100%;
   height: 100%;
   position: relative;
-  background-color: var(--color-white);
+  background-color: var(--background-primary);
   border: 1px solid var(--color-grey-300);
   border-radius: var(--border-radius);
   cursor: crosshair; /* Indicate hover interaction */
@@ -525,14 +625,14 @@ select:focus,
   top: 0;
   width: 1px;
   height: 5px;
-  background-color: var(--color-grey-400);
+  background-color: var(--tt-tick-color);
   transform: translateX(-50%);
 }
 
 .axis-tick-mark.emphasized {
   height: 8px;
   width: 2px;
-  background-color: var(--color-grey-600);
+  background-color: var(--tt-tick-emphasized);
 }
 
 .axis-labels-container {
@@ -540,7 +640,7 @@ select:focus,
   height: 16px;
   position: relative;
   font-size: 10px;
-  color: var(--color-grey-600);
+  color: var(--tt-timeline-label);
 }
 
 .axis-label {
@@ -570,13 +670,13 @@ select:focus,
   position: sticky;
   top: 0;
   z-index: 10;
-  background-color: var(--color-white);
+  background-color: var(--tt-bg);
 }
 
 .board-column-headers {
   display: grid;
   grid-auto-flow: column;
-  background-color: var(--color-white);
+  background-color: var(--tt-bg);
 }
 
 /* Reset padding/border on the first cell (grouping dropdown container) */
@@ -592,17 +692,29 @@ select:focus,
 .board-grouping-selection {
   position: relative;
   z-index: 20; /* Highest - must be above header row AND first column */
-  background-color: var(--color-grey-200);
+  background-color: var(--tt-surface-1);
+  border: 2px solid var(--tt-border-strong);
 }
 
 /* Shared cell styles */
-.board-cell, 
+.board-cell,
 .group-header {
   padding: var(--spacing-sm);
-  background-color: var(--color-grey-200);
+  background-color: var(--tt-surface-1);
   border-radius: 2px;
-  border: var(--card-border-width) solid var(--color-white);
-  color: var(--color-grey-700);
+  border: 2px solid var(--tt-border-strong);
+  color: var(--tt-text);
+}
+
+/* Dark mode: More subtle borders for cells and headers */
+body.theme-dark .board-cell,
+body.theme-dark .group-header {
+  background-color: var(--background-secondary);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+body.theme-dark .timeline-header-cell {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
 }
 
 .board-cell {
@@ -643,15 +755,15 @@ select:focus,
    TASK COMPONENTS
    ================= */
 .task-timeline-task {
-  background-color: var(--color-grey-400);
+  background-color: var(--tt-surface-2);
   border-radius: 2px;
   padding: var(--spacing-sm);
   text-align: left;
   display: flex;
   flex-direction: column;
   gap: 2px;
-  color: var(--color-grey-700);
-  border: var(--card-border-width) solid var(--color-white);
+  color: var(--tt-text);
+  border: 2px solid var(--tt-border-strong);
   position: relative;
   cursor: pointer;
   transition: all 0.2s ease;
@@ -661,8 +773,21 @@ select:focus,
 }
 
 .task-timeline-task:hover {
-  box-shadow: 0 3px 6px rgba(0, 0, 0, 0.15);
+  box-shadow: var(--tt-shadow-1);
   transform: translateY(-2px);
+  border-color: var(--tt-border-hover);
+}
+
+/* Dark mode: Enhanced card visibility with subtle glow */
+body.theme-dark .task-timeline-task {
+  background-color: var(--background-secondary);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(255, 255, 255, 0.05);
+}
+
+body.theme-dark .task-timeline-task:hover {
+  border-color: rgba(255, 255, 255, 0.2);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.1);
 }
 
 .task-timeline-card-name {
@@ -702,7 +827,7 @@ select:focus,
   width: 10px;
   height: 10px;
   border: 1px solid var(--color-grey-500);
-  background-color: var(--color-white);
+  background-color: var(--background-primary);
   border-radius: 2px;
 }
 
@@ -724,7 +849,7 @@ select:focus,
   display: none;
   position: absolute;
   z-index: 100;
-  background-color: var(--color-white);
+  background-color: var(--background-primary);
   border: 1px solid var(--color-grey-300);
   border-radius: var(--border-radius);
   padding: var(--spacing-md);
@@ -768,8 +893,8 @@ select:focus,
 
 .debug-panel {
   flex-shrink: 0;
-  background-color: #f5f5f5;
-  border: 1px solid #ddd;
+  background-color: var(--background-secondary);
+  border: 1px solid var(--background-modifier-border);
   border-radius: 4px;
   padding: 10px;
   margin-top: 10px;
@@ -782,22 +907,22 @@ select:focus,
 }
 
 .debug-warning {
-  color: #d32f2f;
+  color: var(--text-error, #d32f2f);
   font-weight: bold;
 }
 
 .debug-panel h4 {
   margin: 0 0 8px 0;
   font-size: 1rem;
-  color: #333;
-  border-bottom: 1px solid #ddd;
+  color: var(--text-normal);
+  border-bottom: 1px solid var(--background-modifier-border);
   padding-bottom: 4px;
 }
 
 .debug-panel h5 {
   margin: 12px 0 4px 0;
   font-size: 0.9rem;
-  color: #555;
+  color: var(--text-muted);
 }
 
 .debug-section {
@@ -816,13 +941,13 @@ select:focus,
   display: flex;
   gap: 2px;
   margin-bottom: 8px;
-  border-bottom: 1px solid #ddd;
+  border-bottom: 1px solid var(--background-modifier-border);
   padding-bottom: 4px;
 }
 
 .debug-tab {
-  background-color: #e9e9e9;
-  border: 1px solid #ddd;
+  background-color: var(--background-secondary);
+  border: 1px solid var(--background-modifier-border);
   border-radius: 3px 3px 0 0;
   padding: 4px 8px;
   font-size: 0.8rem;
@@ -832,12 +957,12 @@ select:focus,
 }
 
 .debug-tab:hover {
-  background-color: #f0f0f0;
+  background-color: var(--background-secondary-alt, var(--background-secondary));
 }
 
 .debug-tab.active {
-  background-color: #fff;
-  border-bottom-color: #fff;
+  background-color: var(--background-primary);
+  border-bottom-color: var(--background-primary);
   font-weight: bold;
 }
 
@@ -859,32 +984,32 @@ select:focus,
 .debug-task-table th {
   text-align: left;
   padding: 2px 4px;
-  background-color: #f0f0f0;
-  border-bottom: 1px solid #ddd;
+  background-color: var(--background-secondary);
+  border-bottom: 1px solid var(--background-modifier-border);
   font-weight: bold;
 }
 
 .debug-header-table td,
 .debug-task-table td {
   padding: 2px 4px;
-  border-bottom: 1px solid #eee;
+  border-bottom: 1px solid var(--background-modifier-border);
 }
 
 .debug-header-table tr:nth-child(even),
 .debug-task-table tr:nth-child(even) {
-  background-color: #f9f9f9;
+  background-color: var(--background-secondary);
 }
 
 .debug-subsection {
   margin-top: 8px;
   padding-top: 4px;
-  border-top: 1px dotted #ddd;
+  border-top: 1px dotted var(--background-modifier-border);
 }
 
 .debug-subsection h6 {
   margin: 4px 0;
   font-size: 0.8rem;
-  color: #666;
+  color: var(--text-muted);
 }
 
 .debug-task-table {
@@ -899,12 +1024,12 @@ select:focus,
 .debug-task-table th,
 .debug-task-table td {
   padding: 4px 8px;
-  border: 1px solid #ddd;
+  border: 1px solid var(--background-modifier-border);
   text-align: left;
 }
 
 .debug-task-table th {
-  background-color: #f5f5f5;
+  background-color: var(--background-secondary);
   font-weight: bold;
   position: sticky;
   top: 0;
@@ -912,21 +1037,21 @@ select:focus,
 }
 
 .debug-task-table tr:nth-child(even) {
-  background-color: #f9f9f9;
+  background-color: var(--background-secondary);
 }
 
 .debug-task-table tr:hover {
-  background-color: #f0f0f0;
+  background-color: var(--background-secondary-alt, var(--background-secondary));
 }
 
 .debug-task-table:focus {
-  outline: 2px solid #007bff;
+  outline: 2px solid var(--interactive-accent);
   outline-offset: 2px;
 }
 
 .debug-task-table td:focus,
 .debug-task-table th:focus {
-  outline: 1px solid #007bff;
+  outline: 1px solid var(--interactive-accent);
   outline-offset: -1px;
 }
 
@@ -1138,7 +1263,7 @@ h3 {
 }
 
 .group-header:hover {
-  background-color: var(--interactive-hover);
+  background-color: var(--tt-surface-1-hover);
   transform: translateX(2px);
 }
 
@@ -1219,7 +1344,7 @@ h3 {
   appearance: none !important;
   box-sizing: border-box !important;
   border-radius: 0 !important;
-  border: 1px solid var(--color-white) !important;
+  border: 1px solid var(--background-modifier-border) !important;
   background-color: var(--color-grey-200) !important;
   box-shadow: none !important;
   margin: 0 !important;
@@ -1268,7 +1393,7 @@ h3 {
   appearance: none !important;
   box-sizing: border-box !important;
   border-radius: 0 !important;
-  border: 1px solid var(--color-white) !important;
+  border: 1px solid var(--background-modifier-border) !important;
   background-color: var(--color-grey-200) !important;
   box-shadow: none !important;
   margin: 0 !important;
@@ -1341,7 +1466,7 @@ h3 {
 }
 
 .timeline-header-cell.emphasized-header {
-    background-color: var(--color-grey-300) !important;
+    background-color: var(--tt-surface-1-hover) !important;
 }
 
 /* =================
@@ -1369,21 +1494,21 @@ h3 {
 
 .board-error-state,
 .board-group-error-state {
-    color: #e74c3c;
-    background-color: #fdf2f2;
-    border-color: #fecaca;
+    color: var(--text-error, #e74c3c);
+    background-color: var(--background-secondary);
+    border-color: var(--background-modifier-border);
 }
 
 .board-loading-state {
-    color: #3498db;
-    background-color: #f0f8ff;
-    border-color: #bfdbfe;
+    color: var(--text-accent, #3498db);
+    background-color: var(--background-secondary);
+    border-color: var(--background-modifier-border);
 }
 
 .board-no-tasks-state {
-    color: #f39c12;
-    background-color: #fffbf0;
-    border-color: #fde68a;
+    color: var(--text-accent, #f39c12);
+    background-color: var(--background-secondary);
+    border-color: var(--background-modifier-border);
 }
 
 /* =================
@@ -1437,7 +1562,7 @@ h3 {
     right: 8px;
     transform: translateY(-50%);
     font-size: 16px;
-    color: #000000;
+    color: var(--text-normal);
     opacity: 0.8;
     pointer-events: none;
 }
@@ -1449,7 +1574,7 @@ h3 {
     right: 8px;
     transform: translateY(-50%);
     font-size: 14px;
-    color: #000000;
+    color: var(--text-normal);
     opacity: 0.8;
     pointer-events: none;
 }

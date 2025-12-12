@@ -77,10 +77,14 @@ export class NavMinimap {
             const square = document.createElement("div");
             square.className = "minimap-square";
 
-            // Calculate grayscale color (white for zero, black for max)
+            // Calculate grayscale color.
+            // In dark mode, invert so higher activity is brighter (black on dark would be invisible).
             const count = typeof entry.count === 'number' ? entry.count : 0;
             const normalizedCount = Math.max(0, Math.min(1, count / maxCount));
-            const colorValue = Math.round(255 - normalizedCount * 255);
+            const isDarkMode = document.body.classList.contains('theme-dark');
+            const colorValue = isDarkMode
+                ? Math.round(80 + normalizedCount * 160)   // 80..240 (brighter range for better visibility)
+                : Math.round(255 - normalizedCount * 255); // 255..0 (white..black)
             const colorHex = colorValue.toString(16).padStart(2, '0');
             square.style.backgroundColor = `#${colorHex}${colorHex}${colorHex}`;
 

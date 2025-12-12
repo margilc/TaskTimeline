@@ -1,6 +1,6 @@
 {
     "name": "TaskTimeline",
-    "version": "1.1.171",
+    "version": "1.1.366",
     "description": "Transform your task-based markdown files into an interactive, timeline-based board view",
     "main": "main.js",
     "type": "module",
