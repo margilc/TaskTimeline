@@ -26,6 +26,8 @@ export class BoardContainer {
     // Bound handlers for proper event listener cleanup
     private readonly boundRenderBoard = this.renderBoard.bind(this);
     private readonly boundDebouncedRender: (...args: any[]) => void;
+    private readonly boundScrollHandler: (e: Event) => void;
+    private scrollRAF: number | null = null;
 
     constructor(app: App, appStateManager: AppStateManager, isDebugMode = false) {
         this.app = app;
@@ -33,6 +35,7 @@ export class BoardContainer {
         this.isDebugMode = isDebugMode;
 
         this.boundDebouncedRender = debounce(() => this.renderBoard(), 250);
+        this.boundScrollHandler = this.handleScroll.bind(this);
 
         this.element = document.createElement("div");
         this.element.classList.add("board-container");
@@ -40,6 +43,9 @@ export class BoardContainer {
         this.contentElement = document.createElement("div");
         this.contentElement.classList.add("board-content");
         this.element.appendChild(this.contentElement);
+
+        // Add scroll listener for frozen column effect
+        this.contentElement.addEventListener('scroll', this.boundScrollHandler);
 
         // Create stable containers for incremental updates
         this.timelineHeaderContainer = document.createElement("div");
@@ -72,6 +78,32 @@ export class BoardContainer {
 
     public getSharedTooltip(): HTMLElement {
         return this.sharedTooltip;
+    }
+
+    /**
+     * Handle horizontal scroll to keep first column frozen via CSS transform.
+     * Uses requestAnimationFrame for smooth performance.
+     */
+    private handleScroll(): void {
+        if (this.scrollRAF) return;
+
+        this.scrollRAF = requestAnimationFrame(() => {
+            const scrollLeft = this.contentElement.scrollLeft;
+
+            // Update all group headers to stay fixed on the left
+            const groupHeaders = this.groupsContainer?.querySelectorAll('.group-header');
+            groupHeaders?.forEach((header: Element) => {
+                (header as HTMLElement).style.transform = `translateX(${scrollLeft}px)`;
+            });
+
+            // Also update the grouping selection dropdown in the header row
+            const groupingSelection = this.timelineHeaderContainer?.querySelector('.board-grouping-selection');
+            if (groupingSelection) {
+                (groupingSelection as HTMLElement).style.transform = `translateX(${scrollLeft}px)`;
+            }
+
+            this.scrollRAF = null;
+        });
     }
 
     private renderBoard(): void {
@@ -244,6 +276,13 @@ export class BoardContainer {
         this.appStateManager.getEvents().off(PluginEvent.UpdateLayoutDone, this.boundRenderBoard);
         this.appStateManager.getEvents().off(PluginEvent.UpdateBoardGroupingDone, this.boundDebouncedRender);
         this.appStateManager.getEvents().off(PluginEvent.UpdateColorMappingsDone, this.boundDebouncedRender);
+
+        // Remove scroll listener
+        this.contentElement.removeEventListener('scroll', this.boundScrollHandler);
+        if (this.scrollRAF) {
+            cancelAnimationFrame(this.scrollRAF);
+            this.scrollRAF = null;
+        }
 
         // Clear incremental update tracking
         this.groupElements.clear();
