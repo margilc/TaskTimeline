@@ -240,24 +240,19 @@ body.theme-dark .nav-color-map-selection .dropdown {
   appearance: none !important;
   box-sizing: border-box !important;
   border-radius: 0 !important;
-  border: 1px solid var(--background-modifier-border) !important;
+  border: none !important;
   background-color: var(--tt-button-bg) !important;
   box-shadow: none !important;
   margin: 0 !important;
   font-size: 14px !important;
   color: var(--tt-text) !important;
   cursor: pointer;
-  transition: border-color 0.2s ease !important;
+  transition: background-color 0.2s ease !important;
   outline: none;
 }
 
 .nav-control-base:hover {
-  border-color: var(--tt-border-hover) !important;
   background-color: var(--tt-button-bg-hover) !important;
-}
-
-.nav-control-base:focus {
-  border-color: var(--tt-border-hover) !important;
 }
 
 /* =================
@@ -283,16 +278,16 @@ body.theme-dark .nav-color-map-selection .dropdown {
   appearance: none !important;
   box-sizing: border-box !important;
   border-radius: 0 !important;
-  border: 1px solid var(--background-modifier-border) !important;
+  border: none !important;
   background-color: var(--tt-button-bg) !important;
   box-shadow: none !important;
   margin: 0 !important;
   font-size: 14px !important;
   color: var(--tt-text) !important;
   cursor: pointer;
-  transition: border-color 0.2s ease !important;
+  transition: background-color 0.2s ease !important;
   outline: none;
-  
+
   /* nav-dropdown-control styles */
   display: block !important;
   width: 100% !important;
@@ -302,10 +297,6 @@ body.theme-dark .nav-color-map-selection .dropdown {
   background-repeat: no-repeat !important;
   background-position: right 8px top 50% !important;
   background-size: 16px !important;
-}
-
-.board-grouping-select {
-  border: 2px solid var(--tt-border) !important;
 }
 
 .nav-projects-select {
@@ -327,14 +318,14 @@ body.theme-dark .nav-color-map-selection .dropdown {
   appearance: none !important;
   box-sizing: border-box !important;
   border-radius: 0 !important;
-  border: 2px solid var(--tt-border) !important;
+  border: none !important;
   background-color: var(--tt-button-bg) !important;
   box-shadow: none !important;
   margin: 0 !important;
   font-size: 14px !important;
   color: var(--tt-text) !important;
   cursor: pointer;
-  transition: border-color 0.2s ease !important;
+  transition: background-color 0.2s ease !important;
   outline: none;
 
   /* Button-specific styles */
@@ -346,19 +337,12 @@ body.theme-dark .nav-color-map-selection .dropdown {
   min-width: 60px;
   line-height: 1;
   text-align: center;
-  border-right: none;
-}
-
-/* Remove border from the last button in the group */
-.nav-view-button:last-child {
-  border-right: none;
 }
 
 .nav-view-button.is-active {
   background-color: var(--tt-button-active-bg) !important;
   color: var(--tt-button-active-text) !important;
   font-weight: bold; /* Optional: make active text bold */
-  border-color: var(--tt-button-active-bg) !important;
   box-shadow: var(--tt-shadow-1);
 }
 
@@ -366,7 +350,7 @@ body.theme-dark .nav-color-map-selection .dropdown {
 .tt-debug-dump-btn {
   background-color: var(--background-modifier-error, #e74c3c);
   color: var(--text-on-accent, #ffffff);
-  border: 2px solid var(--tt-border);
+  border: none;
   padding: 4px 8px;
   cursor: pointer;
   font-size: 12px;
@@ -375,7 +359,6 @@ body.theme-dark .nav-color-map-selection .dropdown {
 }
 
 .tt-debug-dump-btn:hover {
-  border-color: var(--tt-border-hover);
   filter: brightness(1.05);
 }
 
@@ -434,7 +417,7 @@ select:focus,
    ================= */
 .nav-debug-toggle {
   border-radius: 0;
-  border: 1px solid var(--color-grey-300);
+  border: none;
   background-color: var(--color-grey-100);
   box-shadow: none;
   outline: none;
@@ -450,18 +433,11 @@ select:focus,
 
 .nav-debug-toggle:hover {
   background-color: var(--color-grey-200);
-  border-color: var(--color-grey-400);
-}
-
-.nav-debug-toggle:focus {
-  outline: none;
-  border-color: var(--color-grey-400);
 }
 
 .nav-debug-toggle.active {
   background-color: var(--interactive-accent);
   color: var(--text-on-accent);
-  border-color: var(--interactive-accent);
 }
 
 /* =================
@@ -693,7 +669,7 @@ select:focus,
   position: relative;
   z-index: 20; /* Highest - must be above header row AND first column */
   background-color: var(--tt-surface-1);
-  border: 2px solid var(--tt-border-strong);
+  border: none;
 }
 
 /* Shared cell styles */
@@ -702,7 +678,7 @@ select:focus,
   padding: var(--spacing-sm);
   background-color: var(--tt-surface-1);
   border-radius: 2px;
-  border: 2px solid var(--tt-border-strong);
+  border: none;
   color: var(--tt-text);
 }
 
@@ -711,12 +687,12 @@ body.theme-dark .board-cell,
 body.theme-dark .group-header,
 body.theme-dark .board-grouping-selection {
   background-color: var(--background-secondary);
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  border: none;
   margin: 3px;
 }
 
 body.theme-dark .timeline-header-cell {
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border: none;
   margin: 3px;
 }
 
@@ -766,7 +742,7 @@ body.theme-dark .timeline-header-cell {
   flex-direction: column;
   gap: 2px;
   color: var(--tt-text);
-  border: 2px solid var(--tt-border-strong);
+  border: none;
   position: relative;
   cursor: pointer;
   transition: all 0.2s ease;
@@ -778,19 +754,17 @@ body.theme-dark .timeline-header-cell {
 .task-timeline-task:hover {
   box-shadow: var(--tt-shadow-1);
   transform: translateY(-2px);
-  border-color: var(--tt-border-hover);
 }
 
 /* Dark mode: Enhanced card visibility with actual margin for spacing */
 body.theme-dark .task-timeline-task {
   background-color: var(--background-secondary);
-  border: 1px solid rgba(255, 255, 255, 0.15);
+  border: none;
   margin: 3px;
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
 }
 
 body.theme-dark .task-timeline-task:hover {
-  border-color: rgba(255, 255, 255, 0.3);
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
 }
 
@@ -1343,7 +1317,7 @@ h3 {
   transform: translateY(-50%);
   width: 16px;
   height: 16px;
-  border: 1px solid var(--color-grey-500);
+  border: none;
   border-radius: 2px;
   z-index: 1;
   pointer-events: none; /* Allow clicks to pass through to dropdown */
@@ -1359,16 +1333,16 @@ h3 {
   appearance: none !important;
   box-sizing: border-box !important;
   border-radius: 0 !important;
-  border: 1px solid var(--background-modifier-border) !important;
+  border: none !important;
   background-color: var(--color-grey-200) !important;
   box-shadow: none !important;
   margin: 0 !important;
   font-size: 14px !important;
   color: var(--text-normal) !important;
   cursor: pointer;
-  transition: border-color 0.2s ease !important;
+  transition: background-color 0.2s ease !important;
   outline: none;
-  
+
   /* nav-dropdown-control styles */
   display: block !important;
   width: 100% !important;
@@ -1378,23 +1352,13 @@ h3 {
   background-repeat: no-repeat !important;
   background-position: right 8px top 50% !important;
   background-size: 16px !important;
-  
+
   /* Size matching with increased size */
   height: 44px !important;
   min-height: 44px !important;
   padding-right: calc(var(--spacing-sm) + 48px) !important; /* More space for swatch + arrow */
   min-width: 140px; /* Slightly wider */
 }
-
-.nav-color-value-select:hover {
-  border-color: var(--color-grey-400) !important;
-}
-
-.nav-color-value-select:focus {
-  border-color: var(--color-grey-400) !important;
-}
-
-
 
 /* Style the variable selection dropdown container */
 .nav-color-map-selection .nav-dropdown-container {
@@ -1408,16 +1372,16 @@ h3 {
   appearance: none !important;
   box-sizing: border-box !important;
   border-radius: 0 !important;
-  border: 1px solid var(--background-modifier-border) !important;
+  border: none !important;
   background-color: var(--color-grey-200) !important;
   box-shadow: none !important;
   margin: 0 !important;
   font-size: 14px !important;
   color: var(--text-normal) !important;
   cursor: pointer;
-  transition: border-color 0.2s ease !important;
+  transition: background-color 0.2s ease !important;
   outline: none;
-  
+
   /* nav-dropdown-control styles */
   display: block !important;
   width: 100% !important;
@@ -1427,20 +1391,12 @@ h3 {
   background-repeat: no-repeat !important;
   background-position: right 8px top 50% !important;
   background-size: 16px !important;
-  
+
   /* Size matching */
   height: 40px !important;
   min-height: 40px !important;
   padding-right: calc(var(--spacing-sm) + 24px) !important;
   min-width: 110px;
-}
-
-.nav-color-map-selection .dropdown:hover {
-  border-color: var(--color-grey-400) !important;
-}
-
-.nav-color-map-selection .dropdown:focus {
-  border-color: var(--color-grey-400) !important;
 }
 
 /* Style for text when coloring is disabled or no values */
@@ -1460,7 +1416,7 @@ h3 {
     height: 12px;
     margin-right: 8px;
     vertical-align: middle;
-    border: 1px solid var(--color-grey-500);
+    border: none;
     border-radius: 2px;
 }
 
