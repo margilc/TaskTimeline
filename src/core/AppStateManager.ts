@@ -559,7 +559,8 @@ export class AppStateManager extends Component {
                 numberOfRows: 8,
                 rowHeight: 80,
                 globalMinDate: new Date(2025, 0, 1).toISOString(),
-                globalMaxDate: new Date(2025, 11, 31).toISOString()
+                globalMaxDate: new Date(2025, 11, 31).toISOString(),
+                defaultCardColor: "#002b36"  // Solarized Base03
             },
             lastOpenedDate: new Date().toISOString(),
             colorVariable: "none",

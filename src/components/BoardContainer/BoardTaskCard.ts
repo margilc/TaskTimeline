@@ -22,19 +22,16 @@ export function BoardTaskCard(
 		card.classList.add("debug-cell");
 	}
 
-	// Apply color based on current color variable
+	// Apply color based on current color variable or user's default card color
 	const taskColor = getTaskColor(task, appStateManager);
-	if (taskColor && taskColor !== DEFAULT_COLOR) {
-		if (taskColor === HIDE_COLOR) {
-			card.style.display = "none";
-		} else {
-			card.style.backgroundColor = taskColor;
-			card.style.borderLeft = `4px solid var(--tt-border)`;
-			// Improve readability on custom colors by choosing a contrasting text color.
-			const contrastText = getContrastingTextColor(taskColor);
-			if (contrastText) {
-				card.style.color = contrastText;
-			}
+	if (taskColor === HIDE_COLOR) {
+		card.style.display = "none";
+	} else if (taskColor) {
+		card.style.backgroundColor = taskColor;
+		// Improve readability on custom colors by choosing a contrasting text color.
+		const contrastText = getContrastingTextColor(taskColor);
+		if (contrastText) {
+			card.style.color = contrastText;
 		}
 	}
 
@@ -198,12 +195,13 @@ function getTaskColor(task: ITask, appStateManager: AppStateManager): string {
 	const state = appStateManager.getState();
 	const colorVariable = state.persistent.colorVariable;
 	const currentProject = state.persistent.currentProjectName;
-	
-	// If no color variable selected or no project, return default
+	const defaultCardColor = state.persistent.settings?.defaultCardColor || DEFAULT_COLOR;
+
+	// If no color variable selected or no project, return user's default card color
 	if (!colorVariable || colorVariable === 'none' || !currentProject) {
-		return DEFAULT_COLOR;
+		return defaultCardColor;
 	}
-	
+
 	// Get the value from the task based on the color variable
 	let taskValue: string | undefined;
 	switch (colorVariable) {
@@ -217,30 +215,30 @@ function getTaskColor(task: ITask, appStateManager: AppStateManager): string {
 			taskValue = task.priority?.toString();
 			break;
 		default:
-			return DEFAULT_COLOR;
+			return defaultCardColor;
 	}
-	
-	// If task doesn't have the value, return default
+
+	// If task doesn't have the value, return user's default card color
 	if (!taskValue) {
-		return DEFAULT_COLOR;
+		return defaultCardColor;
 	}
-	
+
 	// Look up the color mapping
 	const colorMappings = state.persistent.colorMappings;
 	if (!colorMappings || !colorMappings[currentProject] || !colorMappings[currentProject][colorVariable]) {
-		return DEFAULT_COLOR;
+		return defaultCardColor;
 	}
-	
+
 	const color = colorMappings[currentProject][colorVariable][taskValue];
 	if (!color) {
-		return DEFAULT_COLOR;
+		return defaultCardColor;
 	}
-	
+
 	// Handle hide value
 	if (color === HIDE_VALUE) {
 		return HIDE_COLOR;
 	}
-	
+
 	return color;
 }
 

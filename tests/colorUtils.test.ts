@@ -1,24 +1,32 @@
-import { 
-    PREDEFINED_COLORS, 
-    DEFAULT_COLOR, 
-    HIDE_COLOR, 
+import {
+    PREDEFINED_COLORS,
+    GREY_BACKGROUNDS,
+    DEFAULT_COLOR,
+    HIDE_COLOR,
     HIDE_VALUE,
     COLOR_VARIABLES,
     getAvailableColors,
+    getAvailableBackgrounds,
     isValidColor,
-    isValidColorVariable 
+    isValidColorVariable
 } from '../src/core/utils/colorUtils';
 
 describe('colorUtils', () => {
     describe('constants', () => {
-        test('PREDEFINED_COLORS contains expected colors', () => {
-            expect(PREDEFINED_COLORS.BrightRed).toBe("#F94144");
-            expect(PREDEFINED_COLORS.OliveGreen).toBe("#90BE6D");
+        test('PREDEFINED_COLORS contains Solarized accent colors', () => {
+            expect(PREDEFINED_COLORS.Yellow).toBe("#b58900");
+            expect(PREDEFINED_COLORS.Blue).toBe("#268bd2");
             expect(Object.keys(PREDEFINED_COLORS)).toHaveLength(8);
         });
 
-        test('DEFAULT_COLOR is white', () => {
-            expect(DEFAULT_COLOR).toBe("#FFFFFF");
+        test('GREY_BACKGROUNDS contains expected colors', () => {
+            expect(GREY_BACKGROUNDS["Grey 900"]).toBe("#1a1a1a");
+            expect(GREY_BACKGROUNDS["Grey 800"]).toBe("#2d2d2d");
+            expect(Object.keys(GREY_BACKGROUNDS)).toHaveLength(6);
+        });
+
+        test('DEFAULT_COLOR is Grey 800', () => {
+            expect(DEFAULT_COLOR).toBe("#2d2d2d");
         });
 
         test('HIDE_VALUE is correct', () => {
@@ -43,10 +51,25 @@ describe('colorUtils', () => {
         });
     });
 
+    describe('getAvailableBackgrounds', () => {
+        test('returns array of background color objects', () => {
+            const backgrounds = getAvailableBackgrounds();
+            expect(Array.isArray(backgrounds)).toBe(true);
+            expect(backgrounds).toHaveLength(6);
+            expect(backgrounds[0]).toHaveProperty('name');
+            expect(backgrounds[0]).toHaveProperty('value');
+        });
+    });
+
     describe('isValidColor', () => {
-        test('validates predefined colors', () => {
-            expect(isValidColor("#F94144")).toBe(true);
-            expect(isValidColor("#90BE6D")).toBe(true);
+        test('validates predefined accent colors', () => {
+            expect(isValidColor("#b58900")).toBe(true);  // Yellow
+            expect(isValidColor("#268bd2")).toBe(true);  // Blue
+        });
+
+        test('validates grey background colors', () => {
+            expect(isValidColor("#1a1a1a")).toBe(true);  // Grey 900
+            expect(isValidColor("#2d2d2d")).toBe(true);  // Grey 800
         });
 
         test('validates special colors', () => {

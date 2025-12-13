@@ -8,4 +8,5 @@ export interface ITaskTimelineSettings {
 	rowHeight: number;
 	globalMinDate: string; // ISO string format
 	globalMaxDate: string; // ISO string format
+	defaultCardColor: string; // Hex color for default card/button background
 }

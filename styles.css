@@ -374,22 +374,22 @@ body.theme-dark .nav-color-map-selection .dropdown {
 }
 
 select option {
-  background-color: var(--color-grey-100) !important;
-  color: var(--text-normal) !important;
+  background-color: var(--tt-button-bg) !important;
+  color: var(--tt-text) !important;
   padding: var(--spacing-sm) !important;
 }
 
 /* Legacy select hover/focus - will be handled by base classes */
 select:hover,
 .dropdown select:hover {
-  background-color: var(--color-grey-200) !important;
-  border-color: var(--color-grey-400) !important;
+  background-color: var(--tt-button-bg-hover) !important;
+  border-color: transparent !important;
 }
 
 select:focus,
 .dropdown select:focus {
   outline: none !important;
-  border-color: var(--color-grey-400) !important;
+  border-color: transparent !important;
 }
 
 /* Menu styling */
@@ -418,7 +418,7 @@ select:focus,
 .nav-debug-toggle {
   border-radius: 0;
   border: none;
-  background-color: var(--color-grey-100);
+  background-color: var(--tt-button-bg);
   box-shadow: none;
   outline: none;
   padding: var(--spacing-md) var(--spacing-lg);
@@ -426,13 +426,13 @@ select:focus,
   font-size: 14px;
   height: 42px;
   min-height: 42px;
-  color: var(--text-normal);
+  color: var(--tt-text);
   transition: all 0.2s ease;
   vertical-align: middle;
 }
 
 .nav-debug-toggle:hover {
-  background-color: var(--color-grey-200);
+  background-color: var(--tt-button-bg-hover);
 }
 
 .nav-debug-toggle.active {
@@ -445,7 +445,7 @@ select:focus,
    ================= */
 .nav-timeline-selection {
   width: 100%;
-  background-color: var(--color-grey-100);
+  background-color: var(--tt-button-bg);
   padding: var(--spacing-xs);
   position: relative;
   display: flex;
@@ -682,11 +682,10 @@ select:focus,
   color: var(--tt-text);
 }
 
-/* Dark mode: More subtle borders for cells and headers with consistent margin */
+/* Dark mode: Consistent margin for cells and headers */
 body.theme-dark .board-cell,
 body.theme-dark .group-header,
 body.theme-dark .board-grouping-selection {
-  background-color: var(--background-secondary);
   border: none;
   margin: 3px;
 }
@@ -726,8 +725,8 @@ body.theme-dark .timeline-header-cell {
 }
 
 .empty-cell:hover {
-  background-color: var(--color-grey-200);
-  border-color: var(--color-grey-300);
+  background-color: var(--tt-button-bg-hover);
+  border-color: var(--tt-border);
 }
 
 /* =================
@@ -1334,11 +1333,11 @@ h3 {
   box-sizing: border-box !important;
   border-radius: 0 !important;
   border: none !important;
-  background-color: var(--color-grey-200) !important;
+  background-color: var(--tt-button-bg) !important;
   box-shadow: none !important;
   margin: 0 !important;
   font-size: 14px !important;
-  color: var(--text-normal) !important;
+  color: var(--tt-text) !important;
   cursor: pointer;
   transition: background-color 0.2s ease !important;
   outline: none;
@@ -1373,11 +1372,11 @@ h3 {
   box-sizing: border-box !important;
   border-radius: 0 !important;
   border: none !important;
-  background-color: var(--color-grey-200) !important;
+  background-color: var(--tt-button-bg) !important;
   box-shadow: none !important;
   margin: 0 !important;
   font-size: 14px !important;
-  color: var(--text-normal) !important;
+  color: var(--tt-text) !important;
   cursor: pointer;
   transition: background-color 0.2s ease !important;
   outline: none;

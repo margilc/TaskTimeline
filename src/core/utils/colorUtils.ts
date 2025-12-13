@@ -1,15 +1,26 @@
+// Solarized accent colors for color variable picker
 export const PREDEFINED_COLORS = {
-    BrightRed: "#F94144",
-    BurntOrange: "#F3722C", 
-    Orange: "#F8961E",
-    Mustard: "#F9C74F",
-    OliveGreen: "#90BE6D",
-    Teal: "#43AA8B",
-    SeaGreen: "#4D908E",
-    SlateBlue: "#577590"
+    Yellow: "#b58900",
+    Orange: "#cb4b16",
+    Red: "#dc322f",
+    Magenta: "#d33682",
+    Violet: "#6c71c4",
+    Blue: "#268bd2",
+    Cyan: "#2aa198",
+    Green: "#859900"
 } as const;
 
-export const DEFAULT_COLOR = "#FFFFFF";
+// Grey shades for default card/button color setting
+export const GREY_BACKGROUNDS = {
+    "Grey 900": "#1a1a1a",  // darkest
+    "Grey 800": "#2d2d2d",
+    "Grey 700": "#404040",
+    "Grey 600": "#525252",
+    "Grey 500": "#6b6b6b",
+    "Grey 400": "#858585"   // lightest
+} as const;
+
+export const DEFAULT_COLOR = "#2d2d2d";  // Grey 800
 export const HIDE_COLOR = "#D1D5DB";
 export const HIDE_VALUE = "hide";
 
@@ -22,6 +33,7 @@ export const COLOR_VARIABLES = [
 
 export type ColorVariable = typeof COLOR_VARIABLES[number];
 export type PredefinedColor = typeof PREDEFINED_COLORS[keyof typeof PREDEFINED_COLORS];
+export type GreyBackground = typeof GREY_BACKGROUNDS[keyof typeof GREY_BACKGROUNDS];
 
 export function getAvailableColors(): Array<{name: string, value: string}> {
     return Object.entries(PREDEFINED_COLORS).map(([name, value]) => ({
@@ -30,10 +42,18 @@ export function getAvailableColors(): Array<{name: string, value: string}> {
     }));
 }
 
+export function getAvailableBackgrounds(): Array<{name: string, value: string}> {
+    return Object.entries(GREY_BACKGROUNDS).map(([name, value]) => ({
+        name,
+        value
+    }));
+}
+
 export function isValidColor(color: string): boolean {
-    return color === HIDE_VALUE || 
+    return color === HIDE_VALUE ||
            color === DEFAULT_COLOR ||
-           Object.values(PREDEFINED_COLORS).includes(color as PredefinedColor);
+           Object.values(PREDEFINED_COLORS).includes(color as PredefinedColor) ||
+           Object.values(GREY_BACKGROUNDS).includes(color as GreyBackground);
 }
 
 export function isValidColorVariable(variable: string): variable is ColorVariable {

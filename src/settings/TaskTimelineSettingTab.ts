@@ -2,6 +2,7 @@ import { App, PluginSettingTab, Setting, Notice } from "obsidian";
 import TaskTimelinePlugin from "../main";
 import { AppStateManager } from "../core/AppStateManager";
 import { ITaskTimelineSettings } from "../interfaces/ITaskTimelineSettings";
+import { getAvailableBackgrounds, DEFAULT_COLOR } from "../core/utils/colorUtils";
 
 export class TaskTimelineSettingTab extends PluginSettingTab {
 	plugin: TaskTimelinePlugin;
@@ -116,6 +117,39 @@ export class TaskTimelineSettingTab extends PluginSettingTab {
 					});
 			});
 
+		// Default Card Color Setting with color preview
+		const backgroundColors = getAvailableBackgrounds();
+		const colorSetting = new Setting(containerEl)
+			.setName("Default card color")
+			.setDesc("Background color for cards and buttons");
+
+		// Add color preview swatch
+		const colorPreview = document.createElement("div");
+		colorPreview.style.cssText = `
+			width: 24px;
+			height: 24px;
+			border-radius: 4px;
+			border: 1px solid var(--background-modifier-border);
+			margin-right: 8px;
+			flex-shrink: 0;
+		`;
+		colorPreview.style.backgroundColor = settings.defaultCardColor || DEFAULT_COLOR;
+
+		colorSetting.addDropdown(dropdown => {
+			backgroundColors.forEach(({ name, value }) => {
+				dropdown.addOption(value, name);
+			});
+			dropdown.setValue(settings.defaultCardColor || DEFAULT_COLOR);
+			dropdown.onChange(async (value) => {
+				colorPreview.style.backgroundColor = value;
+				await this.updateSetting("defaultCardColor", value);
+			});
+
+			// Insert color preview before the dropdown
+			const dropdownEl = dropdown.selectEl;
+			dropdownEl.parentElement?.insertBefore(colorPreview, dropdownEl);
+		});
+
 		// Reset to Defaults Button
 		new Setting(containerEl)
 			.setName("Reset to defaults")
@@ -146,7 +180,8 @@ export class TaskTimelineSettingTab extends PluginSettingTab {
 			numberOfRows: 3,
 			rowHeight: 80,
 			globalMinDate: `${currentYear}-01-01`,
-			globalMaxDate: `${currentYear}-12-31`
+			globalMaxDate: `${currentYear}-12-31`,
+			defaultCardColor: DEFAULT_COLOR
 		};
 	}
 
