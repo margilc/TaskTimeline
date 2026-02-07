@@ -1,25 +1,28 @@
-import { IAppState, IPersistentState, IVolatileState } from '../interfaces/IAppState';
+import { IAppState, IPersistentState, IVolatileState, IZoomState } from '../interfaces/IAppState';
 import { PluginEvent } from '../enums/events';
 import { Plugin, App, TAbstractFile, TFile, TFolder, Component, Events, Notice } from 'obsidian';
 import { updateProjects } from './update/updateProjects';
 import { updateTasks, updateTasksFromIndex } from './update/updateTasks';
 import { updateColorMappings, updateColorVariable } from './update/updateColorMappings';
-import { updateTimeUnit } from './update/updateTimeUnit';
 import { updateCurrentDate } from './update/updateCurrentDate';
-import { updateTimelineViewport } from './update/updateTimelineViewport';
-import { updateMinimapData } from './update/updateMinimapData';
-import { updateSnappedDateBoundaries } from './update/updateSnappedDateBoundaries';
 import { updateLayout, clearLayoutCache } from './update/updateLayout';
 import { updateBoardGrouping } from './update/updateBoardGrouping';
 import { updateSettings } from './update/updateSettings';
 import { createTask } from './update/createTask';
 import { renameTaskFileForNewStartDate } from './utils/fileRenameUtils';
-import { updateDragStart, updateDragMove, updateDragEnd } from './update/updateDragState';
-import { updateResizeStart, updateResizeMove, updateResizeEnd } from './update/updateResizeState';
-import { updateGroupOrder } from './update/updateGroupOrder';
-import { DEFAULT_COLOR, ColorVariable } from './utils/colorUtils';
-import { calculateDefaultViewport } from './utils/timelineUtils';
+import { updateDateBounds } from './update/updateDateBounds';
+import { DEFAULT_COLOR } from './utils/colorUtils';
 import { TaskIndex } from './TaskIndex';
+import { TimeUnit } from '../enums/TimeUnit';
+
+// Ordered from finest to coarsest: index 0=day, 1=week, 2=month
+const ZOOM_TIME_UNITS = [TimeUnit.DAY, TimeUnit.WEEK, TimeUnit.MONTH];
+
+export { ZOOM_TIME_UNITS };
+
+function timeUnitFromModeIndex(modeIndex: number): string {
+    return ZOOM_TIME_UNITS[modeIndex];
+}
 
 export class AppStateManager extends Component {
     private state: IAppState;
@@ -41,10 +44,6 @@ export class AppStateManager extends Component {
         this.setupConventionBasedEventListeners();
     }
 
-    /**
-     * Schedule coalesced updates using requestAnimationFrame.
-     * Multiple layout update requests in the same frame are batched into one.
-     */
     private scheduleCoalescedUpdates(): void {
         if (this.rafId !== null) return;
 
@@ -57,9 +56,6 @@ export class AppStateManager extends Component {
         });
     }
 
-    /**
-     * Request a layout update. Multiple calls in the same frame are coalesced.
-     */
     private triggerLayoutUpdate(): void {
         this.pendingLayoutUpdate = true;
         this.scheduleCoalescedUpdates();
@@ -70,40 +66,22 @@ export class AppStateManager extends Component {
         this.registerEvent(this.app.vault.on('delete', this.handleFileDelete.bind(this)));
         this.registerEvent(this.app.vault.on('rename', this.handleFileRename.bind(this)));
         this.registerEvent(this.app.vault.on('modify', this.handleFileModify.bind(this)));
-        
+
         this.events.on(PluginEvent.UpdateTasksPending, this.handleUpdateTasksPending.bind(this));
         this.events.on(PluginEvent.UpdateColorMappingsPending, this.handleUpdateColorMappingsPending.bind(this));
-        this.events.on(PluginEvent.UpdateTimeUnitPending, this.handleUpdateTimeUnitPending.bind(this));
         this.events.on(PluginEvent.UpdateCurrentDatePending, this.handleUpdateCurrentDatePending.bind(this));
-        this.events.on(PluginEvent.UpdateTimelineViewportPending, this.handleUpdateTimelineViewportPending.bind(this));
-        this.events.on(PluginEvent.UpdateMinimapDataPending, this.handleUpdateMinimapDataPending.bind(this));
-        this.events.on(PluginEvent.UpdateSnappedDateBoundariesPending, this.handleUpdateSnappedDateBoundariesPending.bind(this));
         this.events.on(PluginEvent.UpdateLayoutPending, this.handleUpdateLayoutPending.bind(this));
         this.events.on(PluginEvent.UpdateBoardGroupingPending, this.handleUpdateBoardGroupingPending.bind(this));
         this.events.on(PluginEvent.UpdateSettingsPending, this.handleUpdateSettingsPending.bind(this));
         this.events.on(PluginEvent.CreateTaskPending, this.handleCreateTaskPending.bind(this));
-        
-        // Drag/Drop event listeners
-        this.events.on(PluginEvent.DragStartPending, this.handleDragStartPending.bind(this));
-        this.events.on(PluginEvent.DragMovePending, this.handleDragMovePending.bind(this));
-        this.events.on(PluginEvent.DragEndPending, this.handleDragEndPending.bind(this));
-        
-        // Resize event listeners
-        this.events.on(PluginEvent.ResizeStartPending, this.handleResizeStartPending.bind(this));
-        this.events.on(PluginEvent.ResizeMovePending, this.handleResizeMovePending.bind(this));
-        this.events.on(PluginEvent.ResizeEndPending, this.handleResizeEndPending.bind(this));
-        
-        // Group reorder events
-        this.events.on(PluginEvent.GroupReorderPending, this.handleGroupReorderPending.bind(this));
+        this.events.on(PluginEvent.UpdateZoomPending, this.handleUpdateZoomPending.bind(this));
     }
-
 
     private async handleFileCreate(file: TAbstractFile): Promise<void> {
         if (this.isRelevantFile(file)) {
             if (file instanceof TFolder) {
                 this.handleUpdateProjectsPending();
             } else if (file instanceof TFile && file.extension === 'md') {
-                // Incremental update: add to TaskIndex first
                 if (this.taskIndex) {
                     await this.taskIndex.handleFileCreate(file);
                 }
@@ -117,7 +95,6 @@ export class AppStateManager extends Component {
             if (file instanceof TFolder) {
                 this.handleUpdateProjectsPending();
             } else if (file instanceof TFile && file.extension === 'md') {
-                // Incremental update: remove from TaskIndex first
                 if (this.taskIndex) {
                     this.taskIndex.handleFileDelete(file);
                 }
@@ -131,7 +108,6 @@ export class AppStateManager extends Component {
             if (file instanceof TFolder) {
                 this.handleUpdateProjectsPending();
             } else if (file instanceof TFile && file.extension === 'md') {
-                // Incremental update: update path in TaskIndex
                 if (this.taskIndex) {
                     await this.taskIndex.handleFileRename(file, oldPath);
                 }
@@ -142,37 +118,29 @@ export class AppStateManager extends Component {
 
     private async handleFileModify(file: TAbstractFile): Promise<void> {
         if (this.isRelevantFile(file) && file instanceof TFile && file.extension === 'md') {
-            // Incremental update: update in TaskIndex first
             if (this.taskIndex) {
                 await this.taskIndex.handleFileModify(file);
             }
-            // Handle file modification with potential renaming
             this.handleFileModifyWithRenaming(file);
         }
     }
-    
+
     private async handleFileModifyWithRenaming(file: TFile): Promise<void> {
         try {
-            // Store current task before updating to compare start dates
             const currentTasks = this.state.volatile.currentTasks || [];
             const taskBeforeUpdate = currentTasks.find(task => task.filePath === file.path);
-            
-            // Parse the new content to get the updated start date
+
             const content = await this.app.vault.read(file);
             const { parseTaskFromContent } = await import('./utils/taskUtils');
             const parsedTask = parseTaskFromContent(content, file.path);
-            
+
             if (parsedTask && taskBeforeUpdate && parsedTask.start !== taskBeforeUpdate.start) {
-                // Start date changed - rename file before triggering task updates
                 await renameTaskFileForNewStartDate(this.app, taskBeforeUpdate, parsedTask.start);
             }
-            
-            // Trigger task updates (will pick up the renamed file)
+
             this.events.trigger(PluginEvent.UpdateTasksPending);
-            
         } catch (error) {
             console.error('Error handling file modification with renaming:', error);
-            // Fall back to normal task update even if renaming fails
             this.events.trigger(PluginEvent.UpdateTasksPending);
         }
     }
@@ -189,15 +157,13 @@ export class AppStateManager extends Component {
     private async handleUpdateProjectsPending(): Promise<void> {
         try {
             const result = await updateProjects(this.app, this.state.volatile, this.state.persistent);
-            
+
             this.state.volatile = result.volatile;
             this.state.persistent = result.persistent;
-            
+
             await this.saveData(this.state.persistent);
-            
-            // Clear layout cache when projects change
             clearLayoutCache();
-            
+
             this.events.trigger(PluginEvent.UpdateProjectsDone);
             this.events.trigger(PluginEvent.AppStateUpdated, this.state);
         } catch (error) {
@@ -206,29 +172,26 @@ export class AppStateManager extends Component {
 
     private async handleUpdateTasksPending(): Promise<void> {
         try {
-            // Use TaskIndex for incremental updates when available
             let result;
             if (this.taskIndex && this.taskIndex.isInitialized()) {
                 result = updateTasksFromIndex(this.taskIndex, this.state.volatile, this.state.persistent);
             } else {
                 result = await updateTasks(this.app, this.state.volatile, this.state.persistent);
             }
-            
+
             this.state.volatile = result.volatile;
             this.state.persistent = result.persistent;
-            
+
             await this.saveData(this.state.persistent);
-            
-            // Clear layout cache when tasks change to prevent stale cached layouts
             clearLayoutCache();
-            
+
+            // Update date bounds from tasks
+            const bounds = updateDateBounds(this.state.volatile.currentTasks || []);
+            this.state.volatile.dateBounds = bounds ?? undefined;
+
             this.events.trigger(PluginEvent.UpdateTasksDone);
             this.events.trigger(PluginEvent.AppStateUpdated, this.state);
-            
-            // Update snapped boundaries when tasks change (like time unit does)
-            this.events.trigger(PluginEvent.UpdateSnappedDateBoundariesPending);
 
-            // Trigger layout update after tasks change (coalesced)
             this.triggerLayoutUpdate();
         } catch (error) {
         }
@@ -237,13 +200,13 @@ export class AppStateManager extends Component {
     private async handleUpdateColorMappingsPending(data: any): Promise<void> {
         try {
             let result;
-            
+
             if (data.type === 'variable') {
                 result = await updateColorVariable(this.app, this.state.persistent, this.state.volatile, data.variable);
             } else if (data.type === 'mapping') {
                 result = await updateColorMappings(
-                    this.app, 
-                    this.state.persistent, 
+                    this.app,
+                    this.state.persistent,
                     this.state.volatile,
                     data.projectId,
                     data.variable,
@@ -253,38 +216,14 @@ export class AppStateManager extends Component {
             } else {
                 throw new Error('Invalid color mapping update type');
             }
-            
+
             this.state.persistent = result.persistent;
             this.state.volatile = result.volatile;
-            
+
             await this.saveData(this.state.persistent);
-            
+
             this.events.trigger(PluginEvent.UpdateColorMappingsDone);
             this.events.trigger(PluginEvent.AppStateUpdated, this.state);
-        } catch (error) {
-        }
-    }
-
-    private async handleUpdateTimeUnitPending(timeUnit: string): Promise<void> {
-        try {
-            const result = await updateTimeUnit(this.app, this.state.persistent, this.state.volatile, timeUnit);
-            
-            this.state.persistent = result.persistent;
-            this.state.volatile = result.volatile;
-            
-            await this.saveData(this.state.persistent);
-            
-            // Clear layout cache when time unit changes to prevent stale cached layouts
-            clearLayoutCache();
-            
-            // Update snapped boundaries when time unit changes
-            this.events.trigger(PluginEvent.UpdateSnappedDateBoundariesPending);
-
-            this.events.trigger(PluginEvent.UpdateTimeUnitDone);
-            this.events.trigger(PluginEvent.AppStateUpdated, this.state);
-
-            // Trigger layout update after time unit changes (coalesced)
-            this.triggerLayoutUpdate();
         } catch (error) {
         }
     }
@@ -292,62 +231,13 @@ export class AppStateManager extends Component {
     private async handleUpdateCurrentDatePending(date: string): Promise<void> {
         try {
             const result = await updateCurrentDate(this.app, this.state.persistent, this.state.volatile, date);
-            
+
             this.state.persistent = result.persistent;
             this.state.volatile = result.volatile;
-            
+
             await this.saveData(this.state.persistent);
-            
+
             this.events.trigger(PluginEvent.UpdateCurrentDateDone);
-            this.events.trigger(PluginEvent.AppStateUpdated, this.state);
-        } catch (error) {
-        }
-    }
-
-    private async handleUpdateTimelineViewportPending(data: { localMinDate: string, localMaxDate: string }): Promise<void> {
-        try {
-            const result = await updateTimelineViewport(
-                this.app, 
-                this.state.persistent, 
-                this.state.volatile, 
-                data.localMinDate, 
-                data.localMaxDate
-            );
-            
-            this.state.persistent = result.persistent;
-            this.state.volatile = result.volatile;
-            
-            this.events.trigger(PluginEvent.UpdateTimelineViewportDone);
-            this.events.trigger(PluginEvent.AppStateUpdated, this.state);
-
-            // Trigger layout update after viewport changes (coalesced)
-            this.triggerLayoutUpdate();
-        } catch (error) {
-        }
-    }
-
-    private async handleUpdateMinimapDataPending(): Promise<void> {
-        try {
-            const tasks = this.state.volatile.currentTasks || [];
-            const result = await updateMinimapData(this.app, this.state.persistent, this.state.volatile, tasks);
-            
-            this.state.persistent = result.persistent;
-            this.state.volatile = result.volatile;
-            
-            this.events.trigger(PluginEvent.UpdateMinimapDataDone);
-            this.events.trigger(PluginEvent.AppStateUpdated, this.state);
-        } catch (error) {
-        }
-    }
-
-    private async handleUpdateSnappedDateBoundariesPending(): Promise<void> {
-        try {
-            const result = updateSnappedDateBoundaries(this.app, this.state);
-            
-            this.state.persistent = result.persistent;
-            this.state.volatile = result.volatile;
-            
-            this.events.trigger(PluginEvent.UpdateSnappedDateBoundariesDone);
             this.events.trigger(PluginEvent.AppStateUpdated, this.state);
         } catch (error) {
         }
@@ -356,10 +246,10 @@ export class AppStateManager extends Component {
     private async handleUpdateLayoutPending(): Promise<void> {
         try {
             const result = updateLayout(this.app, this.state);
-            
+
             this.state.persistent = result.persistent;
             this.state.volatile = result.volatile;
-            
+
             this.events.trigger(PluginEvent.UpdateLayoutDone);
             this.events.trigger(PluginEvent.AppStateUpdated, this.state);
         } catch (error) {
@@ -369,19 +259,16 @@ export class AppStateManager extends Component {
     private async handleUpdateBoardGroupingPending(data: { groupBy: string }): Promise<void> {
         try {
             const result = updateBoardGrouping(this.app, this.state, data.groupBy);
-            
+
             this.state.persistent = result.persistent;
             this.state.volatile = result.volatile;
-            
+
             await this.saveData(this.state.persistent);
-            
-            // Clear layout cache when grouping changes to prevent stale cached layouts
             clearLayoutCache();
-            
+
             this.events.trigger(PluginEvent.UpdateBoardGroupingDone);
             this.events.trigger(PluginEvent.AppStateUpdated, this.state);
 
-            // Trigger layout update to reflect the new grouping (coalesced)
             this.triggerLayoutUpdate();
         } catch (error) {
         }
@@ -397,7 +284,6 @@ export class AppStateManager extends Component {
 
             await this.saveData(this.state.persistent);
 
-            // If task directory changed, reinitialize TaskIndex and trigger projects update
             if (oldTaskDirectory !== newSettings.taskDirectory) {
                 if (this.taskIndex) {
                     await this.taskIndex.setTaskDirectory(newSettings.taskDirectory);
@@ -405,7 +291,6 @@ export class AppStateManager extends Component {
                 this.handleUpdateProjectsPending();
             }
 
-            // Trigger layout update to apply new column/dimension settings (coalesced)
             this.triggerLayoutUpdate();
 
             this.events.trigger(PluginEvent.UpdateSettingsDone);
@@ -417,156 +302,61 @@ export class AppStateManager extends Component {
     private async handleCreateTaskPending(taskData: any): Promise<void> {
         try {
             const result = await createTask(this.app, this.state, taskData);
-            
+
             this.state.persistent = result.persistent;
             this.state.volatile = result.volatile;
-            
+
             new Notice("Task created successfully!");
-            
+
             this.events.trigger(PluginEvent.CreateTaskDone);
             this.events.trigger(PluginEvent.AppStateUpdated, this.state);
-            
-            // Don't trigger manual update - let vault events handle it to avoid double processing
         } catch (error) {
             new Notice(error.message || "Failed to create task. Please try again.");
         }
     }
 
-    // Drag/Drop event handlers
-    private async handleDragStartPending(dragData: any): Promise<void> {
+    private async handleUpdateZoomPending(data: { modeIndex: number; columnWidth: number }): Promise<void> {
         try {
-            const result = updateDragStart(this.app, this.state.persistent, this.state.volatile, dragData);
-            
-            this.state.persistent = result.persistent;
-            this.state.volatile = result.volatile;
-            
-            this.events.trigger(PluginEvent.DragStartDone);
-            this.events.trigger(PluginEvent.AppStateUpdated, this.state);
-        } catch (error) {
-            console.error('❌ Drag Start Error:', error);
-            console.error('Drag data:', dragData);
-        }
-    }
+            const zoomState: IZoomState = { modeIndex: data.modeIndex, columnWidth: data.columnWidth };
+            this.state.volatile.zoomState = zoomState;
+            this.state.persistent.zoomLevel = { modeIndex: data.modeIndex, columnWidth: data.columnWidth };
+            this.state.persistent.currentTimeUnit = timeUnitFromModeIndex(data.modeIndex);
 
-    private async handleDragMovePending(dragData: any): Promise<void> {
-        try {
-            const result = updateDragMove(this.app, this.state.persistent, this.state.volatile, dragData);
-            
-            this.state.persistent = result.persistent;
-            this.state.volatile = result.volatile;
-            
-            this.events.trigger(PluginEvent.DragMoveDone);
-            this.events.trigger(PluginEvent.AppStateUpdated, this.state);
-        } catch (error) {
-            console.error('❌ Drag Move Error:', error);
-            console.error('Drag data:', dragData);
-        }
-    }
-
-    private async handleDragEndPending(dragData: any): Promise<void> {
-        try {
-            const result = await updateDragEnd(this.app, this.state.persistent, this.state.volatile, dragData);
-            
-            this.state.persistent = result.persistent;
-            this.state.volatile = result.volatile;
-            
-            this.events.trigger(PluginEvent.DragEndDone);
-            this.events.trigger(PluginEvent.AppStateUpdated, this.state);
-            
-            // Reload tasks after file modification to reflect changes
-            this.events.trigger(PluginEvent.UpdateTasksPending);
-        } catch (error) {
-            console.error('❌ Drag End Error:', error);
-            console.error('Drag data:', dragData);
-        }
-    }
-
-    // Resize event handlers
-    private async handleResizeStartPending(resizeData: any): Promise<void> {
-        try {
-            const result = updateResizeStart(this.app, this.state.persistent, this.state.volatile, resizeData);
-            
-            this.state.persistent = result.persistent;
-            this.state.volatile = result.volatile;
-            
-            this.events.trigger(PluginEvent.ResizeStartDone);
-            this.events.trigger(PluginEvent.AppStateUpdated, this.state);
-        } catch (error) {
-        }
-    }
-
-    private async handleResizeMovePending(resizeData: any): Promise<void> {
-        try {
-            const result = updateResizeMove(this.app, this.state.persistent, this.state.volatile, resizeData);
-            
-            this.state.persistent = result.persistent;
-            this.state.volatile = result.volatile;
-            
-            this.events.trigger(PluginEvent.ResizeMoveDone);
-            this.events.trigger(PluginEvent.AppStateUpdated, this.state);
-        } catch (error) {
-        }
-    }
-
-    private async handleResizeEndPending(resizeData: any): Promise<void> {
-        try {
-            const result = await updateResizeEnd(this.app, this.state.persistent, this.state.volatile, resizeData);
-            
-            this.state.persistent = result.persistent;
-            this.state.volatile = result.volatile;
-            
-            this.events.trigger(PluginEvent.ResizeEndDone);
-            this.events.trigger(PluginEvent.AppStateUpdated, this.state);
-            
-            // Reload tasks after file modification to reflect changes
-            this.events.trigger(PluginEvent.UpdateTasksPending);
-        } catch (error) {
-        }
-    }
-    
-    private async handleGroupReorderPending(reorderData: any): Promise<void> {
-        try {
-            const result = updateGroupOrder(this.app, this.state.persistent, this.state.volatile, reorderData);
-            
-            this.state.persistent = result.persistent;
-            this.state.volatile = result.volatile;
-
-            // Persist group order changes immediately so they survive reloads.
             await this.saveData(this.state.persistent);
-            
-            this.events.trigger(PluginEvent.GroupReorderDone);
-            this.events.trigger(PluginEvent.AppStateUpdated, this.state);
-
-            // Clear layout cache to force re-render with new group order
             clearLayoutCache();
 
-            // Trigger layout update to reflect the new group order (coalesced)
+            this.events.trigger(PluginEvent.UpdateZoomDone);
+            this.events.trigger(PluginEvent.AppStateUpdated, this.state);
+
             this.triggerLayoutUpdate();
         } catch (error) {
-            console.error('Error handling group reorder:', error);
         }
     }
 
     private getDefaultState(): IAppState {
+        const defaultZoom: IZoomState = { modeIndex: 0, columnWidth: 90 };
+
         const defaultPersistent: IPersistentState = {
             currentProjectName: "All Projects",
             settings: {
                 taskDirectory: "Taskdown",
                 openByDefault: true,
                 openInNewPane: false,
-                numberOfColumns: 5,
-                columnWidth: 200,
-                numberOfRows: 8,
                 rowHeight: 80,
-                globalMinDate: new Date(2025, 0, 1).toISOString(),
-                globalMaxDate: new Date(2025, 11, 31).toISOString(),
-                defaultCardColor: "#002b36"  // Solarized Base03
+                defaultCardColor: "#002b36",
+                minColWidth: 30,
+                maxColWidth: 150,
+                zoomStep: 10,
+                minFontSize: 8,
+                maxFontSize: 14,
             },
             lastOpenedDate: new Date().toISOString(),
             colorVariable: "none",
             colorMappings: {},
             currentTimeUnit: "day",
-            currentDate: new Date().toISOString()
+            currentDate: new Date().toISOString(),
+            zoomLevel: { modeIndex: 0, columnWidth: 90 },
+            scrollPosition: { left: 0, top: 0 }
         };
 
         const defaultVolatile: IVolatileState = {
@@ -574,8 +364,8 @@ export class AppStateManager extends Component {
             currentTasks: [],
             boardLayout: undefined,
             activeFilters: {},
-            timelineViewport: undefined,
-            minimapData: []
+            zoomState: defaultZoom,
+            dateBounds: undefined,
         };
 
         return { persistent: defaultPersistent, volatile: defaultVolatile };
@@ -586,49 +376,41 @@ export class AppStateManager extends Component {
             const persistentData = await this.loadData();
             this.state.persistent = this.mergeDeep(this.state.persistent, persistentData);
 
+            // Restore zoom state from persisted level (with migration from old stepIndex format)
+            const savedZoom = this.state.persistent.zoomLevel as any;
+            if (savedZoom) {
+                if ('stepIndex' in savedZoom && !('columnWidth' in savedZoom)) {
+                    // Migration: old format had stepIndex, convert to columnWidth
+                    const oldSteps = [40, 70, 100, 140, 200];
+                    const migratedWidth = oldSteps[savedZoom.stepIndex] ?? 90;
+                    const settings = this.state.persistent.settings;
+                    const minW = settings?.minColWidth ?? 30;
+                    const maxW = settings?.maxColWidth ?? 150;
+                    const clampedWidth = Math.max(minW, Math.min(maxW, migratedWidth));
+                    this.state.volatile.zoomState = { modeIndex: savedZoom.modeIndex, columnWidth: clampedWidth };
+                    this.state.persistent.zoomLevel = { modeIndex: savedZoom.modeIndex, columnWidth: clampedWidth };
+                } else {
+                    this.state.volatile.zoomState = { modeIndex: savedZoom.modeIndex, columnWidth: savedZoom.columnWidth };
+                }
+                this.state.persistent.currentTimeUnit = timeUnitFromModeIndex(savedZoom.modeIndex);
+            }
+
             const projectResult = await updateProjects(this.app, this.state.volatile, this.state.persistent);
             this.state.volatile = projectResult.volatile;
             this.state.persistent = projectResult.persistent;
 
-            // Initialize TaskIndex for incremental task scanning
             const taskDirectory = this.state.persistent.settings?.taskDirectory || 'Taskdown';
             this.taskIndex = new TaskIndex(this.app, taskDirectory);
             await this.taskIndex.initialize();
 
-            // Use TaskIndex for initial task load
             const taskResult = updateTasksFromIndex(this.taskIndex, this.state.volatile, this.state.persistent);
             this.state.volatile = taskResult.volatile;
             this.state.persistent = taskResult.persistent;
 
-            // Initialize timeline viewport if not set
-            if (!this.state.volatile.timelineViewport) {
-                const currentDate = this.getCurrentDate();
-                const timeUnit = this.getCurrentTimeUnit();
-                const defaultViewport = calculateDefaultViewport(currentDate, timeUnit);
-                const viewportResult = await updateTimelineViewport(
-                    this.app,
-                    this.state.persistent,
-                    this.state.volatile,
-                    defaultViewport.localMinDate,
-                    defaultViewport.localMaxDate
-                );
-                this.state.volatile = viewportResult.volatile;
-                this.state.persistent = viewportResult.persistent;
-            }
+            // Compute date bounds from tasks
+            const bounds = updateDateBounds(this.state.volatile.currentTasks || []);
+            this.state.volatile.dateBounds = bounds ?? undefined;
 
-            // Initialize snapped date boundaries
-            const snappedResult = updateSnappedDateBoundaries(this.app, this.state);
-            this.state.volatile = snappedResult.volatile;
-            this.state.persistent = snappedResult.persistent;
-
-            // Initialize minimap data
-            if (this.state.volatile.currentTasks && this.state.volatile.currentTasks.length > 0) {
-                const minimapResult = await updateMinimapData(this.app, this.state.persistent, this.state.volatile, this.state.volatile.currentTasks);
-                this.state.volatile = minimapResult.volatile;
-                this.state.persistent = minimapResult.persistent;
-            }
-
-            // Trigger initial layout update to ensure board renders on startup (coalesced)
             this.triggerLayoutUpdate();
 
             this.events.trigger(PluginEvent.AppStateUpdated, this.state);
@@ -673,13 +455,12 @@ export class AppStateManager extends Component {
     public async updatePersistentState(updates: Partial<IPersistentState>): Promise<void> {
         const oldTaskDirectory = this.state.persistent.settings?.taskDirectory;
         this.state.persistent = { ...this.state.persistent, ...updates };
-        
-        // Check if taskDirectory changed and trigger projects update if so
+
         const newTaskDirectory = this.state.persistent.settings?.taskDirectory;
         if (oldTaskDirectory !== newTaskDirectory) {
             this.handleUpdateProjectsPending();
         }
-        
+
         await this.saveData(this.state.persistent);
         this.events.trigger(PluginEvent.AppStateUpdated, this.state);
     }
@@ -690,46 +471,40 @@ export class AppStateManager extends Component {
     }
 
     public getAvailableLevels(variable: string): string[] {
-        if (variable === 'none') {
-            return [];
-        }
-        
+        if (variable === 'none') return [];
+
         const tasks = this.state.volatile.currentTasks || [];
         const levels = new Set<string>();
-        
+
         for (const task of tasks) {
             const value = task[variable];
             if (value !== undefined && value !== null && value !== '') {
                 levels.add(String(value));
             }
         }
-        
+
         return Array.from(levels).sort();
     }
-    
+
     public getColorForLevel(projectId: string, variable: string, level: string): string {
         const mappings = this.state.persistent.colorMappings;
         if (!mappings || !mappings[projectId] || !mappings[projectId][variable]) {
             return DEFAULT_COLOR;
         }
-        
         return mappings[projectId][variable][level] || DEFAULT_COLOR;
     }
-    
+
     public getCurrentTimeUnit(): string {
         return this.state.persistent.currentTimeUnit || "day";
     }
-    
+
     public getCurrentDate(): string {
         return new Date().toISOString();
     }
-    
-    public getTimelineViewport(): { localMinDate: string, localMaxDate: string } | null {
-        return this.state.volatile.timelineViewport || null;
-    }
-    
-    public getMinimapData(): Array<{ date: string, count: number }> {
-        return this.state.volatile.minimapData || [];
+
+    public async saveScrollPosition(left: number, top: number): Promise<void> {
+        this.state.persistent.scrollPosition = { left, top };
+        await this.saveData(this.state.persistent);
     }
 
     public emit(event: string, data?: any): void {
@@ -737,14 +512,12 @@ export class AppStateManager extends Component {
     }
 
     public destroy(): void {
-        // Cancel any pending coalesced updates
         if (this.rafId !== null) {
             cancelAnimationFrame(this.rafId);
             this.rafId = null;
         }
         this.pendingLayoutUpdate = false;
 
-        // Clean up TaskIndex
         if (this.taskIndex) {
             this.taskIndex.clear();
             this.taskIndex = null;

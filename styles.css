@@ -100,7 +100,6 @@ body.theme-light {
 
 /* Dark mode: SVG dropdown icons - lighter fill for visibility */
 body.theme-dark .nav-dropdown-control,
-body.theme-dark .nav-projects-select,
 body.theme-dark .board-grouping-select,
 body.theme-dark .nav-color-value-select,
 body.theme-dark .nav-color-map-selection .dropdown {
@@ -132,8 +131,14 @@ body.theme-dark .nav-color-map-selection .dropdown {
   display: grid;
   grid-auto-rows: min-content;
   gap: var(--spacing-sm);
-  overflow: auto; /* Single scroll container for both directions */
+  overflow: auto;
   min-height: 0;
+  /* Hide scrollbars - navigation via right-click pan */
+  scrollbar-width: none;           /* Firefox */
+  -ms-overflow-style: none;        /* IE/Edge */
+}
+.board-content::-webkit-scrollbar {
+  display: none;                    /* Chrome/Safari */
 }
 
 /* =================
@@ -144,7 +149,7 @@ body.theme-dark .nav-color-map-selection .dropdown {
   display: flex;
   flex-direction: column;
   background-color: var(--background-primary);
-  padding: var(--spacing-md);
+  padding: var(--spacing-sm);
   font-family: Arial, sans-serif;
   box-shadow: 0 2px 3px rgba(0,0,0,0.05);
   gap: var(--spacing-sm); /* Reduced gap between rows */
@@ -159,15 +164,6 @@ body.theme-dark .nav-color-map-selection .dropdown {
   min-width: 0; /* Prevent flex item from growing beyond container */
 }
 
-.nav-title {
-  font-size: 1.5rem;
-  margin: 0;
-  color: var(--text-normal);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  min-width: 0; /* Allow text to shrink */
-}
 
 .nav-settings-button {
   background: transparent;
@@ -193,27 +189,6 @@ body.theme-dark .nav-color-map-selection .dropdown {
   justify-content: center;
 }
 
-.nav-controls-row {
-  display: flex;
-  align-items: center;
-  gap: var(--spacing-sm);
-  padding: var(--spacing-xs) 0; /* Reduced vertical padding */
-  flex-wrap: wrap; /* Allow items to wrap on smaller screens */
-  min-width: 0; /* Prevent flex item from growing beyond container */
-}
-
-/* Dropdown/Button Group containers */
-.nav-projects { /* Keep styles for project dropdown */
-  min-width: 150px !important;
-  max-width: 200px !important;
-  display: flex !important;
-  padding: var(--spacing-xs) 0 !important;
-  flex-shrink: 0;
-}
-.nav-views { /* Container for the view buttons */
-  display: flex; /* Use flex for the button group */
-  flex-shrink: 0; /* Prevent shrinking */
-}
 
 /* Select elements and dropdowns */
 .dropdown {
@@ -272,7 +247,6 @@ body.theme-dark .nav-color-map-selection .dropdown {
 }
 
 /* Shared dropdown styles - apply base classes */
-.nav-projects-select,
 .board-grouping-select {
   /* nav-control-base styles */
   appearance: none !important;
@@ -299,51 +273,55 @@ body.theme-dark .nav-color-map-selection .dropdown {
   background-size: 16px !important;
 }
 
-.nav-projects-select {
-  height: 40px !important;
-  min-height: 40px !important;
-  padding-right: calc(var(--spacing-sm) + 24px) !important; /* Ensure space for arrow */
+
+/* =================
+   PROJECT PICKER
+   ================= */
+.nav-project-picker {
+  position: relative;
 }
 
-/* Styles for the new View Selection Button Group */
-.nav-view-buttons {
-  display: flex;
-  border-radius: 0; /* Optional: round the corners of the group */
-  overflow: hidden; /* Clip corners if using border-radius */
-  height: 40px; /* Match dropdown height */
-}
-
-.nav-view-button {
-  /* nav-control-base styles */
-  appearance: none !important;
-  box-sizing: border-box !important;
-  border-radius: 0 !important;
-  border: none !important;
-  background-color: var(--tt-button-bg) !important;
-  box-shadow: none !important;
-  margin: 0 !important;
-  font-size: 14px !important;
-  color: var(--tt-text) !important;
+.nav-project-heading {
+  font-size: 1.3rem;
+  margin: 0;
+  color: var(--text-normal);
   cursor: pointer;
-  transition: background-color 0.2s ease !important;
-  outline: none;
-
-  /* Button-specific styles */
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: var(--spacing-sm) var(--spacing-md);
-  height: 100%;
-  min-width: 60px;
-  line-height: 1;
-  text-align: center;
+  user-select: none;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  padding: var(--spacing-xs) var(--spacing-sm);
+  border-radius: var(--border-radius);
+  transition: background-color 0.15s ease;
 }
 
-.nav-view-button.is-active {
-  background-color: var(--tt-button-active-bg) !important;
-  color: var(--tt-button-active-text) !important;
-  font-weight: bold; /* Optional: make active text bold */
+.nav-project-heading:hover {
+  background-color: var(--interactive-hover);
+}
+
+.nav-project-dropdown {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  z-index: 100;
+  min-width: 200px;
+  background-color: var(--background-primary);
+  border: 1px solid var(--tt-border);
   box-shadow: var(--tt-shadow-1);
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.nav-project-dropdown-item {
+  padding: var(--spacing-sm) var(--spacing-md);
+  cursor: pointer;
+  color: var(--tt-text);
+  font-size: 14px;
+  transition: background-color 0.1s ease;
+}
+
+.nav-project-dropdown-item:hover {
+  background-color: var(--interactive-hover);
 }
 
 /* High-contrast dump-state button */
@@ -440,202 +418,6 @@ select:focus,
   color: var(--text-on-accent);
 }
 
-/* =================
-   TIMELINE COMPONENTS
-   ================= */
-.nav-timeline-selection {
-  width: 100%;
-  background-color: var(--tt-button-bg);
-  padding: var(--spacing-xs);
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  gap: var(--spacing-sm);
-  max-height: 130px;
-}
-
-/* Track container - minimap as base, slider overlayed */
-.nav-timeline-track-container {
-  width: 100%;
-  position: relative;
-}
-
-/* Slider overlays on minimap */
-.nav-timeline-track-container .nav-time-slider {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  z-index: 1;
-}
-
-/* Slider track transparent so minimap shows through */
-.nav-timeline-track-container .slider-track {
-  background-color: transparent;
-  border: none;
-}
-
-.timeline-title {
-  font-weight: bold;
-  font-size: 12px;
-  color: var(--color-grey-700);
-}
-
-/* Minimap */
-.nav-minimap {
-  width: 100%;
-  height: 20px;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.minimap-visualization {
-  width: 100%;
-  height: 20px;
-  display: flex;
-  background-color: var(--background-primary);
-  border: 1px solid var(--color-grey-300);
-  border-radius: var(--border-radius);
-  transition: background-color 0.01s ease-out, border-color 0.01s ease-out; /* Near-instant hover */
-}
-
-.minimap-square {
-  flex: 1;
-  height: 100%;
-}
-
-.minimap-empty-state {
-  text-align: center;
-  color: var(--color-grey-500);
-  font-style: italic;
-  padding: var(--spacing-sm);
-}
-
-.minimap-summary {
-  font-size: 10px;
-  color: var(--color-grey-600);
-  text-align: center;
-}
-
-/* Time slider */
-.nav-time-slider {
-  width: 100%;
-  height: 100%;
-  position: relative;
-}
-
-.slider-track {
-  width: 100%;
-  height: 100%;
-  position: relative;
-  background-color: var(--background-primary);
-  border: 1px solid var(--color-grey-300);
-  border-radius: var(--border-radius);
-  cursor: crosshair; /* Indicate hover interaction */
-  transition: background-color 0.01s ease-out, border-color 0.01s ease-out; /* Near-instant hover */
-}
-
-.current-date-indicator {
-  position: absolute;
-  width: 3px;
-  height: 100%;
-  background-color: var(--color-accent);
-  transform: translateX(-50%);
-  z-index: 2;
-}
-
-.viewport-selector-container {
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-}
-
-.viewport-selector {
-  position: absolute;
-  height: 100%;
-  background-color: rgba(var(--color-accent-rgb), 0.2);
-  border: 2px solid var(--color-accent);
-  border-radius: var(--border-radius);
-  pointer-events: auto;
-  cursor: grab;
-  transition: background-color 0.01s ease-out, border-color 0.01s ease-out; /* Near-instant hover/drag */
-}
-
-.viewport-selector.dragging {
-  cursor: grabbing;
-  background-color: rgba(var(--color-accent-rgb), 0.3);
-}
-
-.handle {
-  position: absolute;
-  width: 8px;
-  height: 100%;
-  background-color: var(--color-accent);
-  cursor: col-resize;
-}
-
-
-.slider-error {
-  color: var(--color-error);
-  text-align: center;
-  padding: var(--spacing-md);
-}
-
-/* Timeline Axis */
-.nav-timeline-axis {
-  width: 100%;
-  position: relative;
-  padding-top: 2px;
-}
-
-.axis-tick-marks-container {
-  width: 100%;
-  height: 8px;
-  position: relative;
-}
-
-.axis-tick-mark {
-  position: absolute;
-  top: 0;
-  width: 1px;
-  height: 5px;
-  background-color: var(--tt-tick-color);
-  transform: translateX(-50%);
-}
-
-.axis-tick-mark.emphasized {
-  height: 8px;
-  width: 2px;
-  background-color: var(--tt-tick-emphasized);
-}
-
-.axis-labels-container {
-  width: 100%;
-  height: 16px;
-  position: relative;
-  font-size: 10px;
-  color: var(--tt-timeline-label);
-}
-
-.axis-label {
-  position: absolute;
-  top: 0;
-  white-space: nowrap;
-}
-
-.axis-label-left {
-  text-align: left;
-}
-
-.axis-label-center {
-  transform: translateX(-50%);
-}
-
-.axis-label-right {
-  text-align: right;
-}
 
 /* =================
    BOARD COMPONENTS
@@ -664,9 +446,9 @@ select:focus,
 }
 
 /* Frozen first column - grouping dropdown (top-left corner cell) */
-/* Uses JS transform for horizontal freeze since CSS sticky doesn't work in nested grids */
 .board-grouping-selection {
-  position: relative;
+  position: sticky;
+  left: 0;
   z-index: 20; /* Highest - must be above header row AND first column */
   background-color: var(--tt-surface-1);
   border: none;
@@ -682,21 +464,34 @@ select:focus,
   color: var(--tt-text);
 }
 
-/* Dark mode: Consistent margin for cells and headers */
+/* Dark mode: gap-based spacing on grid containers instead of per-cell margin */
+body.theme-dark .board-task-group,
+body.theme-dark .board-column-headers {
+  gap: 6px;
+}
+
 body.theme-dark .board-cell,
 body.theme-dark .group-header,
 body.theme-dark .board-grouping-selection {
   border: none;
-  margin: 3px;
 }
 
 body.theme-dark .timeline-header-cell {
   border: none;
-  margin: 3px;
 }
 
 .board-cell {
   text-align: center;
+}
+
+/* Groups container - stacks groups vertically */
+.groups-container {
+  display: flex;
+  flex-direction: column;
+}
+
+body.theme-dark .groups-container {
+  gap: 6px;
 }
 
 /* Board Groups */
@@ -708,11 +503,13 @@ body.theme-dark .timeline-header-cell {
 }
 
 /* Frozen first column - group row headers */
-/* Uses JS transform for horizontal freeze since CSS sticky doesn't work in nested grids */
 .group-header {
-  position: relative;
+  position: sticky;
+  left: 0;
   z-index: 5;
+  background-color: var(--tt-surface-1);
   font-weight: bold;
+  box-sizing: border-box;
 }
 
 /* Empty Cell */
@@ -748,6 +545,7 @@ body.theme-dark .timeline-header-cell {
   z-index: 1;
   box-sizing: border-box;
   overflow: hidden;
+  font-size: var(--tt-card-font-size, 14px);
 }
 
 .task-timeline-task:hover {
@@ -755,11 +553,10 @@ body.theme-dark .timeline-header-cell {
   transform: translateY(-2px);
 }
 
-/* Dark mode: Enhanced card visibility with actual margin for spacing */
+/* Dark mode: Enhanced card visibility */
 body.theme-dark .task-timeline-task {
   background-color: var(--background-secondary);
   border: none;
-  margin: 3px;
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
 }
 
@@ -774,22 +571,6 @@ body.theme-dark .task-timeline-task:hover {
   line-height: 1.2;
 }
 
-.task-drag-handle {
-  background: var(--interactive-accent) !important;
-  color: var(--text-on-accent) !important;
-  border-radius: 3px;
-  font-size: 14px;
-  font-weight: bold;
-  transition: all 0.2s ease;
-  user-select: none;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
-}
-
-.task-drag-handle:hover {
-  background: var(--interactive-accent) !important;
-  transform: scale(1.1);
-  box-shadow: 0 3px 6px rgba(0, 0, 0, 0.3);
-}
 
 /* Subtasks */
 .task-timeline-subtask-container {
@@ -1048,218 +829,11 @@ h3 {
   margin: 0;
 }
 
-/* =================
-   DRAG & DROP STYLES
-   ================= */
 
-/* Draggable task cards */
-.task-timeline-task {
-  user-select: none; /* Prevent text selection during drag */
-  transition: transform 0.1s ease, box-shadow 0.1s ease;
-}
 
-.task-timeline-task:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
-}
-
-/* Dragging state */
-.task-timeline-task.dragging {
-  opacity: 0.7;
-  transform: scale(1.02);
-  box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
-  z-index: 1000;
-  pointer-events: none;
-}
-
-/* Ghost card during drag */
-.task-drag-ghost {
-  position: fixed;
-  pointer-events: none;
-  z-index: 1001;
-  opacity: 0.8;
-  transform: scale(1.02);
-  box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
-  border: 2px dashed var(--color-accent);
-  background-color: var(--background-primary);
-}
-
-/* Drop zone highlighting */
-.board-task-group.drop-zone-active {
-  background-color: rgba(var(--color-accent-rgb), 0.1);
-  border: 2px dashed var(--color-accent);
-  border-radius: var(--border-radius);
-}
-
-.board-cell.drop-target {
-  background-color: rgba(var(--color-accent-rgb), 0.15);
-  border: 2px solid var(--color-accent);
-  border-radius: var(--border-radius);
-  position: relative;
-}
-
-.board-cell.drop-target::before {
-  content: "";
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  width: 20px;
-  height: 20px;
-  background-color: var(--color-accent);
-  border-radius: 50%;
-  transform: translate(-50%, -50%);
-  opacity: 0.7;
-  animation: pulse 1s infinite;
-}
-
-@keyframes pulse {
-  0% { transform: translate(-50%, -50%) scale(1); opacity: 0.7; }
-  50% { transform: translate(-50%, -50%) scale(1.2); opacity: 0.9; }
-  100% { transform: translate(-50%, -50%) scale(1); opacity: 0.7; }
-}
-
-/* =================
-   RESIZE STYLES
-   ================= */
-
-/* Resize cursors on hover */
-.task-timeline-task.resize-left {
-  cursor: w-resize;
-}
-
-.task-timeline-task.resize-right {
-  cursor: e-resize;
-}
-
-.task-timeline-task.resize-both {
-  cursor: col-resize;
-}
-
-/* Resize handles (visual indicators) */
-.task-timeline-task::before,
-.task-timeline-task::after {
-  content: "";
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  width: 5px;
-  opacity: 0;
-  background-color: var(--color-accent);
-  transition: opacity 0.2s ease;
-  pointer-events: none;
-}
-
-.task-timeline-task::before {
-  left: 0;
-}
-
-.task-timeline-task::after {
-  right: 0;
-}
-
-.task-timeline-task:hover::before,
-.task-timeline-task:hover::after {
-  opacity: 0.3;
-}
-
-.task-timeline-task.resizing::before,
-.task-timeline-task.resizing::after {
-  opacity: 0.7;
-}
-
-/* Resize preview */
-.task-resize-preview {
-  position: absolute;
-  background-color: rgba(var(--color-accent-rgb), 0.2);
-  border: 2px dashed var(--color-accent);
-  border-radius: var(--border-radius);
-  pointer-events: none;
-  z-index: 999;
-}
-
-/* Resize active state */
-.task-timeline-task.resizing {
-  opacity: 0.8;
-  transform: scale(1.01);
-  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.2);
-}
-
-/* Resize ghost preview */
-.task-resize-ghost {
-  position: fixed;
-  pointer-events: none;
-  z-index: 1002;
-  opacity: 0.6;
-  background-color: var(--background-primary);
-  border: 2px dashed var(--interactive-accent);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
-  transition: all 0.1s ease;
-}
-
-/* Row header drag styles */
-.group-header {
-  transition: background-color 0.2s ease, transform 0.1s ease;
-}
-
-/* Group drag handle (same style as task drag handle) */
-.group-drag-handle {
-  background: var(--interactive-accent) !important;
-  color: var(--text-on-accent) !important;
-  border-radius: 3px;
-  font-size: 14px;
-  font-weight: bold;
-  transition: all 0.2s ease;
-  user-select: none;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
-}
-
-.group-drag-handle:hover {
-  background: var(--interactive-accent) !important;
-  transform: scale(1.1);
-  box-shadow: 0 3px 6px rgba(0, 0, 0, 0.3);
-}
-
-/* Group dragging state */
-.group-header.group-dragging {
-  opacity: 0.7;
-  transform: scale(1.02);
-  box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
-  z-index: 1000;
-}
-
-/* Group drag ghost */
-.group-drag-ghost {
-  position: fixed;
-  pointer-events: none;
-  z-index: 1001;
-  opacity: 0.8;
-  transform: scale(1.02);
-  box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
-  border: 2px dashed var(--interactive-accent);
-  background-color: var(--background-primary);
-}
-
-/* Group drop zone highlighting */
-.group-header.group-drop-target-before {
-  border-top: 3px solid var(--interactive-accent);
-  background-color: rgba(var(--interactive-accent), 0.1);
-}
-
-.group-header.group-drop-target-after {
-  border-bottom: 3px solid var(--interactive-accent);
-  background-color: rgba(var(--interactive-accent), 0.1);
-}
-
+/* Group header hover */
 .group-header:hover {
   background-color: var(--tt-surface-1-hover);
-  transform: translateX(2px);
-}
-
-.group-header.dragging {
-  cursor: grabbing;
-  opacity: 0.7;
-  transform: scale(1.02);
-  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.2);
 }
 
 

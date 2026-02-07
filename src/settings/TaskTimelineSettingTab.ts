@@ -20,7 +20,6 @@ export class TaskTimelineSettingTab extends PluginSettingTab {
 
 		const settings = this.getSettings();
 
-		// Task Directory Setting
 		new Setting(containerEl)
 			.setName("Task Directory")
 			.setDesc("Directory containing task markdown files")
@@ -31,7 +30,6 @@ export class TaskTimelineSettingTab extends PluginSettingTab {
 					await this.updateSetting("taskDirectory", value);
 				}));
 
-		// Open By Default Setting
 		new Setting(containerEl)
 			.setName("Open by default")
 			.setDesc("Automatically open Task Timeline when Obsidian starts")
@@ -41,7 +39,6 @@ export class TaskTimelineSettingTab extends PluginSettingTab {
 					await this.updateSetting("openByDefault", value);
 				}));
 
-		// Open In New Pane Setting
 		new Setting(containerEl)
 			.setName("Open in new pane")
 			.setDesc("Open Task Timeline in a new pane instead of current tab")
@@ -51,31 +48,6 @@ export class TaskTimelineSettingTab extends PluginSettingTab {
 					await this.updateSetting("openInNewPane", value);
 				}));
 
-		// Number of Columns Setting
-		new Setting(containerEl)
-			.setName("Number of columns")
-			.setDesc("Number of columns to display in board view (3-10)")
-			.addSlider(slider => slider
-				.setLimits(3, 10, 1)
-				.setValue(settings.numberOfColumns)
-				.setDynamicTooltip()
-				.onChange(async (value) => {
-					await this.updateSetting("numberOfColumns", value);
-				}));
-
-		// Column Width Setting
-		new Setting(containerEl)
-			.setName("Column width")
-			.setDesc("Width of each column in pixels (150-400)")
-			.addSlider(slider => slider
-				.setLimits(150, 400, 10)
-				.setValue(settings.columnWidth)
-				.setDynamicTooltip()
-				.onChange(async (value) => {
-					await this.updateSetting("columnWidth", value);
-				}));
-
-		// Row Height Setting
 		new Setting(containerEl)
 			.setName("Row height")
 			.setDesc("Height of task cards in pixels (60-120)")
@@ -87,35 +59,23 @@ export class TaskTimelineSettingTab extends PluginSettingTab {
 					await this.updateSetting("rowHeight", value);
 				}));
 
-		// Global Min Date Setting
-		new Setting(containerEl)
-			.setName("Timeline start date")
-			.setDesc("Earliest date to show in timeline")
-			.addText(text => {
-				text.inputEl.type = "date";
-				text.setValue(settings.globalMinDate)
-					.onChange(async (value) => {
-						const normalizedDate = this.normalizeDateInput(value);
-						if (normalizedDate && this.isValidDate(normalizedDate)) {
-							await this.updateSetting("globalMinDate", normalizedDate);
-						}
-					});
-			});
+		// --- Zoom Settings ---
+		containerEl.createEl('h3', { text: 'Zoom' });
 
-		// Global Max Date Setting
-		new Setting(containerEl)
-			.setName("Timeline end date")
-			.setDesc("Latest date to show in timeline")
-			.addText(text => {
-				text.inputEl.type = "date";
-				text.setValue(settings.globalMaxDate)
-					.onChange(async (value) => {
-						const normalizedDate = this.normalizeDateInput(value);
-						if (normalizedDate && this.isValidDate(normalizedDate)) {
-							await this.updateSetting("globalMaxDate", normalizedDate);
-						}
-					});
-			});
+		this.addIntSetting(containerEl, settings, "minColWidth", "Min column width (px)",
+			"Narrowest column width before switching to coarser time unit", 30);
+
+		this.addIntSetting(containerEl, settings, "maxColWidth", "Max column width (px)",
+			"Widest column width before switching to finer time unit", 150);
+
+		this.addIntSetting(containerEl, settings, "zoomStep", "Zoom step (px)",
+			"Pixels added/removed per scroll tick", 10);
+
+		this.addIntSetting(containerEl, settings, "minFontSize", "Min font size (px)",
+			"Smallest card font at narrowest column width", 8);
+
+		this.addIntSetting(containerEl, settings, "maxFontSize", "Max font size (px)",
+			"Largest card font at widest column width", 14);
 
 		// Default Card Color Setting with color preview
 		const backgroundColors = getAvailableBackgrounds();
@@ -123,7 +83,6 @@ export class TaskTimelineSettingTab extends PluginSettingTab {
 			.setName("Default card color")
 			.setDesc("Background color for cards and buttons");
 
-		// Add color preview swatch
 		const colorPreview = document.createElement("div");
 		colorPreview.style.cssText = `
 			width: 24px;
@@ -145,12 +104,10 @@ export class TaskTimelineSettingTab extends PluginSettingTab {
 				await this.updateSetting("defaultCardColor", value);
 			});
 
-			// Insert color preview before the dropdown
 			const dropdownEl = dropdown.selectEl;
 			dropdownEl.parentElement?.insertBefore(colorPreview, dropdownEl);
 		});
 
-		// Reset to Defaults Button
 		new Setting(containerEl)
 			.setName("Reset to defaults")
 			.setDesc("Reset all settings to their default values")
@@ -170,91 +127,52 @@ export class TaskTimelineSettingTab extends PluginSettingTab {
 	}
 
 	private getDefaultSettings(): ITaskTimelineSettings {
-		const currentYear = new Date().getFullYear();
 		return {
 			taskDirectory: "Taskdown",
 			openByDefault: true,
 			openInNewPane: false,
-			numberOfColumns: 5,
-			columnWidth: 200,
-			numberOfRows: 3,
 			rowHeight: 80,
-			globalMinDate: `${currentYear}-01-01`,
-			globalMaxDate: `${currentYear}-12-31`,
-			defaultCardColor: DEFAULT_COLOR
+			defaultCardColor: DEFAULT_COLOR,
+			minColWidth: 30,
+			maxColWidth: 150,
+			zoomStep: 10,
+			minFontSize: 8,
+			maxFontSize: 14,
 		};
+	}
+
+	private addIntSetting(
+		containerEl: HTMLElement,
+		settings: ITaskTimelineSettings,
+		key: keyof ITaskTimelineSettings,
+		name: string,
+		desc: string,
+		fallback: number
+	): void {
+		new Setting(containerEl)
+			.setName(name)
+			.setDesc(desc)
+			.addText(text => {
+				text.inputEl.type = "number";
+				text.inputEl.style.width = "60px";
+				text.setValue(String(settings[key] ?? fallback));
+				text.onChange(async (value) => {
+					const parsed = parseInt(value, 10);
+					if (!isNaN(parsed)) {
+						await this.updateSetting(key, parsed);
+					}
+				});
+			});
 	}
 
 	private async updateSetting(key: keyof ITaskTimelineSettings, value: any): Promise<void> {
 		const currentSettings = this.getSettings();
 		const newSettings = { ...currentSettings, [key]: value };
-		
-		if (this.validateSettings(newSettings)) {
-			this.appStateManager.emit("update_settings_pending", newSettings);
-		}
+		this.appStateManager.emit("update_settings_pending", newSettings);
 	}
 
 	private async resetToDefaults(): Promise<void> {
 		const defaultSettings = this.getDefaultSettings();
 		this.appStateManager.emit("update_settings_pending", defaultSettings);
-	}
-
-	private validateSettings(settings: ITaskTimelineSettings): boolean {
-		// Normalize the dates in the settings object before validation
-		const normalizedMinDate = this.normalizeDateInput(settings.globalMinDate);
-		const normalizedMaxDate = this.normalizeDateInput(settings.globalMaxDate);
-		
-		if (!normalizedMinDate || !this.isValidDate(normalizedMinDate) || 
-		    !normalizedMaxDate || !this.isValidDate(normalizedMaxDate)) {
-			new Notice("Invalid date format. Please use YYYY-MM-DD format.");
-			return false;
-		}
-		
-		if (new Date(normalizedMinDate) >= new Date(normalizedMaxDate)) {
-			new Notice("Start date must be before end date.");
-			return false;
-		}
-		
-		return true;
-	}
-
-	private normalizeDateInput(dateInput: string): string | null {
-		if (!dateInput) return null;
-		
-		// If already in YYYY-MM-DD format, return as-is
-		if (/^\d{4}-\d{2}-\d{2}$/.test(dateInput)) {
-			return dateInput;
-		}
-		
-		// If it's an ISO string, extract the date part
-		if (dateInput.includes('T') || dateInput.includes('Z')) {
-			const date = new Date(dateInput);
-			if (!isNaN(date.getTime())) {
-				return date.toISOString().split('T')[0];
-			}
-		}
-		
-		// If in DD/MM/YYYY format, convert to YYYY-MM-DD
-		const ddmmyyyyMatch = dateInput.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
-		if (ddmmyyyyMatch) {
-			const [, day, month, year] = ddmmyyyyMatch;
-			return `${year}-${month}-${day}`;
-		}
-		
-		// Try to parse the date and format it properly
-		const date = new Date(dateInput);
-		if (!isNaN(date.getTime())) {
-			return date.toISOString().split('T')[0];
-		}
-		
-		return null;
-	}
-
-	private isValidDate(dateString: string): boolean {
-		const regex = /^\d{4}-\d{2}-\d{2}$/;
-		if (!regex.test(dateString)) return false;
-		
-		const date = new Date(dateString);
-		return date instanceof Date && !isNaN(date.getTime());
 	}
 }

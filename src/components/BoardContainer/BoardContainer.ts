@@ -1,11 +1,14 @@
 import { App } from "obsidian";
-import { AppStateManager } from "../../core/AppStateManager";
+import { AppStateManager, ZOOM_TIME_UNITS } from "../../core/AppStateManager";
 import { BoardTaskGroup } from "./BoardTaskGroup";
 import { BoardTimelineHeader } from "./BoardTimelineHeader";
 import { PluginEvent } from "../../enums/events";
 import { ITask } from "../../interfaces/ITask";
 import { createEmptyStateElement, validateTask } from "../../core/utils/boardUtils";
 import { debounce } from "../../core/utils/layoutUtils";
+import { TimeUnit } from "../../enums/TimeUnit";
+import { snapToUnitBoundary, countDateUnits } from "../../core/update/updateLayout";
+import { addTime } from "../../core/utils/dateUtils";
 
 export class BoardContainer {
     public element: HTMLElement;
@@ -20,14 +23,17 @@ export class BoardContainer {
     private groupsContainer: HTMLElement | null = null;
     private groupElements: Map<string, HTMLElement> = new Map();
 
-    // Track last rendered state for diffing
-    private lastLayoutVersion: number = -1;
-
     // Bound handlers for proper event listener cleanup
     private readonly boundRenderBoard = this.renderBoard.bind(this);
     private readonly boundDebouncedRender: (...args: any[]) => void;
-    private readonly boundScrollHandler: (e: Event) => void;
-    private scrollRAF: number | null = null;
+
+    // Zoom and pan cleanup functions
+    private zoomCleanup: (() => void) | null = null;
+    private panCleanup: (() => void) | null = null;
+
+    // Scroll persistence
+    private scrollCleanup: (() => void) | null = null;
+    private hasRestoredScroll = false;
 
     constructor(app: App, appStateManager: AppStateManager, isDebugMode = false) {
         this.app = app;
@@ -35,7 +41,6 @@ export class BoardContainer {
         this.isDebugMode = isDebugMode;
 
         this.boundDebouncedRender = debounce(() => this.renderBoard(), 250);
-        this.boundScrollHandler = this.handleScroll.bind(this);
 
         this.element = document.createElement("div");
         this.element.classList.add("board-container");
@@ -43,9 +48,6 @@ export class BoardContainer {
         this.contentElement = document.createElement("div");
         this.contentElement.classList.add("board-content");
         this.element.appendChild(this.contentElement);
-
-        // Add scroll listener for frozen column effect
-        this.contentElement.addEventListener('scroll', this.boundScrollHandler);
 
         // Create stable containers for incremental updates
         this.timelineHeaderContainer = document.createElement("div");
@@ -60,11 +62,15 @@ export class BoardContainer {
         this.sharedTooltip = this.createSharedTooltip();
         document.body.appendChild(this.sharedTooltip);
 
-        // Render only on UpdateLayoutDone (the "ready to render" signal)
-        // Removed UpdateTasksDone listener to prevent double-render
+        // Event listeners
         this.appStateManager.getEvents().on(PluginEvent.UpdateLayoutDone, this.boundRenderBoard);
         this.appStateManager.getEvents().on(PluginEvent.UpdateBoardGroupingDone, this.boundDebouncedRender);
         this.appStateManager.getEvents().on(PluginEvent.UpdateColorMappingsDone, this.boundDebouncedRender);
+
+        // Setup zoom, pan, and scroll persistence handlers
+        this.zoomCleanup = this.setupZoomHandler();
+        this.panCleanup = this.setupPanHandler();
+        this.scrollCleanup = this.setupScrollPersistence();
 
         this.renderBoard();
     }
@@ -76,34 +82,178 @@ export class BoardContainer {
         return tooltip;
     }
 
-    public getSharedTooltip(): HTMLElement {
-        return this.sharedTooltip;
-    }
+    private setupZoomHandler(): () => void {
+        const handler = (e: WheelEvent) => {
+            e.preventDefault();
 
-    /**
-     * Handle horizontal scroll to keep first column frozen via CSS transform.
-     * Uses requestAnimationFrame for smooth performance.
-     */
-    private handleScroll(): void {
-        if (this.scrollRAF) return;
+            const state = this.appStateManager.getState();
+            const zoom = state.volatile.zoomState;
+            if (!zoom) return;
 
-        this.scrollRAF = requestAnimationFrame(() => {
-            const scrollLeft = this.contentElement.scrollLeft;
+            const settings = state.persistent.settings || {};
+            const minColWidth = settings.minColWidth ?? 30;
+            const maxColWidth = settings.maxColWidth ?? 150;
+            const zoomStep = settings.zoomStep ?? 10;
 
-            // Update all group headers to stay fixed on the left
-            const groupHeaders = this.groupsContainer?.querySelectorAll('.group-header');
-            groupHeaders?.forEach((header: Element) => {
-                (header as HTMLElement).style.transform = `translateX(${scrollLeft}px)`;
-            });
+            const direction = e.deltaY < 0 ? 1 : -1; // scroll up = zoom in (wider)
+            const oldColW = zoom.columnWidth;
+            let newColW = oldColW + direction * zoomStep;
+            let newModeIndex = zoom.modeIndex;
 
-            // Also update the grouping selection dropdown in the header row
-            const groupingSelection = this.timelineHeaderContainer?.querySelector('.board-grouping-selection');
-            if (groupingSelection) {
-                (groupingSelection as HTMLElement).style.transform = `translateX(${scrollLeft}px)`;
+            // Handle boundary transitions
+            if (newColW > maxColWidth) {
+                if (zoom.modeIndex > 0) {
+                    // Zoom in past max → finer time unit, reset to min width
+                    newModeIndex = zoom.modeIndex - 1;
+                    newColW = minColWidth;
+                } else {
+                    // Already finest (day), clamp
+                    newColW = maxColWidth;
+                    if (oldColW === maxColWidth) return;
+                }
+            } else if (newColW < minColWidth) {
+                if (zoom.modeIndex < ZOOM_TIME_UNITS.length - 1) {
+                    // Zoom out past min → coarser time unit, reset to max width
+                    newModeIndex = zoom.modeIndex + 1;
+                    newColW = maxColWidth;
+                } else {
+                    // Already coarsest (month), clamp
+                    newColW = minColWidth;
+                    if (oldColW === minColWidth) return;
+                }
             }
 
-            this.scrollRAF = null;
-        });
+            const modeChanged = newModeIndex !== zoom.modeIndex;
+
+            // Capture cursor position for scroll anchoring
+            const rect = this.contentElement.getBoundingClientRect();
+            const mouseX = e.clientX - rect.left;
+            const contentX = this.contentElement.scrollLeft + mouseX;
+
+            // Emit zoom change
+            this.appStateManager.emit(PluginEvent.UpdateZoomPending, {
+                modeIndex: newModeIndex,
+                columnWidth: newColW
+            });
+
+            // After layout re-renders, adjust scroll to keep anchor
+            this.appStateManager.getEvents().once(PluginEvent.UpdateLayoutDone, () => {
+                if (modeChanged) {
+                    this.anchorScrollAfterModeChange(contentX, oldColW, mouseX, zoom.modeIndex, newModeIndex, newColW);
+                } else {
+                    // Same mode: simple ratio adjustment
+                    this.contentElement.scrollLeft = Math.max(0, (contentX / oldColW) * newColW - mouseX);
+                }
+            });
+        };
+
+        this.contentElement.addEventListener('wheel', handler, { passive: false });
+        return () => this.contentElement.removeEventListener('wheel', handler);
+    }
+
+    private anchorScrollAfterModeChange(
+        oldContentX: number,
+        oldColW: number,
+        mouseX: number,
+        oldModeIndex: number,
+        newModeIndex: number,
+        newColW: number
+    ): void {
+        const state = this.appStateManager.getState();
+        const dateBounds = state.volatile.dateBounds;
+        if (!dateBounds) return;
+
+        const oldTimeUnit = ZOOM_TIME_UNITS[oldModeIndex] as TimeUnit;
+        const newTimeUnit = ZOOM_TIME_UNITS[newModeIndex] as TimeUnit;
+
+        // Convert old pixel position to fractional column, then to a date
+        const oldFractionalCol = oldContentX / oldColW;
+        const oldStart = snapToUnitBoundary(new Date(dateBounds.earliest), oldTimeUnit);
+        const anchorDate = addFractionalUnits(oldStart, oldFractionalCol, oldTimeUnit);
+
+        // Convert date to fractional column in new mode
+        const newStart = snapToUnitBoundary(new Date(dateBounds.earliest), newTimeUnit);
+        const newFractionalCol = dateDiffInUnits(newStart, anchorDate, newTimeUnit);
+
+        this.contentElement.scrollLeft = Math.max(0, newFractionalCol * newColW - mouseX);
+    }
+
+    private setupPanHandler(): () => void {
+        let active = false;
+        let startX = 0, startY = 0;
+        let startScrollLeft = 0, startScrollTop = 0;
+        let suppressContext = false;
+
+        const onDown = (e: MouseEvent) => {
+            if (e.button !== 2) return;
+            e.preventDefault();
+            active = true;
+            startX = e.clientX;
+            startY = e.clientY;
+            startScrollLeft = this.contentElement.scrollLeft;
+            startScrollTop = this.contentElement.scrollTop;
+            this.contentElement.style.cursor = 'grabbing';
+            this.contentElement.style.userSelect = 'none';
+            suppressContext = true;
+        };
+
+        const onMove = (e: MouseEvent) => {
+            if (!active) return;
+            this.contentElement.scrollLeft = startScrollLeft - (e.clientX - startX);
+            this.contentElement.scrollTop = startScrollTop - (e.clientY - startY);
+        };
+
+        const onUp = (e: MouseEvent) => {
+            if (e.button !== 2 || !active) return;
+            active = false;
+            this.contentElement.style.cursor = '';
+            this.contentElement.style.userSelect = '';
+        };
+
+        const onContext = (e: MouseEvent) => {
+            if (suppressContext) {
+                const moved = Math.abs(e.clientX - startX) > 3 || Math.abs(e.clientY - startY) > 3;
+                if (moved) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                }
+                suppressContext = false;
+            }
+        };
+
+        this.contentElement.addEventListener('mousedown', onDown);
+        document.addEventListener('mousemove', onMove);
+        document.addEventListener('mouseup', onUp);
+        this.contentElement.addEventListener('contextmenu', onContext);
+
+        return () => {
+            this.contentElement.removeEventListener('mousedown', onDown);
+            document.removeEventListener('mousemove', onMove);
+            document.removeEventListener('mouseup', onUp);
+            this.contentElement.removeEventListener('contextmenu', onContext);
+        };
+    }
+
+    private setupScrollPersistence(): () => void {
+        const saveScroll = debounce(() => {
+            this.appStateManager.saveScrollPosition(
+                this.contentElement.scrollLeft,
+                this.contentElement.scrollTop
+            );
+        }, 500);
+
+        this.contentElement.addEventListener('scroll', saveScroll);
+        return () => this.contentElement.removeEventListener('scroll', saveScroll);
+    }
+
+    private restoreScrollPosition(): void {
+        if (this.hasRestoredScroll) return;
+        const saved = this.appStateManager.getPersistentState().scrollPosition;
+        if (saved) {
+            this.contentElement.scrollLeft = saved.left;
+            this.contentElement.scrollTop = saved.top;
+        }
+        this.hasRestoredScroll = true;
     }
 
     private renderBoard(): void {
@@ -112,7 +262,6 @@ export class BoardContainer {
             const boardLayout = state.volatile.boardLayout;
             const currentTasks = state.volatile.currentTasks;
 
-            // Handle loading/empty states by clearing containers
             if (!boardLayout) {
                 this.clearContainers();
                 this.showEmptyState('Loading board layout...', 'board-loading-state');
@@ -127,18 +276,26 @@ export class BoardContainer {
 
             if (!boardLayout.columnHeaders || boardLayout.columnHeaders.length === 0) {
                 this.clearContainers();
-                this.showEmptyState('No timeline columns available. Adjust your date range.', 'board-no-columns-state');
+                this.showEmptyState('No timeline columns available.', 'board-no-columns-state');
                 return;
             }
 
-            // Clear any previous empty state
             this.clearEmptyState();
 
             const settings = state.persistent.settings || {};
-            const columnWidth = settings.columnWidth || 200;
+            const zoomState = state.volatile.zoomState;
+            const columnWidth = zoomState?.columnWidth || 100;
             const rowHeight = settings.rowHeight || 80;
 
-            // Update timeline header (recreate - it's small)
+            // Scale card font size proportionally within column width range
+            const minCW = settings.minColWidth ?? 30;
+            const maxCW = settings.maxColWidth ?? 150;
+            const minFS = settings.minFontSize ?? 8;
+            const maxFS = settings.maxFontSize ?? 14;
+            const t = maxCW > minCW ? Math.max(0, Math.min(1, (columnWidth - minCW) / (maxCW - minCW))) : 0.5;
+            const fontSize = Math.round(minFS + t * (maxFS - minFS));
+            this.contentElement.style.setProperty('--tt-card-font-size', `${fontSize}px`);
+
             this.updateTimelineHeader(boardLayout, columnWidth);
 
             if (!boardLayout.taskGrids || boardLayout.taskGrids.length === 0) {
@@ -147,8 +304,10 @@ export class BoardContainer {
                 return;
             }
 
-            // Incremental group updates
             this.updateGroups(boardLayout, settings, columnWidth, rowHeight);
+
+            // Restore saved scroll position after first real render
+            requestAnimationFrame(() => this.restoreScrollPosition());
 
         } catch (error) {
             this.clearContainers();
@@ -171,7 +330,6 @@ export class BoardContainer {
     }
 
     private showEmptyState(message: string, className: string): void {
-        // Check if empty state already exists
         const existing = this.contentElement.querySelector('.board-empty-state');
         if (existing) {
             existing.textContent = message;
@@ -192,7 +350,6 @@ export class BoardContainer {
 
     private updateTimelineHeader(boardLayout: any, columnWidth: number): void {
         if (!this.timelineHeaderContainer) return;
-        // Timeline header is relatively small, just recreate it
         this.timelineHeaderContainer.innerHTML = '';
         const timelineHeaderEl = BoardTimelineHeader(boardLayout, this.appStateManager, this.app, columnWidth, this.isDebugMode);
         this.timelineHeaderContainer.appendChild(timelineHeaderEl);
@@ -203,7 +360,6 @@ export class BoardContainer {
 
         const currentGroupNames = new Set<string>();
 
-        // Process each task grid
         boardLayout.taskGrids.forEach((taskGrid: any) => {
             try {
                 const groupName = taskGrid.group;
@@ -216,7 +372,6 @@ export class BoardContainer {
                 });
 
                 if (validTasks.length === 0) {
-                    // Remove group if it exists but has no valid tasks
                     this.removeGroup(groupName);
                     currentGroupNames.delete(groupName);
                     return;
@@ -232,15 +387,12 @@ export class BoardContainer {
                     rowHeight
                 };
 
-                // Check if group already exists
                 const existingGroup = this.groupElements.get(groupName);
                 if (existingGroup) {
-                    // Replace existing group content (keeping the container stable)
                     const newGroupEl = BoardTaskGroup(groupName, validTasks, gridConfig, settings, this.appStateManager, this.app, this.isDebugMode, this.sharedTooltip);
                     existingGroup.replaceWith(newGroupEl);
                     this.groupElements.set(groupName, newGroupEl);
                 } else {
-                    // Create new group
                     const taskGroupEl = BoardTaskGroup(groupName, validTasks, gridConfig, settings, this.appStateManager, this.app, this.isDebugMode, this.sharedTooltip);
                     this.groupsContainer!.appendChild(taskGroupEl);
                     this.groupElements.set(groupName, taskGroupEl);
@@ -254,8 +406,7 @@ export class BoardContainer {
             }
         });
 
-        // Ensure DOM order matches the taskGrids order.
-        // Replacing existing group nodes keeps their previous position, so we explicitly reorder here.
+        // Ensure DOM order matches the taskGrids order
         for (const taskGrid of boardLayout.taskGrids) {
             const groupName = taskGrid.group;
             const groupEl = this.groupElements.get(groupName);
@@ -264,7 +415,7 @@ export class BoardContainer {
             }
         }
 
-        // Remove stale groups that no longer exist
+        // Remove stale groups
         for (const [groupName, element] of this.groupElements.entries()) {
             if (!currentGroupNames.has(groupName)) {
                 element.remove();
@@ -282,29 +433,33 @@ export class BoardContainer {
     }
 
     public destroy(): void {
-        // Unsubscribe event listeners
         this.appStateManager.getEvents().off(PluginEvent.UpdateLayoutDone, this.boundRenderBoard);
         this.appStateManager.getEvents().off(PluginEvent.UpdateBoardGroupingDone, this.boundDebouncedRender);
         this.appStateManager.getEvents().off(PluginEvent.UpdateColorMappingsDone, this.boundDebouncedRender);
 
-        // Remove scroll listener
-        this.contentElement.removeEventListener('scroll', this.boundScrollHandler);
-        if (this.scrollRAF) {
-            cancelAnimationFrame(this.scrollRAF);
-            this.scrollRAF = null;
+        if (this.zoomCleanup) {
+            this.zoomCleanup();
+            this.zoomCleanup = null;
         }
 
-        // Clear incremental update tracking
+        if (this.panCleanup) {
+            this.panCleanup();
+            this.panCleanup = null;
+        }
+
+        if (this.scrollCleanup) {
+            this.scrollCleanup();
+            this.scrollCleanup = null;
+        }
+
         this.groupElements.clear();
         this.timelineHeaderContainer = null;
         this.groupsContainer = null;
 
-        // Remove shared tooltip
         if (this.sharedTooltip && this.sharedTooltip.parentNode) {
             this.sharedTooltip.parentNode.removeChild(this.sharedTooltip);
         }
 
-        // Clean up any legacy per-card tooltips (for cleanup during transition)
         const legacyTooltips = document.querySelectorAll('.task-timeline-tooltip');
         legacyTooltips.forEach(tooltip => {
             if (tooltip !== this.sharedTooltip && tooltip.parentNode) {
@@ -312,4 +467,30 @@ export class BoardContainer {
             }
         });
     }
+}
+
+// Helper: add fractional time units to a date
+function addFractionalUnits(start: Date, fractionalUnits: number, timeUnit: TimeUnit): Date {
+    const wholeUnits = Math.floor(fractionalUnits);
+    const fraction = fractionalUnits - wholeUnits;
+
+    const colStart = addTime(start, wholeUnits, timeUnit);
+    const colEnd = addTime(start, wholeUnits + 1, timeUnit);
+
+    return new Date(colStart.getTime() + fraction * (colEnd.getTime() - colStart.getTime()));
+}
+
+// Helper: compute fractional date difference in time units
+function dateDiffInUnits(start: Date, target: Date, timeUnit: TimeUnit): number {
+    if (timeUnit === TimeUnit.DAY) {
+        return (target.getTime() - start.getTime()) / 86400000;
+    } else if (timeUnit === TimeUnit.WEEK) {
+        return (target.getTime() - start.getTime()) / 604800000;
+    } else if (timeUnit === TimeUnit.MONTH) {
+        const yearDiff = target.getFullYear() - start.getFullYear();
+        const monthDiff = target.getMonth() - start.getMonth();
+        const dayFraction = (target.getDate() - 1) / 30; // approximate
+        return yearDiff * 12 + monthDiff + dayFraction;
+    }
+    return 0;
 }
