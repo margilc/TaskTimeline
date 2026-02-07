@@ -1,5 +1,6 @@
 import { App, Modal, Setting, Notice } from "obsidian";
 import { AppStateManager } from "../core/AppStateManager";
+import { ITemplate } from "../interfaces/ITemplate";
 
 export interface NewTaskFormData {
 	name: string;
@@ -8,26 +9,37 @@ export interface NewTaskFormData {
 	priority?: string;
 	start: string;
 	end?: string;
+	templateContent?: string;
 }
 
 export class NewTaskModal extends Modal {
 	private appStateManager: AppStateManager;
 	private formData: NewTaskFormData;
 	private onSubmit: (data: NewTaskFormData) => void;
+	private templates: ITemplate[];
+	private selectedTemplate: ITemplate | null = null;
+	private defaultLengthDays: number = 7;
 
-	constructor(app: App, appStateManager: AppStateManager, onSubmit: (data: NewTaskFormData) => void, prePopulated?: Partial<NewTaskFormData>) {
+	constructor(
+		app: App,
+		appStateManager: AppStateManager,
+		onSubmit: (data: NewTaskFormData) => void,
+		prePopulated?: Partial<NewTaskFormData>,
+		templates?: ITemplate[]
+	) {
 		super(app);
 		this.appStateManager = appStateManager;
 		this.onSubmit = onSubmit;
-		
+		this.templates = templates || [];
+
 		const startDate = new Date();
 		const endDate = new Date(startDate);
 		endDate.setDate(startDate.getDate() + 7);
-		
+
 		this.formData = {
 			name: "",
 			category: "default",
-			status: "default", 
+			status: "default",
 			priority: "5",
 			start: startDate.toISOString().split('T')[0],
 			end: endDate.toISOString().split('T')[0],
@@ -40,6 +52,24 @@ export class NewTaskModal extends Modal {
 		contentEl.empty();
 
 		contentEl.createEl("h2", { text: "Create New Task" });
+
+		// Template picker (only if templates exist)
+		if (this.templates.length > 0) {
+			new Setting(contentEl)
+				.setName("Template")
+				.setDesc("Select a template to pre-fill fields")
+				.addDropdown(dropdown => {
+					dropdown.addOption("none", "None");
+					for (const t of this.templates) {
+						dropdown.addOption(t.name, t.name);
+					}
+					dropdown.onChange(value => {
+						this.applyTemplate(value);
+						// Re-render the form to reflect updated values
+						this.onOpen();
+					});
+				});
+		}
 
 		// Task Name (required)
 		new Setting(contentEl)
@@ -63,11 +93,10 @@ export class NewTaskModal extends Modal {
 				text.setValue(this.formData.start)
 					.onChange(value => {
 						this.formData.start = value;
-						// Auto-update end date to one week later
 						if (value && this.isValidDate(value)) {
 							const startDate = new Date(value);
 							const endDate = new Date(startDate);
-							endDate.setDate(startDate.getDate() + 7);
+							endDate.setDate(startDate.getDate() + this.defaultLengthDays);
 							this.formData.end = endDate.toISOString().split('T')[0];
 							if (endDateInput) {
 								endDateInput.value = this.formData.end;
@@ -126,13 +155,13 @@ export class NewTaskModal extends Modal {
 
 		// Submit and Cancel buttons
 		const buttonContainer = contentEl.createDiv("modal-button-container");
-		
+
 		const submitButton = buttonContainer.createEl("button", {
 			text: "Create Task",
 			cls: "mod-cta"
 		});
 		submitButton.addEventListener("click", this.handleSubmit.bind(this));
-		
+
 		const cancelButton = buttonContainer.createEl("button", {
 			text: "Cancel"
 		});
@@ -141,6 +170,33 @@ export class NewTaskModal extends Modal {
 		this.updateSubmitButton();
 	}
 
+	private applyTemplate(templateName: string): void {
+		if (templateName === "none") {
+			this.selectedTemplate = null;
+			this.defaultLengthDays = 7;
+			this.formData.category = "default";
+			this.formData.status = "default";
+			this.formData.priority = "5";
+			this.formData.templateContent = undefined;
+		} else {
+			const template = this.templates.find(t => t.name === templateName);
+			if (!template) return;
+			this.selectedTemplate = template;
+			this.defaultLengthDays = template.defaultLengthDays || 7;
+			if (template.defaultCategory) this.formData.category = template.defaultCategory;
+			if (template.defaultStatus) this.formData.status = template.defaultStatus;
+			if (template.defaultPriority) this.formData.priority = String(template.defaultPriority);
+			if (template.bodyContent) this.formData.templateContent = template.bodyContent;
+		}
+
+		// Recompute end date from current start + new length
+		if (this.formData.start && this.isValidDate(this.formData.start)) {
+			const startDate = new Date(this.formData.start);
+			const endDate = new Date(startDate);
+			endDate.setDate(startDate.getDate() + this.defaultLengthDays);
+			this.formData.end = endDate.toISOString().split('T')[0];
+		}
+	}
 
 	private updateSubmitButton(): void {
 		const submitButton = this.contentEl.querySelector('.mod-cta') as HTMLButtonElement;
@@ -157,20 +213,20 @@ export class NewTaskModal extends Modal {
 		if (!this.isValidDate(this.formData.start)) return false;
 		if (this.formData.end && !this.isValidDate(this.formData.end)) return false;
 		if (this.formData.end && new Date(this.formData.start) >= new Date(this.formData.end)) return false;
-		
+
 		// Validate priority if provided
 		if (this.formData.priority) {
 			const priority = parseInt(this.formData.priority, 10);
 			if (isNaN(priority) || priority < 1 || priority > 5) return false;
 		}
-		
+
 		return true;
 	}
 
 	private isValidDate(dateString: string): boolean {
 		const regex = /^\d{4}-\d{2}-\d{2}$/;
 		if (!regex.test(dateString)) return false;
-		
+
 		const date = new Date(dateString);
 		return date instanceof Date && !isNaN(date.getTime()) && dateString === date.toISOString().split('T')[0];
 	}

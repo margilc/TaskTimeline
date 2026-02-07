@@ -35,6 +35,9 @@ export class BoardContainer {
     private scrollCleanup: (() => void) | null = null;
     private hasRestoredScroll = false;
 
+    // Zoom anchor for cursor-anchored zoom
+    private pendingZoomAnchor: { anchorDate: Date, mouseX: number } | null = null;
+
     constructor(app: App, appStateManager: AppStateManager, isDebugMode = false) {
         this.app = app;
         this.appStateManager = appStateManager;
@@ -124,59 +127,31 @@ export class BoardContainer {
                 }
             }
 
-            const modeChanged = newModeIndex !== zoom.modeIndex;
+            // Capture anchor on first wheel event in a batch (before state changes)
+            if (!this.pendingZoomAnchor) {
+                const rect = this.contentElement.getBoundingClientRect();
+                const mouseX = e.clientX - rect.left;
+                const contentX = this.contentElement.scrollLeft + mouseX;
 
-            // Capture cursor position for scroll anchoring
-            const rect = this.contentElement.getBoundingClientRect();
-            const mouseX = e.clientX - rect.left;
-            const contentX = this.contentElement.scrollLeft + mouseX;
+                const dateBounds = state.volatile.dateBounds;
+                if (dateBounds) {
+                    const oldTimeUnit = ZOOM_TIME_UNITS[zoom.modeIndex] as TimeUnit;
+                    const oldStart = snapToUnitBoundary(new Date(dateBounds.earliest), oldTimeUnit);
+                    const fractionalCol = contentX / oldColW;
+                    const anchorDate = addFractionalUnits(oldStart, fractionalCol, oldTimeUnit);
+                    this.pendingZoomAnchor = { anchorDate, mouseX };
+                }
+            }
 
             // Emit zoom change
             this.appStateManager.emit(PluginEvent.UpdateZoomPending, {
                 modeIndex: newModeIndex,
                 columnWidth: newColW
             });
-
-            // After layout re-renders, adjust scroll to keep anchor
-            this.appStateManager.getEvents().once(PluginEvent.UpdateLayoutDone, () => {
-                if (modeChanged) {
-                    this.anchorScrollAfterModeChange(contentX, oldColW, mouseX, zoom.modeIndex, newModeIndex, newColW);
-                } else {
-                    // Same mode: simple ratio adjustment
-                    this.contentElement.scrollLeft = Math.max(0, (contentX / oldColW) * newColW - mouseX);
-                }
-            });
         };
 
         this.contentElement.addEventListener('wheel', handler, { passive: false });
         return () => this.contentElement.removeEventListener('wheel', handler);
-    }
-
-    private anchorScrollAfterModeChange(
-        oldContentX: number,
-        oldColW: number,
-        mouseX: number,
-        oldModeIndex: number,
-        newModeIndex: number,
-        newColW: number
-    ): void {
-        const state = this.appStateManager.getState();
-        const dateBounds = state.volatile.dateBounds;
-        if (!dateBounds) return;
-
-        const oldTimeUnit = ZOOM_TIME_UNITS[oldModeIndex] as TimeUnit;
-        const newTimeUnit = ZOOM_TIME_UNITS[newModeIndex] as TimeUnit;
-
-        // Convert old pixel position to fractional column, then to a date
-        const oldFractionalCol = oldContentX / oldColW;
-        const oldStart = snapToUnitBoundary(new Date(dateBounds.earliest), oldTimeUnit);
-        const anchorDate = addFractionalUnits(oldStart, oldFractionalCol, oldTimeUnit);
-
-        // Convert date to fractional column in new mode
-        const newStart = snapToUnitBoundary(new Date(dateBounds.earliest), newTimeUnit);
-        const newFractionalCol = dateDiffInUnits(newStart, anchorDate, newTimeUnit);
-
-        this.contentElement.scrollLeft = Math.max(0, newFractionalCol * newColW - mouseX);
     }
 
     private setupPanHandler(): () => void {
@@ -306,6 +281,21 @@ export class BoardContainer {
             }
 
             this.updateGroups(boardLayout, settings, columnWidth, rowHeight);
+
+            // Apply zoom cursor anchor after DOM update
+            if (this.pendingZoomAnchor) {
+                const dateBounds = state.volatile.dateBounds;
+                if (dateBounds) {
+                    const { anchorDate, mouseX } = this.pendingZoomAnchor;
+                    const zoomState = state.volatile.zoomState;
+                    const newColW = zoomState?.columnWidth || 100;
+                    const newTimeUnit = ZOOM_TIME_UNITS[zoomState?.modeIndex || 0] as TimeUnit;
+                    const newStart = snapToUnitBoundary(new Date(dateBounds.earliest), newTimeUnit);
+                    const newFractionalCol = dateDiffInUnits(newStart, anchorDate, newTimeUnit);
+                    this.contentElement.scrollLeft = Math.max(0, newFractionalCol * newColW - mouseX);
+                }
+                this.pendingZoomAnchor = null;
+            }
 
             // Restore saved scroll position after first real render
             requestAnimationFrame(() => this.restoreScrollPosition());

@@ -144,7 +144,10 @@ export class TaskIndex {
      * Check if a path is within the task directory.
      */
     private isRelevantPath(path: string): boolean {
-        return path.startsWith(this.taskDirectory + '/');
+        if (!path.startsWith(this.taskDirectory + '/')) return false;
+        // Exclude template files
+        if (path.startsWith(this.taskDirectory + '/templates/')) return false;
+        return true;
     }
 
     /**
@@ -170,6 +173,7 @@ export class TaskIndex {
 
         for (const child of dir.children) {
             if (child instanceof TFolder) {
+                if (child.name === 'templates') continue;
                 // Recurse into subdirectories (projects)
                 await this.scanDirectory(child.path);
             } else if (child instanceof TFile && child.extension === 'md') {

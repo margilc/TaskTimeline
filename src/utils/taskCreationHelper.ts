@@ -2,6 +2,7 @@ import { App, Notice } from "obsidian";
 import { AppStateManager } from "../core/AppStateManager";
 import { NewTaskModal, NewTaskFormData } from "../components/NewTaskModal";
 import { PluginEvent } from "../enums/events";
+import { loadTemplates } from "../core/utils/templateUtils";
 
 export class TaskCreationHelper {
 	constructor(private app: App, private appStateManager: AppStateManager) {}
@@ -33,24 +34,28 @@ export class TaskCreationHelper {
 		this.openTaskModal(prePopulated);
 	}
 
-	private openTaskModal(prePopulated: Partial<NewTaskFormData> = {}): void {
+	private async openTaskModal(prePopulated: Partial<NewTaskFormData> = {}): Promise<void> {
 		// Check if a valid project is selected
 		const currentProject = this.appStateManager.getPersistentState().currentProjectName;
-		
+
 		if (!currentProject || currentProject === "All Projects") {
 			new Notice("Please select a specific project before creating tasks. You cannot create tasks when 'All Projects' is selected.");
 			return;
 		}
-		
+
+		const taskDirectory = this.appStateManager.getPersistentState().settings?.taskDirectory || 'Taskdown';
+		const templates = await loadTemplates(this.app, taskDirectory);
+
 		const modal = new NewTaskModal(
 			this.app,
 			this.appStateManager,
 			(taskData: NewTaskFormData) => {
 				this.appStateManager.emit(PluginEvent.CreateTaskPending, taskData);
 			},
-			prePopulated
+			prePopulated,
+			templates
 		);
-		
+
 		modal.open();
 	}
 }

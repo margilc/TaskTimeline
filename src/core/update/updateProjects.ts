@@ -15,7 +15,7 @@ async function listSubfolderNames(app: App, directoryPath: string): Promise<stri
         const folderWithChildren = directory as any;
         
         const subfolderNames = folderWithChildren.children
-            .filter((item: TAbstractFile) => 'children' in item)
+            .filter((item: TAbstractFile) => 'children' in item && item.name !== 'templates')
             .map((folder: TAbstractFile) => folder.name);
         
         return subfolderNames;

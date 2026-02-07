@@ -42,7 +42,7 @@ export async function updateTasks(
             }
             
             for (const child of (taskDir as any).children) {
-                if ('children' in child) {
+                if ('children' in child && child.name !== 'templates') {
                     // This is a project folder
                     await scanProjectFolder(app, child, tasks);
                 }

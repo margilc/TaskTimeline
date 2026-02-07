@@ -14,6 +14,7 @@ import { updateTaskFrontmatter } from './utils/frontmatterUtils';
 import { updateDateBounds } from './update/updateDateBounds';
 import { DEFAULT_COLOR } from './utils/colorUtils';
 import { TaskIndex } from './TaskIndex';
+import { ensureTemplatesFolder } from './utils/templateUtils';
 import { TimeUnit } from '../enums/TimeUnit';
 
 // Ordered from finest to coarsest: index 0=day, 1=week, 2=month
@@ -201,7 +202,9 @@ export class AppStateManager extends Component {
 
     private isRelevantPath(path: string): boolean {
         const taskDirectory = this.state.persistent.settings?.taskDirectory || 'Taskdown';
-        return path.startsWith(taskDirectory + '/');
+        if (!path.startsWith(taskDirectory + '/')) return false;
+        if (path.startsWith(taskDirectory + '/templates/')) return false;
+        return true;
     }
 
     private async handleUpdateProjectsPending(): Promise<void> {
@@ -492,6 +495,7 @@ export class AppStateManager extends Component {
             this.state.persistent = projectResult.persistent;
 
             const taskDirectory = this.state.persistent.settings?.taskDirectory || 'Taskdown';
+            await ensureTemplatesFolder(this.app, taskDirectory);
             this.taskIndex = new TaskIndex(this.app, taskDirectory);
             await this.taskIndex.initialize();
 

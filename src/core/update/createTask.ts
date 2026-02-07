@@ -50,18 +50,12 @@ export async function createTask(app: App, state: IAppState, taskData: NewTaskFo
 	const yamlContent = Object.entries(frontmatter)
 		.map(([key, value]) => `${key}: ${value}`)
 		.join('\n');
-	
-	const content = `---
-${yamlContent}
----
 
-# ${taskData.name}
+	const bodyContent = taskData.templateContent
+		? taskData.templateContent
+		: `# ${taskData.name}\n\nTask description and notes go here.\n\n## Subtasks\n- [ ] Add your subtasks here`;
 
-Task description and notes go here.
-
-## Subtasks
-- [ ] Add your subtasks here
-`;
+	const content = `---\n${yamlContent}\n---\n\n${bodyContent}\n`;
 	
 	// Create the file
 	const filePath = `${targetDirectory}/${filename}`;

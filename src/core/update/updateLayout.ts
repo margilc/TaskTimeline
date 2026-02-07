@@ -108,12 +108,14 @@ export function countDateUnits(start: Date, end: Date, timeUnit: TimeUnit): numb
     return 1;
 }
 
-function generateColumnHeaders(startDate: Date, endDate: Date, timeUnit: TimeUnit, totalColumns: number): Array<{date: Date, label: string, index: number, isEmphasized: boolean}> {
-    const headers: Array<{date: Date, label: string, index: number, isEmphasized: boolean}> = [];
+function generateColumnHeaders(startDate: Date, endDate: Date, timeUnit: TimeUnit, totalColumns: number): Array<{date: Date, label: string, index: number, isEmphasized: boolean, isToday: boolean}> {
+    const headers: Array<{date: Date, label: string, index: number, isEmphasized: boolean, isToday: boolean}> = [];
+    const today = normalizeDate(new Date());
     let currentDate = normalizeDate(startDate);
 
     for (let i = 0; i < totalColumns; i++) {
         const isEmphasized = isHeaderEmphasized(currentDate, timeUnit);
+        const isToday = isHeaderToday(currentDate, today, timeUnit);
         let label: string;
         if (timeUnit === TimeUnit.WEEK && isEmphasized) {
             const weekStart = getWeekStart(currentDate);
@@ -129,7 +131,8 @@ function generateColumnHeaders(startDate: Date, endDate: Date, timeUnit: TimeUni
             date: new Date(currentDate),
             label,
             index: i + 1, // 1-based
-            isEmphasized
+            isEmphasized,
+            isToday
         });
 
         if (i < totalColumns - 1) {
@@ -152,6 +155,19 @@ function isHeaderEmphasized(date: Date, timeUnit: TimeUnit): boolean {
                (nextMonth1st >= weekStart && nextMonth1st <= weekEnd);
     } else if (timeUnit === TimeUnit.DAY) {
         return date.getDay() === 1; // Monday
+    }
+    return false;
+}
+
+function isHeaderToday(date: Date, today: Date, timeUnit: TimeUnit): boolean {
+    if (timeUnit === TimeUnit.DAY) {
+        return date.getFullYear() === today.getFullYear() && date.getMonth() === today.getMonth() && date.getDate() === today.getDate();
+    } else if (timeUnit === TimeUnit.WEEK) {
+        const weekStart = getWeekStart(date);
+        const weekEnd = addTime(weekStart, 6, TimeUnit.DAY);
+        return today >= weekStart && today <= weekEnd;
+    } else if (timeUnit === TimeUnit.MONTH) {
+        return date.getFullYear() === today.getFullYear() && date.getMonth() === today.getMonth();
     }
     return false;
 }
