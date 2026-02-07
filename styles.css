@@ -1100,27 +1100,52 @@ h3 {
 }
 
 .timeline-header-cell.clickable-header:hover::after {
-    content: "➕";
+    content: "+";
     position: absolute;
     top: 50%;
     right: 8px;
     transform: translateY(-50%);
     font-size: 16px;
-    color: var(--text-normal);
-    opacity: 0.8;
+    font-weight: bold;
+    color: var(--text-muted);
+    opacity: 0.6;
     pointer-events: none;
 }
 
-.group-header.clickable-header:hover::after {
-    content: "➕";
+/* Group header action buttons container */
+.group-header-arrows {
+    display: none;
     position: absolute;
+    right: 6px;
     top: 50%;
-    right: 8px;
     transform: translateY(-50%);
+    flex-direction: row;
+    align-items: center;
+    gap: 0;
+}
+
+.group-header:hover .group-header-arrows {
+    display: flex;
+}
+
+.group-header-action {
+    font-size: 10px;
+    line-height: 1;
+    color: var(--text-muted);
+    opacity: 0.5;
+    cursor: pointer;
+    padding: 2px 3px;
+    transition: opacity 0.15s ease;
+}
+
+.group-header-action:hover {
+    opacity: 1;
+}
+
+.group-header-action:last-child {
     font-size: 14px;
-    color: var(--text-normal);
-    opacity: 0.8;
-    pointer-events: none;
+    font-weight: bold;
+    margin-left: 1px;
 }
 
 /* =================

@@ -66,6 +66,7 @@ export class BoardContainer {
         this.appStateManager.getEvents().on(PluginEvent.UpdateLayoutDone, this.boundRenderBoard);
         this.appStateManager.getEvents().on(PluginEvent.UpdateBoardGroupingDone, this.boundDebouncedRender);
         this.appStateManager.getEvents().on(PluginEvent.UpdateColorMappingsDone, this.boundDebouncedRender);
+        this.appStateManager.getEvents().on(PluginEvent.UpdateGroupOrderDone, this.boundDebouncedRender);
 
         // Setup zoom, pan, and scroll persistence handlers
         this.zoomCleanup = this.setupZoomHandler();
@@ -360,7 +361,10 @@ export class BoardContainer {
 
         const currentGroupNames = new Set<string>();
 
-        boardLayout.taskGrids.forEach((taskGrid: any) => {
+        const totalGroups = boardLayout.taskGrids.length;
+
+        for (let groupIdx = 0; groupIdx < totalGroups; groupIdx++) {
+            const taskGrid = boardLayout.taskGrids[groupIdx];
             try {
                 const groupName = taskGrid.group;
                 currentGroupNames.add(groupName);
@@ -374,7 +378,7 @@ export class BoardContainer {
                 if (validTasks.length === 0) {
                     this.removeGroup(groupName);
                     currentGroupNames.delete(groupName);
-                    return;
+                    continue;
                 }
 
                 const maxY = validTasks.reduce((max: number, task: ITask) => Math.max(max, task.y ?? -1), -1);
@@ -389,11 +393,11 @@ export class BoardContainer {
 
                 const existingGroup = this.groupElements.get(groupName);
                 if (existingGroup) {
-                    const newGroupEl = BoardTaskGroup(groupName, validTasks, gridConfig, settings, this.appStateManager, this.app, this.isDebugMode, this.sharedTooltip);
+                    const newGroupEl = BoardTaskGroup(groupName, validTasks, gridConfig, settings, this.appStateManager, this.app, this.isDebugMode, this.sharedTooltip, groupIdx, totalGroups);
                     existingGroup.replaceWith(newGroupEl);
                     this.groupElements.set(groupName, newGroupEl);
                 } else {
-                    const taskGroupEl = BoardTaskGroup(groupName, validTasks, gridConfig, settings, this.appStateManager, this.app, this.isDebugMode, this.sharedTooltip);
+                    const taskGroupEl = BoardTaskGroup(groupName, validTasks, gridConfig, settings, this.appStateManager, this.app, this.isDebugMode, this.sharedTooltip, groupIdx, totalGroups);
                     this.groupsContainer!.appendChild(taskGroupEl);
                     this.groupElements.set(groupName, taskGroupEl);
                 }
@@ -404,7 +408,7 @@ export class BoardContainer {
                 );
                 this.groupsContainer!.appendChild(errorElement);
             }
-        });
+        }
 
         // Ensure DOM order matches the taskGrids order
         for (const taskGrid of boardLayout.taskGrids) {
@@ -436,6 +440,7 @@ export class BoardContainer {
         this.appStateManager.getEvents().off(PluginEvent.UpdateLayoutDone, this.boundRenderBoard);
         this.appStateManager.getEvents().off(PluginEvent.UpdateBoardGroupingDone, this.boundDebouncedRender);
         this.appStateManager.getEvents().off(PluginEvent.UpdateColorMappingsDone, this.boundDebouncedRender);
+        this.appStateManager.getEvents().off(PluginEvent.UpdateGroupOrderDone, this.boundDebouncedRender);
 
         if (this.zoomCleanup) {
             this.zoomCleanup();

@@ -5,6 +5,7 @@ import { ITaskTimelineSettings } from "../../interfaces/ITaskTimelineSettings";
 import { AppStateManager } from "../../core/AppStateManager";
 import { ITask } from "../../interfaces/ITask";
 import { TaskCreationHelper } from "../../utils/taskCreationHelper";
+import { PluginEvent } from "../../enums/events";
 
 export function BoardTaskGroup(
 	groupName: string,
@@ -19,7 +20,9 @@ export function BoardTaskGroup(
 	appStateManager: AppStateManager,
 	app: App,
 	isDebugMode = false,
-	sharedTooltip: HTMLElement
+	sharedTooltip: HTMLElement,
+	groupIndex: number,
+	totalGroups: number
 ): HTMLElement {
 	const container = document.createElement("div");
 	container.className = isDebugMode
@@ -59,10 +62,54 @@ export function BoardTaskGroup(
 	header.style.paddingRight = '5px';
 	header.style.paddingBottom = '5px';
 	header.style.cursor = 'pointer';
+	header.style.position = 'relative';
 
 	const headerText = document.createElement("span");
 	headerText.textContent = groupName;
 	header.appendChild(headerText);
+
+	// Arrow buttons + plus indicator container (visible on hover via CSS)
+	const arrowContainer = document.createElement("div");
+	arrowContainer.className = "group-header-arrows";
+
+	if (groupIndex > 0) {
+		const upBtn = document.createElement("span");
+		upBtn.className = "group-header-action";
+		upBtn.textContent = "\u25B2";
+		upBtn.title = "Move group up";
+		upBtn.addEventListener('click', (e) => {
+			e.stopPropagation();
+			e.preventDefault();
+			appStateManager.getEvents().trigger(PluginEvent.UpdateGroupOrderPending, {
+				groupName,
+				direction: 'up'
+			});
+		});
+		arrowContainer.appendChild(upBtn);
+	}
+
+	if (groupIndex < totalGroups - 1) {
+		const downBtn = document.createElement("span");
+		downBtn.className = "group-header-action";
+		downBtn.textContent = "\u25BC";
+		downBtn.title = "Move group down";
+		downBtn.addEventListener('click', (e) => {
+			e.stopPropagation();
+			e.preventDefault();
+			appStateManager.getEvents().trigger(PluginEvent.UpdateGroupOrderPending, {
+				groupName,
+				direction: 'down'
+			});
+		});
+		arrowContainer.appendChild(downBtn);
+	}
+
+	const plusIndicator = document.createElement("span");
+	plusIndicator.className = "group-header-action";
+	plusIndicator.textContent = "+";
+	arrowContainer.appendChild(plusIndicator);
+
+	header.appendChild(arrowContainer);
 
 	// Hover effects
 	header.addEventListener('mouseenter', () => {

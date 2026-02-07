@@ -18,6 +18,8 @@ export enum PluginEvent {
     UpdateLayoutDone = 'update_layout_done',
     UpdateBoardGroupingPending = 'update_boardgrouping_pending',
     UpdateBoardGroupingDone = 'update_boardgrouping_done',
+    UpdateGroupOrderPending = 'update_grouporder_pending',
+    UpdateGroupOrderDone = 'update_grouporder_done',
     UpdateSettingsPending = 'update_settings_pending',
     UpdateSettingsDone = 'update_settings_done',
     CreateTaskPending = 'create_task_pending',

@@ -75,6 +75,7 @@ export class AppStateManager extends Component {
         this.events.on(PluginEvent.UpdateSettingsPending, this.handleUpdateSettingsPending.bind(this));
         this.events.on(PluginEvent.CreateTaskPending, this.handleCreateTaskPending.bind(this));
         this.events.on(PluginEvent.UpdateZoomPending, this.handleUpdateZoomPending.bind(this));
+        this.events.on(PluginEvent.UpdateGroupOrderPending, this.handleUpdateGroupOrderPending.bind(this));
     }
 
     private async handleFileCreate(file: TAbstractFile): Promise<void> {
@@ -326,6 +327,48 @@ export class AppStateManager extends Component {
             clearLayoutCache();
 
             this.events.trigger(PluginEvent.UpdateZoomDone);
+            this.events.trigger(PluginEvent.AppStateUpdated, this.state);
+
+            this.triggerLayoutUpdate();
+        } catch (error) {
+        }
+    }
+
+    private async handleUpdateGroupOrderPending(data: { groupName: string; direction: 'up' | 'down' }): Promise<void> {
+        try {
+            const persistent = this.state.persistent;
+            const projectId = persistent.currentProjectName || 'All Projects';
+            const groupBy = persistent.boardGrouping?.groupBy || 'none';
+            const availableGroups = persistent.boardGrouping?.availableGroups || [];
+
+            const currentIndex = availableGroups.indexOf(data.groupName);
+            if (currentIndex === -1) return;
+
+            const targetIndex = data.direction === 'up' ? currentIndex - 1 : currentIndex + 1;
+            if (targetIndex < 0 || targetIndex >= availableGroups.length) return;
+
+            const newOrder = [...availableGroups];
+            [newOrder[currentIndex], newOrder[targetIndex]] = [newOrder[targetIndex], newOrder[currentIndex]];
+
+            const groupingOrderings = { ...(persistent.groupingOrderings || {}) };
+            groupingOrderings[projectId] = {
+                ...(groupingOrderings[projectId] || {}),
+                [groupBy]: newOrder
+            };
+
+            this.state.persistent = {
+                ...persistent,
+                boardGrouping: {
+                    ...persistent.boardGrouping!,
+                    availableGroups: newOrder
+                },
+                groupingOrderings
+            };
+
+            await this.saveData(this.state.persistent);
+            clearLayoutCache();
+
+            this.events.trigger(PluginEvent.UpdateGroupOrderDone);
             this.events.trigger(PluginEvent.AppStateUpdated, this.state);
 
             this.triggerLayoutUpdate();
