@@ -37,20 +37,18 @@ export function BoardTaskCard(
 	taskName.textContent = task.name || "Unnamed Task";
 	card.appendChild(taskName);
 
-	// Display Subtask Progress if applicable
+	// Display progress bar if task has subtasks
 	if (task.totalSubtasks > 0) {
-		const subtaskContainer = document.createElement("div");
-		subtaskContainer.className = "task-timeline-subtask-container";
+		const progressBar = document.createElement("div");
+		progressBar.className = "task-timeline-progress-bar";
 
-		for (let i = 0; i < task.totalSubtasks; i++) {
-			const subtaskBox = document.createElement("span");
-			subtaskBox.className = "task-timeline-subtask-box";
-			if (i < task.completedSubtasks) {
-				subtaskBox.classList.add("completed");
-			}
-			subtaskContainer.appendChild(subtaskBox);
-		}
-		card.appendChild(subtaskContainer);
+		const progressFill = document.createElement("div");
+		progressFill.className = "task-timeline-progress-fill";
+		const pct = Math.round((task.completedSubtasks / task.totalSubtasks) * 100);
+		progressFill.style.width = `${pct}%`;
+
+		progressBar.appendChild(progressFill);
+		card.appendChild(progressBar);
 	}
 
 	card.classList.add("hover-enabled");

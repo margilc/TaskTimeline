@@ -9,7 +9,8 @@ import { updateLayout, clearLayoutCache } from './update/updateLayout';
 import { updateBoardGrouping } from './update/updateBoardGrouping';
 import { updateSettings } from './update/updateSettings';
 import { createTask } from './update/createTask';
-import { renameTaskFileForNewStartDate } from './utils/fileRenameUtils';
+import { renameTaskFileForNewStartDate, renameTaskFileForNewName, parseTaskFilename, identifierToName } from './utils/fileRenameUtils';
+import { updateTaskFrontmatter } from './utils/frontmatterUtils';
 import { updateDateBounds } from './update/updateDateBounds';
 import { DEFAULT_COLOR } from './utils/colorUtils';
 import { TaskIndex } from './TaskIndex';
@@ -34,6 +35,10 @@ export class AppStateManager extends Component {
     // Event coalescing state
     private pendingLayoutUpdate = false;
     private rafId: number | null = null;
+
+    // Loop prevention for bidirectional name-filename sync
+    private pendingRenames: Set<string> = new Set();
+    private pendingFrontmatterUpdates: Set<string> = new Set();
 
     constructor(plugin: Plugin) {
         super();
@@ -112,6 +117,15 @@ export class AppStateManager extends Component {
                 if (this.taskIndex) {
                     await this.taskIndex.handleFileRename(file, oldPath);
                 }
+
+                // Check if this rename was triggered by our own name→filename sync
+                if (this.pendingRenames.has(oldPath)) {
+                    this.pendingRenames.delete(oldPath);
+                } else {
+                    // External rename: sync filename identifier → frontmatter name
+                    await this.syncNameFromFilename(file, oldPath);
+                }
+
                 this.events.trigger(PluginEvent.UpdateTasksPending);
             }
         }
@@ -127,6 +141,13 @@ export class AppStateManager extends Component {
     }
 
     private async handleFileModifyWithRenaming(file: TFile): Promise<void> {
+        // Guard: skip if this modify was triggered by our own filename→name sync
+        if (this.pendingFrontmatterUpdates.has(file.path)) {
+            this.pendingFrontmatterUpdates.delete(file.path);
+            this.events.trigger(PluginEvent.UpdateTasksPending);
+            return;
+        }
+
         try {
             const currentTasks = this.state.volatile.currentTasks || [];
             const taskBeforeUpdate = currentTasks.find(task => task.filePath === file.path);
@@ -135,14 +156,42 @@ export class AppStateManager extends Component {
             const { parseTaskFromContent } = await import('./utils/taskUtils');
             const parsedTask = parseTaskFromContent(content, file.path);
 
-            if (parsedTask && taskBeforeUpdate && parsedTask.start !== taskBeforeUpdate.start) {
-                await renameTaskFileForNewStartDate(this.app, taskBeforeUpdate, parsedTask.start);
+            if (parsedTask && taskBeforeUpdate) {
+                if (parsedTask.start !== taskBeforeUpdate.start) {
+                    await renameTaskFileForNewStartDate(this.app, taskBeforeUpdate, parsedTask.start);
+                } else if (parsedTask.name !== taskBeforeUpdate.name) {
+                    this.pendingRenames.add(file.path);
+                    const newPath = await renameTaskFileForNewName(this.app, file.path, parsedTask.name);
+                    if (!newPath) {
+                        this.pendingRenames.delete(file.path);
+                    }
+                }
             }
 
             this.events.trigger(PluginEvent.UpdateTasksPending);
         } catch (error) {
             console.error('Error handling file modification with renaming:', error);
             this.events.trigger(PluginEvent.UpdateTasksPending);
+        }
+    }
+
+    private async syncNameFromFilename(file: TFile, oldPath: string): Promise<void> {
+        try {
+            const oldFileName = oldPath.split('/').pop() || '';
+            const newFileName = file.name;
+
+            const oldParsed = parseTaskFilename(oldFileName);
+            const newParsed = parseTaskFilename(newFileName);
+
+            if (!oldParsed || !newParsed) return;
+
+            if (oldParsed.identifier !== newParsed.identifier) {
+                const newName = identifierToName(newParsed.identifier);
+                this.pendingFrontmatterUpdates.add(file.path);
+                await updateTaskFrontmatter(this.app, file.path, { name: newName });
+            }
+        } catch (error) {
+            console.error('Error syncing name from filename:', error);
         }
     }
 
@@ -560,6 +609,8 @@ export class AppStateManager extends Component {
             this.rafId = null;
         }
         this.pendingLayoutUpdate = false;
+        this.pendingRenames.clear();
+        this.pendingFrontmatterUpdates.clear();
 
         if (this.taskIndex) {
             this.taskIndex.clear();

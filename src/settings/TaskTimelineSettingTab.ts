@@ -48,16 +48,8 @@ export class TaskTimelineSettingTab extends PluginSettingTab {
 					await this.updateSetting("openInNewPane", value);
 				}));
 
-		new Setting(containerEl)
-			.setName("Row height")
-			.setDesc("Height of task cards in pixels (60-120)")
-			.addSlider(slider => slider
-				.setLimits(60, 120, 5)
-				.setValue(settings.rowHeight)
-				.setDynamicTooltip()
-				.onChange(async (value) => {
-					await this.updateSetting("rowHeight", value);
-				}));
+		this.addIntSetting(containerEl, settings, "rowHeight", "Row height (px)",
+			"Height of task cards in pixels", 80);
 
 		// --- Zoom Settings ---
 		containerEl.createEl('h3', { text: 'Zoom' });

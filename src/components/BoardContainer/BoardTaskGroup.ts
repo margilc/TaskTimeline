@@ -62,7 +62,6 @@ export function BoardTaskGroup(
 	header.style.paddingRight = '5px';
 	header.style.paddingBottom = '5px';
 	header.style.cursor = 'pointer';
-	header.style.position = 'relative';
 
 	const headerText = document.createElement("span");
 	headerText.textContent = groupName;

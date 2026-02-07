@@ -1,6 +1,7 @@
 import { App, TFolder } from "obsidian";
 import { IAppState } from "../../interfaces/IAppState";
 import { NewTaskFormData } from "../../components/NewTaskModal";
+import { nameToIdentifier } from "../utils/fileRenameUtils";
 
 export async function createTask(app: App, state: IAppState, taskData: NewTaskFormData): Promise<IAppState> {
 	const settings = state.persistent.settings;
@@ -24,8 +25,7 @@ export async function createTask(app: App, state: IAppState, taskData: NewTaskFo
 	// Generate unique filename using start date and task name
 	const startDate = new Date(taskData.start);
 	const datePrefix = startDate.toISOString().split('T')[0].replace(/-/g, '');
-	const safeName = taskData.name.replace(/[^a-zA-Z0-9\s]/g, '').replace(/\s+/g, '_');
-	const identifier = safeName.slice(0, 20);
+	const identifier = nameToIdentifier(taskData.name);
 	
 	let filename = `${datePrefix}_${identifier}.md`;
 	let counter = 1;
