@@ -93,8 +93,9 @@ async function buildProject() {
   try {
     await esbuild.build(buildOptions);
     console.log("Build completed successfully.");
-    // Always run post-build steps (copy files to test vault)
-    await handleRebuild();
+    if (!prod) {
+      await handleRebuild();
+    }
   } catch (err) {
     console.error("Build failed:", err);
     throw err;
