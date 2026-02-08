@@ -10,6 +10,7 @@ export interface ITask {
     priority: number;
     totalSubtasks: number;
     completedSubtasks: number;
+    linkedTaskIds?: string[];  // Resolved task IDs from [[wiki-links]] in content
     // Layout properties (added by layout business logic)
     xStart?: number;  // 1-based column start
     xEnd?: number;    // 1-based column end

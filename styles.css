@@ -141,6 +141,7 @@ body.theme-dark .tt-dropdown-trigger {
   gap: var(--spacing-sm);
   overflow: auto;
   min-height: 0;
+  position: relative;
   /* Hide scrollbars - navigation via right-click pan */
   scrollbar-width: none;           /* Firefox */
   -ms-overflow-style: none;        /* IE/Edge */
@@ -582,6 +583,27 @@ body.theme-dark .task-timeline-task:hover {
 }
 
 /* Task Colors (Removed - now applied via inline styles based on settings) */
+
+/* =================
+   ARROW OVERLAY
+   ================= */
+.board-arrow-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  pointer-events: none;
+  z-index: 50;
+}
+
+.board-arrow-path {
+  opacity: 0;
+  animation: arrow-fade-in 0.2s ease forwards;
+}
+
+@keyframes arrow-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
 
 /* =================
    TOOLTIPS

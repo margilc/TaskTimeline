@@ -10,6 +10,7 @@ import { isTaskHidden } from "../../core/utils/colorUtils";
 import { TimeUnit } from "../../enums/TimeUnit";
 import { snapToUnitBoundary, countDateUnits } from "../../core/update/updateLayout";
 import { addTime } from "../../core/utils/dateUtils";
+import { BoardArrowOverlay } from "./BoardArrowOverlay";
 
 export class BoardContainer {
     public element: HTMLElement;
@@ -39,6 +40,9 @@ export class BoardContainer {
     // Zoom anchor for cursor-anchored zoom
     private pendingZoomAnchor: { anchorDate: Date, mouseX: number } | null = null;
 
+    // Arrow overlay for task link visualization
+    private arrowOverlay: BoardArrowOverlay | null = null;
+
     constructor(app: App, appStateManager: AppStateManager, isDebugMode = false) {
         this.app = app;
         this.appStateManager = appStateManager;
@@ -61,6 +65,9 @@ export class BoardContainer {
         this.groupsContainer = document.createElement("div");
         this.groupsContainer.classList.add("groups-container");
         this.contentElement.appendChild(this.groupsContainer);
+
+        // Arrow overlay for link visualization (inside scrollable content)
+        this.arrowOverlay = new BoardArrowOverlay(this.contentElement);
 
         // Create shared tooltip once (instead of per-card)
         this.sharedTooltip = this.createSharedTooltip();
@@ -283,6 +290,11 @@ export class BoardContainer {
 
             this.updateGroups(boardLayout, settings, columnWidth, rowHeight);
 
+            // Update arrow overlay dimensions to match scrollable area
+            if (this.arrowOverlay) {
+                requestAnimationFrame(() => this.arrowOverlay?.updateSize());
+            }
+
             // Apply zoom cursor anchor after DOM update
             if (this.pendingZoomAnchor) {
                 const dateBounds = state.volatile.dateBounds;
@@ -319,6 +331,7 @@ export class BoardContainer {
             this.groupsContainer.innerHTML = '';
         }
         this.groupElements.clear();
+        this.arrowOverlay?.clearArrows();
     }
 
     private showEmptyState(message: string, className: string): void {
@@ -393,11 +406,11 @@ export class BoardContainer {
 
                 const existingGroup = this.groupElements.get(groupName);
                 if (existingGroup) {
-                    const newGroupEl = BoardTaskGroup(groupName, validTasks, gridConfig, settings, this.appStateManager, this.app, this.isDebugMode, this.sharedTooltip, groupIdx, totalGroups);
+                    const newGroupEl = BoardTaskGroup(groupName, validTasks, gridConfig, settings, this.appStateManager, this.app, this.isDebugMode, this.sharedTooltip, groupIdx, totalGroups, this.arrowOverlay ?? undefined);
                     existingGroup.replaceWith(newGroupEl);
                     this.groupElements.set(groupName, newGroupEl);
                 } else {
-                    const taskGroupEl = BoardTaskGroup(groupName, validTasks, gridConfig, settings, this.appStateManager, this.app, this.isDebugMode, this.sharedTooltip, groupIdx, totalGroups);
+                    const taskGroupEl = BoardTaskGroup(groupName, validTasks, gridConfig, settings, this.appStateManager, this.app, this.isDebugMode, this.sharedTooltip, groupIdx, totalGroups, this.arrowOverlay ?? undefined);
                     this.groupsContainer!.appendChild(taskGroupEl);
                     this.groupElements.set(groupName, taskGroupEl);
                 }
@@ -455,6 +468,11 @@ export class BoardContainer {
         if (this.scrollCleanup) {
             this.scrollCleanup();
             this.scrollCleanup = null;
+        }
+
+        if (this.arrowOverlay) {
+            this.arrowOverlay.destroy();
+            this.arrowOverlay = null;
         }
 
         this.groupElements.clear();

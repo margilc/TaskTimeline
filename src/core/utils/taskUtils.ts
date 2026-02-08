@@ -22,7 +22,8 @@ export function parseTaskFromContent(fileContent: string, filePath: string): ITa
     
     const contentBody = fileContent.replace(frontmatterRegex, '').trim();
     const { totalSubtasks, completedSubtasks } = parseSubtasks(contentBody);
-    
+    const rawLinks = extractWikiLinks(contentBody);
+
     const task: ITask = {
         id: generateTaskId(filePath),
         name: frontmatter.name,
@@ -34,7 +35,8 @@ export function parseTaskFromContent(fileContent: string, filePath: string): ITa
         filePath,
         content: contentBody,
         totalSubtasks,
-        completedSubtasks
+        completedSubtasks,
+        linkedTaskIds: rawLinks.length > 0 ? rawLinks : undefined
     };
 
     if (task.end && task.start > task.end) {
@@ -91,6 +93,19 @@ function parseFrontmatter(frontmatterText: string): Record<string, any> {
     }
     
     return result;
+}
+
+export function extractWikiLinks(content: string): string[] {
+    const wikiLinkRegex = /\[\[([^\]|]+)(?:\|[^\]]+)?\]\]/g;
+    const links: string[] = [];
+    let match: RegExpExecArray | null;
+    while ((match = wikiLinkRegex.exec(content)) !== null) {
+        const target = match[1].trim();
+        if (target) {
+            links.push(target);
+        }
+    }
+    return links;
 }
 
 function parseSubtasks(content: string): { totalSubtasks: number; completedSubtasks: number } {

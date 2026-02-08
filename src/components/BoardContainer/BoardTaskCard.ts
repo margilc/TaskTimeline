@@ -4,13 +4,15 @@ import { ITask } from "../../interfaces/ITask";
 import { ITaskTimelineSettings } from "../../interfaces/ITaskTimelineSettings";
 import { AppStateManager } from "../../core/AppStateManager";
 import { DEFAULT_COLOR, HIDE_VALUE } from "../../core/utils/colorUtils";
+import { BoardArrowOverlay } from "./BoardArrowOverlay";
 
 export function BoardTaskCard(
 	task: ITask,
 	settings: ITaskTimelineSettings,
 	appStateManager: AppStateManager,
 	isDebugMode = false,
-	sharedTooltip: HTMLElement
+	sharedTooltip: HTMLElement,
+	arrowOverlay?: BoardArrowOverlay
 ): HTMLElement {
 	const card = document.createElement("div");
 	card.className = "task-timeline-task";
@@ -76,6 +78,16 @@ export function BoardTaskCard(
 			positionTooltipAtMouse(e, sharedTooltip);
 		}
 	});
+
+	// Arrow overlay: show arrows on hover if task has links
+	if (arrowOverlay && task.linkedTaskIds && task.linkedTaskIds.length > 0) {
+		card.addEventListener("mouseenter", () => {
+			arrowOverlay.showArrows(task.id, task.linkedTaskIds!);
+		});
+		card.addEventListener("mouseleave", () => {
+			arrowOverlay.clearArrows();
+		});
+	}
 
 	return card;
 }

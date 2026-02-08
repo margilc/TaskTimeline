@@ -3,6 +3,7 @@ import { IPersistentState, IVolatileState } from '../../interfaces/IAppState';
 import { ITask } from '../../interfaces/ITask';
 import { parseTaskFromContent } from '../utils/taskUtils';
 import { generateAvailableGroups } from '../utils/groupingUtils';
+import { resolveTaskLinks } from '../utils/linkUtils';
 import { TaskIndex } from '../TaskIndex';
 
 export async function updateTasks(
@@ -68,10 +69,13 @@ export async function updateTasks(
         };
     }
     
+    // Resolve [[wiki-links]] to task IDs across all collected tasks
+    resolveTaskLinks(tasks);
+
     // Update group ordering if board grouping is active
     let updatedPersistent = currentPersistent;
     const currentGrouping = currentPersistent.boardGrouping;
-    
+
     if (currentGrouping) {
         const updatedAvailableGroups = generateAvailableGroups(
             tasks, 
@@ -140,8 +144,11 @@ export function updateTasksFromIndex(
         };
     }
 
-    // Get tasks from index (O(n) where n = number of tasks, not files to scan)
-    const tasks = taskIndex.getTasks(currentProjectName);
+    // Get tasks from index and clone to avoid mutating cached objects
+    const tasks = taskIndex.getTasks(currentProjectName).map(t => ({ ...t }));
+
+    // Resolve [[wiki-links]] to task IDs across all collected tasks
+    resolveTaskLinks(tasks);
 
     // Update group ordering if board grouping is active
     let updatedPersistent = currentPersistent;

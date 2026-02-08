@@ -6,6 +6,7 @@ import { AppStateManager } from "../../core/AppStateManager";
 import { ITask } from "../../interfaces/ITask";
 import { TaskCreationHelper } from "../../utils/taskCreationHelper";
 import { PluginEvent } from "../../enums/events";
+import { BoardArrowOverlay } from "./BoardArrowOverlay";
 
 export function BoardTaskGroup(
 	groupName: string,
@@ -22,7 +23,8 @@ export function BoardTaskGroup(
 	isDebugMode = false,
 	sharedTooltip: HTMLElement,
 	groupIndex: number,
-	totalGroups: number
+	totalGroups: number,
+	arrowOverlay?: BoardArrowOverlay
 ): HTMLElement {
 	const container = document.createElement("div");
 	container.className = isDebugMode
@@ -131,7 +133,7 @@ export function BoardTaskGroup(
 	container.appendChild(header);
 
 	tasks.forEach((task) => {
-		const card = BoardTaskCard(task, settings, appStateManager, isDebugMode, sharedTooltip);
+		const card = BoardTaskCard(task, settings, appStateManager, isDebugMode, sharedTooltip, arrowOverlay);
 
 		const startX = (task.xStart ?? 1);
 		const endX = (task.xEnd ?? startX);
