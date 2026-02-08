@@ -6,6 +6,7 @@ import { PluginEvent } from "../../enums/events";
 import { ITask } from "../../interfaces/ITask";
 import { createEmptyStateElement, validateTask } from "../../core/utils/boardUtils";
 import { debounce } from "../../core/utils/layoutUtils";
+import { isTaskHidden } from "../../core/utils/colorUtils";
 import { TimeUnit } from "../../enums/TimeUnit";
 import { snapToUnitBoundary, countDateUnits } from "../../core/update/updateLayout";
 import { addTime } from "../../core/utils/dateUtils";
@@ -360,15 +361,24 @@ export class BoardContainer {
                 currentGroupNames.add(groupName);
 
                 const tasksInGroup = taskGrid.tasks as ITask[];
+                const persistentState = this.appStateManager.getPersistentState();
                 const validTasks = tasksInGroup.filter(task => {
                     const validation = validateTask(task);
-                    return validation.isValid;
+                    if (!validation.isValid) return false;
+                    return !isTaskHidden(task, persistentState.colorVariable, persistentState.currentProjectName, persistentState.colorMappings);
                 });
 
                 if (validTasks.length === 0) {
                     this.removeGroup(groupName);
                     currentGroupNames.delete(groupName);
                     continue;
+                }
+
+                // Compact y positions to eliminate gaps from hidden tasks
+                const uniqueYs = [...new Set(validTasks.map(t => t.y ?? 0))].sort((a, b) => a - b);
+                const yMap = new Map(uniqueYs.map((y, i) => [y, i]));
+                for (const task of validTasks) {
+                    task.y = yMap.get(task.y ?? 0) ?? 0;
                 }
 
                 const maxY = validTasks.reduce((max: number, task: ITask) => Math.max(max, task.y ?? -1), -1);

@@ -56,3 +56,24 @@ export function isValidColor(color: string): boolean {
 export function isValidColorVariable(variable: string): variable is ColorVariable {
     return COLOR_VARIABLES.includes(variable as ColorVariable);
 }
+
+export function isTaskHidden(
+    task: { category?: string; status?: string; priority?: number | string },
+    colorVariable: string | undefined,
+    currentProject: string | undefined,
+    colorMappings: Record<string, Record<string, Record<string, string>>> | undefined
+): boolean {
+    if (!colorVariable || colorVariable === 'none' || !currentProject) return false;
+
+    let taskValue: string | undefined;
+    switch (colorVariable) {
+        case 'category': taskValue = task.category; break;
+        case 'status': taskValue = task.status; break;
+        case 'priority': taskValue = task.priority?.toString(); break;
+        default: return false;
+    }
+
+    if (!taskValue) return false;
+
+    return colorMappings?.[currentProject]?.[colorVariable]?.[taskValue] === HIDE_VALUE;
+}

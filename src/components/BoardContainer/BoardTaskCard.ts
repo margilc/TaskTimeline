@@ -3,7 +3,7 @@ import { TFile } from "obsidian";
 import { ITask } from "../../interfaces/ITask";
 import { ITaskTimelineSettings } from "../../interfaces/ITaskTimelineSettings";
 import { AppStateManager } from "../../core/AppStateManager";
-import { DEFAULT_COLOR, HIDE_COLOR, HIDE_VALUE } from "../../core/utils/colorUtils";
+import { DEFAULT_COLOR, HIDE_VALUE } from "../../core/utils/colorUtils";
 
 export function BoardTaskCard(
 	task: ITask,
@@ -21,9 +21,7 @@ export function BoardTaskCard(
 
 	// Apply color based on current color variable or user's default card color
 	const taskColor = getTaskColor(task, appStateManager);
-	if (taskColor === HIDE_COLOR) {
-		card.style.display = "none";
-	} else if (taskColor) {
+	if (taskColor) {
 		card.style.backgroundColor = taskColor;
 		const contrastText = getContrastingTextColor(taskColor);
 		if (contrastText) {
@@ -200,9 +198,7 @@ function getTaskColor(task: ITask, appStateManager: AppStateManager): string {
 	}
 
 	const color = colorMappings[currentProject][colorVariable][taskValue];
-	if (!color) return defaultCardColor;
-
-	if (color === HIDE_VALUE) return HIDE_COLOR;
+	if (!color || color === HIDE_VALUE) return defaultCardColor;
 
 	return color;
 }
