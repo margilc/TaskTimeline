@@ -56,11 +56,6 @@ export function BoardTaskGroup(
 
 	const header = document.createElement("div");
 	header.className = "group-header clickable-header";
-	header.style.display = 'flex';
-	header.style.alignItems = 'flex-end';
-	header.style.justifyContent = 'space-between';
-	header.style.paddingRight = '5px';
-	header.style.paddingBottom = '5px';
 	header.style.cursor = 'pointer';
 
 	const headerText = document.createElement("span");

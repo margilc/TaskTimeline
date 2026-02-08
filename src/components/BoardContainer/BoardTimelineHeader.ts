@@ -25,7 +25,7 @@ export function BoardTimelineHeader(boardLayout: any, appStateManager: AppStateM
   container.style.gridAutoColumns = "unset";
   
   // Simple container styling
-  container.style.minHeight = "40px";
+  container.style.minHeight = "36px";
 
   // Create the grouping selection dropdown for the first column (group header column)
   const groupingSelectionCell = BoardGroupingSelection(appStateManager);
@@ -51,9 +51,6 @@ export function BoardTimelineHeader(boardLayout: any, appStateManager: AppStateM
     cellEl.style.gridRowStart = "1";
     
     // Simple header cell styling
-    cellEl.style.textAlign = "center";
-    cellEl.style.padding = "8px 4px";
-    cellEl.style.fontSize = "12px";
     cellEl.style.cursor = "pointer";
     cellEl.style.position = "relative";
     

@@ -113,7 +113,6 @@ export class NavBar {
 			notification.style.padding = "10px 15px";
 			notification.style.borderRadius = "5px";
 			notification.style.zIndex = "9999";
-			notification.style.fontSize = "14px";
 			document.body.appendChild(notification);
 
 			setTimeout(() => {
