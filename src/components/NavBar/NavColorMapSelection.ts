@@ -1,13 +1,13 @@
-import { DropdownComponent } from 'obsidian';
 import { AppStateManager } from '../../core/AppStateManager';
 import { PluginEvent } from '../../enums/events';
 import { COLOR_VARIABLES, getAvailableColors, DEFAULT_COLOR, HIDE_COLOR, HIDE_VALUE } from '../../core/utils/colorUtils';
+import { CustomDropdown } from '../common/CustomDropdown';
 
 export class NavColorMapSelection {
     private container: HTMLElement;
     private appStateManager: AppStateManager;
-    private variableDropdown: DropdownComponent;
     private colorPickersContainer: HTMLElement;
+    private dropdowns: CustomDropdown[] = [];
 
     // Bound handlers for proper event listener cleanup
     private readonly boundRender = this.render.bind(this);
@@ -25,11 +25,13 @@ export class NavColorMapSelection {
     }
 
     private render(): void {
+        // Destroy existing dropdowns before clearing
+        this.destroyDropdowns();
         this.container.empty();
         this.container.addClass('nav-color-map-selection');
 
         const controlsContainer = this.container.createDiv('nav-color-map-controls');
-        
+
         this.createVariableDropdown(controlsContainer);
         this.createColorPickersContainer(controlsContainer);
         this.updateColorPickers();
@@ -37,24 +39,26 @@ export class NavColorMapSelection {
 
     private createVariableDropdown(parent: HTMLElement): void {
         const dropdownContainer = parent.createDiv('nav-dropdown-container');
-        
-        this.variableDropdown = new DropdownComponent(dropdownContainer);
-        
-        COLOR_VARIABLES.forEach(variable => {
-            this.variableDropdown.addOption(variable, `Color Variable: ${variable}`);
-        });
-        
+
+        const options = COLOR_VARIABLES.map(variable => ({
+            value: variable,
+            label: `Color Variable: ${variable}`
+        }));
+
         const currentVariable = this.appStateManager.getState().persistent.colorVariable || 'none';
-        this.variableDropdown.setValue(currentVariable);
-        
-        this.variableDropdown.selectEl.style.minWidth = "180px";
-        
-        this.variableDropdown.onChange((value) => {
-            this.appStateManager.getEvents().trigger(PluginEvent.UpdateColorMappingsPending, {
-                type: 'variable',
-                variable: value
-            });
+
+        const dropdown = new CustomDropdown(dropdownContainer, {
+            options,
+            value: currentVariable,
+            onChange: (value) => {
+                this.appStateManager.getEvents().trigger(PluginEvent.UpdateColorMappingsPending, {
+                    type: 'variable',
+                    variable: value
+                });
+            }
         });
+
+        this.dropdowns.push(dropdown);
     }
 
     private createColorPickersContainer(parent: HTMLElement): void {
@@ -63,17 +67,17 @@ export class NavColorMapSelection {
 
     private updateColorPickers(): void {
         this.colorPickersContainer.empty();
-        
+
         const state = this.appStateManager.getState();
         const currentVariable = state.persistent.colorVariable || 'none';
-        
+
         if (currentVariable === 'none') {
             return;
         }
-        
+
         const levels = this.appStateManager.getAvailableLevels(currentVariable);
         const currentProject = state.persistent.currentProjectName || 'All Projects';
-        
+
         levels.forEach(level => {
             this.createColorPickerDropdown(level, currentProject, currentVariable);
         });
@@ -81,82 +85,34 @@ export class NavColorMapSelection {
 
     private createColorPickerDropdown(level: string, projectId: string, variable: string): void {
         const dropdownContainer = this.colorPickersContainer.createDiv('nav-dropdown-container');
-        
-        // Create a wrapper that will contain both the swatch and the dropdown
-        const dropdownWrapper = dropdownContainer.createDiv('nav-color-dropdown-wrapper');
-        
-        // Create the color swatch
-        const colorSwatch = dropdownWrapper.createDiv('nav-color-swatch-indicator');
-        
-        // Create the dropdown in the wrapper
-        const dropdown = new DropdownComponent(dropdownWrapper);
-        
+
         const availableColors = getAvailableColors();
         const currentColor = this.appStateManager.getColorForLevel(projectId, variable, level);
-        
-        // Add all color options
-        availableColors.forEach(({ name, value }) => {
-            dropdown.addOption(value, name);
-        });
-        
-        // Add special options
-        dropdown.addOption(HIDE_VALUE, 'HIDE');
-        dropdown.addOption(DEFAULT_COLOR, 'Default (White)');
-        
-        // Set current value
-        dropdown.setValue(currentColor);
-        
-        // Add level label as prefix to dropdown text
-        const selectElement = dropdown.selectEl;
-        selectElement.addClass('nav-color-value-select');
-        selectElement.setAttribute('data-level', level);
-        
-        // Update the display to show level name and color swatch
-        this.updateDropdownDisplay(dropdown, level, currentColor, colorSwatch);
-        
-        dropdown.onChange((value) => {
-            this.updateColorMapping(projectId, variable, level, value);
-            this.updateDropdownDisplay(dropdown, level, value, colorSwatch);
-        });
-    }
 
-    private updateDropdownDisplay(dropdown: DropdownComponent, level: string, currentColor: string, colorSwatch: HTMLElement): void {
-        const selectElement = dropdown.selectEl;
-        
-        // Update the selected option to show just the level name
-        const options = Array.from(selectElement.options);
-        options.forEach(option => {
-            if (option.value === currentColor) {
-                option.text = level;
-                option.selected = true;
-            } else {
-                // Reset other options to their color names for the dropdown menu
-                const availableColors = getAvailableColors();
-                const colorInfo = availableColors.find(c => c.value === option.value);
-                if (colorInfo) {
-                    option.text = colorInfo.name;
-                } else if (option.value === HIDE_VALUE) {
-                    option.text = 'HIDE';
-                } else if (option.value === DEFAULT_COLOR) {
-                    option.text = 'Default (White)';
-                }
+        const options = [
+            ...availableColors.map(({ name, value }) => ({
+                value,
+                label: name,
+                swatch: value
+            })),
+            { value: HIDE_VALUE, label: 'HIDE', swatch: HIDE_COLOR },
+            { value: DEFAULT_COLOR, label: 'Default (White)' }
+        ];
+
+        const dropdown = new CustomDropdown(dropdownContainer, {
+            options,
+            value: currentColor,
+            onChange: (value) => {
+                this.updateColorMapping(projectId, variable, level, value);
+                dropdown.setTriggerText(level);
             }
         });
-        
-        // Update the color swatch
-        this.updateColorSwatch(colorSwatch, currentColor);
-    }
 
-    private updateColorSwatch(colorSwatch: HTMLElement, currentColor: string): void {
-        if (currentColor === HIDE_VALUE) {
-            colorSwatch.style.backgroundColor = HIDE_COLOR;
-            colorSwatch.addClass('hidden-swatch');
-        } else {
-            colorSwatch.style.backgroundColor = currentColor;
-            colorSwatch.removeClass('hidden-swatch');
-        }
-    }
+        // Show level name as trigger text instead of color name
+        dropdown.setTriggerText(level);
 
+        this.dropdowns.push(dropdown);
+    }
 
     private updateColorMapping(projectId: string, variable: string, level: string, color: string): void {
         this.appStateManager.getEvents().trigger(PluginEvent.UpdateColorMappingsPending, {
@@ -168,8 +124,16 @@ export class NavColorMapSelection {
         });
     }
 
+    private destroyDropdowns(): void {
+        for (const dropdown of this.dropdowns) {
+            dropdown.destroy();
+        }
+        this.dropdowns = [];
+    }
+
     public destroy(): void {
         this.appStateManager.getEvents().off(PluginEvent.UpdateTasksDone, this.boundRender);
         this.appStateManager.getEvents().off(PluginEvent.UpdateColorMappingsDone, this.boundRender);
+        this.destroyDropdowns();
     }
 }

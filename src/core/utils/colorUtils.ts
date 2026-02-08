@@ -1,13 +1,10 @@
-// Solarized accent colors for color variable picker
+// Muted accent colors for color variable picker (dark-mode friendly)
 export const PREDEFINED_COLORS = {
-    Yellow: "#b58900",
-    Orange: "#cb4b16",
-    Red: "#dc322f",
-    Magenta: "#d33682",
-    Violet: "#6c71c4",
-    Blue: "#268bd2",
-    Cyan: "#2aa198",
-    Green: "#859900"
+    Blue:   "#4E6E8E",  // muted steel blue
+    Green:  "#5A8A6A",  // muted sage
+    Amber:  "#9E8A5A",  // warm muted gold
+    Rose:   "#9E6A72",  // dusty rose
+    Violet: "#7E6E9E",  // soft lavender
 } as const;
 
 // Grey shades for default card/button color setting
