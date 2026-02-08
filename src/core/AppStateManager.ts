@@ -15,6 +15,7 @@ import { updateDateBounds } from './update/updateDateBounds';
 import { DEFAULT_COLOR } from './utils/colorUtils';
 import { TaskIndex } from './TaskIndex';
 import { ensureTemplatesFolder } from './utils/templateUtils';
+import { parseTaskFromContent } from './utils/taskUtils';
 import { TimeUnit } from '../enums/TimeUnit';
 
 // Ordered from finest to coarsest: index 0=day, 1=week, 2=month
@@ -154,7 +155,6 @@ export class AppStateManager extends Component {
             const taskBeforeUpdate = currentTasks.find(task => task.filePath === file.path);
 
             const content = await this.app.vault.read(file);
-            const { parseTaskFromContent } = await import('./utils/taskUtils');
             const parsedTask = parseTaskFromContent(content, file.path);
 
             if (parsedTask && taskBeforeUpdate) {
@@ -220,6 +220,7 @@ export class AppStateManager extends Component {
             this.events.trigger(PluginEvent.UpdateProjectsDone);
             this.events.trigger(PluginEvent.AppStateUpdated, this.state);
         } catch (error) {
+            console.error('TaskTimeline: Failed to update projects', error);
         }
     }
 
@@ -247,6 +248,7 @@ export class AppStateManager extends Component {
 
             this.triggerLayoutUpdate();
         } catch (error) {
+            console.error('TaskTimeline: Failed to update tasks', error);
         }
     }
 
@@ -278,6 +280,7 @@ export class AppStateManager extends Component {
             this.events.trigger(PluginEvent.UpdateColorMappingsDone);
             this.events.trigger(PluginEvent.AppStateUpdated, this.state);
         } catch (error) {
+            console.error('TaskTimeline: Failed to update color mappings', error);
         }
     }
 
@@ -293,6 +296,7 @@ export class AppStateManager extends Component {
             this.events.trigger(PluginEvent.UpdateCurrentDateDone);
             this.events.trigger(PluginEvent.AppStateUpdated, this.state);
         } catch (error) {
+            console.error('TaskTimeline: Failed to update current date', error);
         }
     }
 
@@ -306,6 +310,7 @@ export class AppStateManager extends Component {
             this.events.trigger(PluginEvent.UpdateLayoutDone);
             this.events.trigger(PluginEvent.AppStateUpdated, this.state);
         } catch (error) {
+            console.error('TaskTimeline: Failed to update layout', error);
         }
     }
 
@@ -324,6 +329,7 @@ export class AppStateManager extends Component {
 
             this.triggerLayoutUpdate();
         } catch (error) {
+            console.error('TaskTimeline: Failed to update board grouping', error);
         }
     }
 
@@ -349,6 +355,7 @@ export class AppStateManager extends Component {
             this.events.trigger(PluginEvent.UpdateSettingsDone);
             this.events.trigger(PluginEvent.AppStateUpdated, this.state);
         } catch (error) {
+            console.error('TaskTimeline: Failed to update settings', error);
         }
     }
 
@@ -383,6 +390,7 @@ export class AppStateManager extends Component {
 
             this.triggerLayoutUpdate();
         } catch (error) {
+            console.error('TaskTimeline: Failed to update zoom', error);
         }
     }
 
@@ -425,6 +433,7 @@ export class AppStateManager extends Component {
 
             this.triggerLayoutUpdate();
         } catch (error) {
+            console.error('TaskTimeline: Failed to update group order', error);
         }
     }
 
@@ -458,7 +467,6 @@ export class AppStateManager extends Component {
             availableProjects: ["All Projects"],
             currentTasks: [],
             boardLayout: undefined,
-            activeFilters: {},
             zoomState: defaultZoom,
             dateBounds: undefined,
         };
@@ -511,6 +519,7 @@ export class AppStateManager extends Component {
 
             this.events.trigger(PluginEvent.AppStateUpdated, this.state);
         } catch (error) {
+            console.error('TaskTimeline: Failed to initialize', error);
         }
     }
 

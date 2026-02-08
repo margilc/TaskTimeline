@@ -67,7 +67,7 @@ export function updateLayout(app: App, currentState: IAppState): IAppState {
         viewport: { startDate, endDate }
     };
 
-    if (layoutCache.size > 10) {
+    if (layoutCache.size >= 10) {
         const firstKey = layoutCache.keys().next().value;
         layoutCache.delete(firstKey);
     }
@@ -222,8 +222,8 @@ function getDuration(task: ITask): number {
 }
 
 function findTaskPosition(task: ITask, columnHeaders: Array<{date: Date, label: string, index: number, isEmphasized: boolean}>, timeUnit: TimeUnit): {xStart: number, xEnd: number} | null {
-    const taskStart = new Date(task.start);
-    const taskEnd = task.end ? new Date(task.end) : taskStart;
+    const taskStart = normalizeDate(new Date(task.start));
+    const taskEnd = task.end ? normalizeDate(new Date(task.end)) : taskStart;
 
     let xStart = -1;
     let xEnd = -1;
@@ -240,9 +240,8 @@ function findTaskPosition(task: ITask, columnHeaders: Array<{date: Date, label: 
     return { xStart, xEnd };
 }
 
-function isTaskInColumn(taskStart: Date, taskEnd: Date, columnDate: Date, timeUnit: TimeUnit): boolean {
-    const normalizedTaskStart = normalizeDate(taskStart);
-    const normalizedTaskEnd = normalizeDate(taskEnd);
+// Note: taskStart and taskEnd are pre-normalized by findTaskPosition
+function isTaskInColumn(normalizedTaskStart: Date, normalizedTaskEnd: Date, columnDate: Date, timeUnit: TimeUnit): boolean {
     const normalizedColumnDate = normalizeDate(columnDate);
 
     if (timeUnit === TimeUnit.DAY) {
@@ -261,10 +260,11 @@ function isTaskInColumn(taskStart: Date, taskEnd: Date, columnDate: Date, timeUn
 }
 
 function getWeekStart(date: Date): Date {
-    const d = new Date(date);
+    const d = new Date(date.getTime());
     const day = d.getUTCDay();
     const diff = d.getUTCDate() - day + (day === 0 ? -6 : 1);
-    return new Date(d.setUTCDate(diff));
+    d.setUTCDate(diff);
+    return d;
 }
 
 function findAvailableRowOptimized(occupiedRows: Map<number, Set<number>>, xStart: number, xEnd: number): number {

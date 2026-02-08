@@ -11,6 +11,7 @@ import { TimeUnit } from "../../enums/TimeUnit";
 import { snapToUnitBoundary, countDateUnits } from "../../core/update/updateLayout";
 import { addTime } from "../../core/utils/dateUtils";
 import { BoardArrowOverlay } from "./BoardArrowOverlay";
+import { ITaskTimelineSettings } from "../../interfaces/ITaskTimelineSettings";
 
 export class BoardContainer {
     public element: HTMLElement;
@@ -102,7 +103,7 @@ export class BoardContainer {
             const zoom = state.volatile.zoomState;
             if (!zoom) return;
 
-            const settings = state.persistent.settings || {};
+            const settings = state.persistent.settings || {} as Partial<ITaskTimelineSettings>;
             const minColWidth = settings.minColWidth ?? 30;
             const maxColWidth = settings.maxColWidth ?? 150;
             const zoomStep = settings.zoomStep ?? 10;
@@ -266,7 +267,7 @@ export class BoardContainer {
 
             this.clearEmptyState();
 
-            const settings = state.persistent.settings || {};
+            const settings = state.persistent.settings || {} as Partial<ITaskTimelineSettings>;
             const zoomState = state.volatile.zoomState;
             const columnWidth = zoomState?.columnWidth || 100;
             const rowHeight = settings.rowHeight || 80;

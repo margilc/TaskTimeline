@@ -1,7 +1,8 @@
 // src/interfaces/IAppState.ts
+import { ITaskTimelineSettings } from './ITaskTimelineSettings';
+
 export interface IPersistentState {
-    // Settings from the existing interface
-    settings?: any;
+    settings?: ITaskTimelineSettings;
     // Navigation state
     currentProjectName?: string;
     lastOpenedDate?: string;
@@ -23,8 +24,6 @@ export interface IPersistentState {
     zoomLevel?: { modeIndex: number; columnWidth: number };
     // Scroll position persistence (pan position on the timeline)
     scrollPosition?: { left: number; top: number };
-    // Keep flexible for now
-    [key: string]: any;
 }
 
 export interface IZoomState {
@@ -51,13 +50,10 @@ export interface IVolatileState {
         timeUnit: string;
         viewport: {startDate: Date, endDate: Date};
     };
-    activeFilters?: any;
     // Zoom state
     zoomState?: IZoomState;
     // Auto-calculated date bounds from tasks
     dateBounds?: IDateBounds;
-    // Keep flexible for now
-    [key: string]: any;
 }
 
 export interface IAppState {

@@ -59,7 +59,7 @@ export function BoardTaskCard(
 	card.addEventListener("click", (e) => {
 		e.stopPropagation();
 		if (task.filePath) {
-			openTaskFile(task.filePath);
+			openTaskFile(task.filePath, appStateManager);
 		}
 	});
 
@@ -159,22 +159,29 @@ function updateSharedTooltipContent(tooltip: HTMLElement, task: ITask, isDebugMo
 	tooltip.appendChild(content);
 }
 
-// Track the task file leaf to reuse the same split pane
-let taskFileLeaf: any = null;
+// Track the task file leaf ID to reuse the same split pane
+let taskFileLeafId: string | null = null;
 
-function openTaskFile(filePath: string): void {
+function openTaskFile(filePath: string, appStateManager: AppStateManager): void {
 	const app = (window as any).app;
 	if (!app) return;
 
 	const file = app.vault.getAbstractFileByPath(filePath);
 	if (!file) return;
 
-	if (taskFileLeaf && app.workspace.getLeafById && app.workspace.getLeafById(taskFileLeaf.id)) {
-		taskFileLeaf.openFile(file as TFile);
-	} else {
-		taskFileLeaf = app.workspace.getLeaf("split", "vertical");
-		taskFileLeaf.openFile(file as TFile);
+	// Try to reuse existing leaf
+	if (taskFileLeafId) {
+		const existingLeaf = app.workspace.getLeafById(taskFileLeafId);
+		if (existingLeaf) {
+			existingLeaf.openFile(file as TFile);
+			return;
+		}
+		taskFileLeafId = null;
 	}
+
+	const newLeaf = app.workspace.getLeaf("split", "vertical");
+	taskFileLeafId = newLeaf.id;
+	newLeaf.openFile(file as TFile);
 }
 
 function getTaskColor(task: ITask, appStateManager: AppStateManager): string {

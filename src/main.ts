@@ -1,20 +1,15 @@
 import { Plugin, WorkspaceLeaf, Notice } from "obsidian";
 import { TaskTimelineView, TASK_TIMELINE_VIEW_TYPE } from "./views/TaskTimelineView";
 import { AppStateManager } from "./core/AppStateManager";
-import { DebugEventListener } from "./components/Debug/DebugEventListener";
 import { TaskTimelineSettingTab } from "./settings/TaskTimelineSettingTab";
 
 export default class TaskTimelinePlugin extends Plugin {
 	appStateManager: AppStateManager;
-	debugEventListener: DebugEventListener;
 
 	async onload() {
 		// AppStateManager - Includes vault event listening functionality
 		this.appStateManager = new AppStateManager(this);
 		await this.appStateManager.initialize();
-		
-		// DebugEventListener - Temporarily disabled to eliminate console spam
-		// this.debugEventListener = new DebugEventListener(this.appStateManager);
 		
 		this.registerView(
 			TASK_TIMELINE_VIEW_TYPE,
@@ -72,8 +67,6 @@ export default class TaskTimelinePlugin extends Plugin {
 	}
 
 	onunload() {
-		// Clean up in reverse order
-		this.debugEventListener?.destroy();
 		this.appStateManager?.destroy();
 		this.app.workspace.detachLeavesOfType(TASK_TIMELINE_VIEW_TYPE);
 	}
