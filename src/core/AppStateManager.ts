@@ -101,7 +101,7 @@ export class AppStateManager extends Component {
     private handleFileDelete(file: TAbstractFile): void {
         if (this.isRelevantFile(file)) {
             if (file instanceof TFolder) {
-                this.handleUpdateProjectsPending();
+                this.handleUpdateProjectsPending({ resetMissingProject: true });
             } else if (file instanceof TFile && file.extension === 'md') {
                 if (this.taskIndex) {
                     this.taskIndex.handleFileDelete(file);
@@ -114,7 +114,7 @@ export class AppStateManager extends Component {
     private async handleFileRename(file: TAbstractFile, oldPath: string): Promise<void> {
         if (this.isRelevantPath(oldPath) || this.isRelevantFile(file)) {
             if (file instanceof TFolder) {
-                this.handleUpdateProjectsPending();
+                this.handleUpdateProjectsPending({ resetMissingProject: true });
             } else if (file instanceof TFile && file.extension === 'md') {
                 if (this.taskIndex) {
                     await this.taskIndex.handleFileRename(file, oldPath);
@@ -207,9 +207,9 @@ export class AppStateManager extends Component {
         return true;
     }
 
-    private async handleUpdateProjectsPending(): Promise<void> {
+    private async handleUpdateProjectsPending(options: { resetMissingProject?: boolean } = {}): Promise<void> {
         try {
-            const result = await updateProjects(this.app, this.state.volatile, this.state.persistent);
+            const result = await updateProjects(this.app, this.state.volatile, this.state.persistent, options);
 
             this.state.volatile = result.volatile;
             this.state.persistent = result.persistent;
@@ -347,7 +347,7 @@ export class AppStateManager extends Component {
                 if (this.taskIndex) {
                     await this.taskIndex.setTaskDirectory(newSettings.taskDirectory);
                 }
-                this.handleUpdateProjectsPending();
+                this.handleUpdateProjectsPending({ resetMissingProject: true });
             }
 
             this.triggerLayoutUpdate();
@@ -563,7 +563,7 @@ export class AppStateManager extends Component {
 
         const newTaskDirectory = this.state.persistent.settings?.taskDirectory;
         if (oldTaskDirectory !== newTaskDirectory) {
-            this.handleUpdateProjectsPending();
+            this.handleUpdateProjectsPending({ resetMissingProject: true });
         }
 
         await this.saveData(this.state.persistent);

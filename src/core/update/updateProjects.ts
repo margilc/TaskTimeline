@@ -1,6 +1,10 @@
 import { App, TAbstractFile } from 'obsidian';
 import { IVolatileState, IPersistentState } from '../../interfaces/IAppState';
 
+export interface UpdateProjectsOptions {
+    resetMissingProject?: boolean;
+}
+
 /**
  * Lists all subfolder names within a given directory path.
  */
@@ -40,7 +44,8 @@ function directoryExists(app: App, directoryPath: string): boolean {
 export async function updateProjects(
     app: App,
     currentVolatileState: IVolatileState,
-    currentPersistentState: IPersistentState
+    currentPersistentState: IPersistentState,
+    options: UpdateProjectsOptions = {}
 ): Promise<{ volatile: IVolatileState; persistent: IPersistentState }> {
     const taskDirectory = currentPersistentState.settings?.taskDirectory;
     
@@ -64,7 +69,7 @@ export async function updateProjects(
         
         let updatedPersistent = currentPersistentState;
         const currentProject = currentPersistentState.currentProjectName || 'All Projects';
-        if (currentProject !== 'All Projects' && !projectFolders.includes(currentProject)) {
+        if (options.resetMissingProject && currentProject !== 'All Projects' && !projectFolders.includes(currentProject)) {
             updatedPersistent = { ...currentPersistentState, currentProjectName: 'All Projects' };
         }
 

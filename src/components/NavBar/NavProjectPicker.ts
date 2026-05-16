@@ -6,6 +6,9 @@ export class NavProjectPicker {
     private container: HTMLElement;
     private dropdown: CustomDropdown;
     private appStateManager: AppStateManager;
+    private readonly boundProjectSelected = this.handleProjectSelected.bind(this);
+    private readonly boundProjectsUpdated = this.handleProjectsUpdated.bind(this);
+    private readonly boundAppStateUpdated = this.handleAppStateUpdated.bind(this);
 
     constructor(appStateManager: AppStateManager) {
         this.appStateManager = appStateManager;
@@ -26,28 +29,37 @@ export class NavProjectPicker {
         });
 
         // Listen for state updates
-        appStateManager.getEvents().on(PluginEvent.ProjectSelected, (name: string) => {
-            this.dropdown.setValue(name);
-        });
+        appStateManager.getEvents().on(PluginEvent.ProjectSelected, this.boundProjectSelected);
 
-        appStateManager.getEvents().on(PluginEvent.UpdateProjectsDone, () => {
-            const updatedProjects = appStateManager.getVolatileState().availableProjects || [];
-            this.dropdown.setOptions(updatedProjects.map(p => ({ value: p, label: p })));
-        });
+        appStateManager.getEvents().on(PluginEvent.UpdateProjectsDone, this.boundProjectsUpdated);
 
-        appStateManager.getEvents().on(PluginEvent.AppStateUpdated, () => {
-            const project = appStateManager.getPersistentState().currentProjectName;
-            if (project && this.dropdown.getValue() !== project) {
-                this.dropdown.setValue(project);
-            }
-        });
+        appStateManager.getEvents().on(PluginEvent.AppStateUpdated, this.boundAppStateUpdated);
     }
 
     public getElement(): HTMLElement {
         return this.container;
     }
 
+    private handleProjectSelected(name: string): void {
+        this.dropdown.setValue(name);
+    }
+
+    private handleProjectsUpdated(): void {
+        const updatedProjects = this.appStateManager.getVolatileState().availableProjects || [];
+        this.dropdown.setOptions(updatedProjects.map(p => ({ value: p, label: p })));
+    }
+
+    private handleAppStateUpdated(): void {
+        const project = this.appStateManager.getPersistentState().currentProjectName;
+        if (project && this.dropdown.getValue() !== project) {
+            this.dropdown.setValue(project);
+        }
+    }
+
     public destroy(): void {
+        this.appStateManager.getEvents().off(PluginEvent.ProjectSelected, this.boundProjectSelected);
+        this.appStateManager.getEvents().off(PluginEvent.UpdateProjectsDone, this.boundProjectsUpdated);
+        this.appStateManager.getEvents().off(PluginEvent.AppStateUpdated, this.boundAppStateUpdated);
         this.dropdown.destroy();
     }
 }
