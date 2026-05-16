@@ -7,6 +7,7 @@ import { updateColorMappings, updateColorVariable } from './update/updateColorMa
 import { updateCurrentDate } from './update/updateCurrentDate';
 import { updateLayout, clearLayoutCache } from './update/updateLayout';
 import { updateBoardGrouping } from './update/updateBoardGrouping';
+import { updateGroupFold } from './update/updateGroupFold';
 import { updateSettings } from './update/updateSettings';
 import { createTask } from './update/createTask';
 import { renameTaskFileForNewStartDate, renameTaskFileForNewName, parseTaskFilename, identifierToName } from './utils/fileRenameUtils';
@@ -83,6 +84,7 @@ export class AppStateManager extends Component {
         this.events.on(PluginEvent.CreateTaskPending, this.handleCreateTaskPending.bind(this));
         this.events.on(PluginEvent.UpdateZoomPending, this.handleUpdateZoomPending.bind(this));
         this.events.on(PluginEvent.UpdateGroupOrderPending, this.handleUpdateGroupOrderPending.bind(this));
+        this.events.on(PluginEvent.UpdateGroupFoldPending, this.handleUpdateGroupFoldPending.bind(this));
     }
 
     private async handleFileCreate(file: TAbstractFile): Promise<void> {
@@ -437,6 +439,22 @@ export class AppStateManager extends Component {
         }
     }
 
+    private async handleUpdateGroupFoldPending(data: { groupName: string; folded?: boolean }): Promise<void> {
+        try {
+            const result = updateGroupFold(this.state, data);
+
+            this.state.persistent = result.persistent;
+            this.state.volatile = result.volatile;
+
+            await this.saveData(this.state.persistent);
+
+            this.events.trigger(PluginEvent.UpdateGroupFoldDone);
+            this.events.trigger(PluginEvent.AppStateUpdated, this.state);
+        } catch (error) {
+            console.error('TaskTimeline: Failed to update group fold state', error);
+        }
+    }
+
     private getDefaultState(): IAppState {
         const defaultZoom: IZoomState = { modeIndex: 0, columnWidth: 90 };
 
@@ -457,6 +475,7 @@ export class AppStateManager extends Component {
             lastOpenedDate: new Date().toISOString(),
             colorVariable: "none",
             colorMappings: {},
+            foldedGroups: {},
             currentTimeUnit: "day",
             currentDate: new Date().toISOString(),
             zoomLevel: { modeIndex: 0, columnWidth: 90 },

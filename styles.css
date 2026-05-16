@@ -792,10 +792,21 @@ h3 {
     opacity: 1;
 }
 
+.group-header-fold-toggle {
+    margin-left: 1px;
+}
+
 .group-header-action:last-child {
     font-size: var(--tt-font-size-label);
     font-weight: var(--tt-font-weight-label);
-    margin-left: 1px;
+}
+
+.task-timeline-folded-card {
+    background-color: var(--tt-surface-2);
+    border-radius: var(--border-radius);
+    box-sizing: border-box;
+    min-height: 100%;
+    opacity: 0.9;
 }
 
 /* =================

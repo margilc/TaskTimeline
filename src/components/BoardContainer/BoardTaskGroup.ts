@@ -7,6 +7,7 @@ import { ITask } from "../../interfaces/ITask";
 import { TaskCreationHelper } from "../../utils/taskCreationHelper";
 import { PluginEvent } from "../../enums/events";
 import { BoardArrowOverlay } from "./BoardArrowOverlay";
+import { DEFAULT_COLOR } from "../../core/utils/colorUtils";
 
 export function BoardTaskGroup(
 	groupName: string,
@@ -24,12 +25,16 @@ export function BoardTaskGroup(
 	sharedTooltip: HTMLElement,
 	groupIndex: number,
 	totalGroups: number,
+	isFolded = false,
 	arrowOverlay?: BoardArrowOverlay
 ): HTMLElement {
 	const container = document.createElement("div");
 	container.className = isDebugMode
 		? "debug-board-task-group"
 		: "board-task-group";
+	if (isFolded) {
+		container.classList.add("is-folded");
+	}
 
 	const columnWidth = gridConfig.columnWidth || 100;
 
@@ -38,7 +43,7 @@ export function BoardTaskGroup(
 		const startY = (task.y ?? 0) + 1;
 		maxOccupiedRow = Math.max(maxOccupiedRow, startY);
 	});
-	const actualGridHeight = Math.max(1, maxOccupiedRow);
+	const actualGridHeight = isFolded ? 1 : Math.max(1, maxOccupiedRow);
 
 	container.style.display = "grid";
 	container.style.gridTemplateColumns = `${columnWidth}px repeat(${gridConfig.gridWidth}, ${columnWidth}px)`;
@@ -58,13 +63,17 @@ export function BoardTaskGroup(
 
 	const header = document.createElement("div");
 	header.className = "group-header clickable-header";
+	if (isFolded) {
+		header.classList.add("is-folded");
+	}
 	header.style.cursor = 'pointer';
 
 	const headerText = document.createElement("span");
+	headerText.className = "group-header-label";
 	headerText.textContent = groupName;
 	header.appendChild(headerText);
 
-	// Arrow buttons + plus indicator container (visible on hover via CSS)
+	// Action buttons container (visible on hover via CSS)
 	const arrowContainer = document.createElement("div");
 	arrowContainer.className = "group-header-arrows";
 
@@ -100,10 +109,18 @@ export function BoardTaskGroup(
 		arrowContainer.appendChild(downBtn);
 	}
 
-	const plusIndicator = document.createElement("span");
-	plusIndicator.className = "group-header-action";
-	plusIndicator.textContent = "+";
-	arrowContainer.appendChild(plusIndicator);
+	const foldBtn = document.createElement("span");
+	foldBtn.className = "group-header-action group-header-fold-toggle";
+	foldBtn.textContent = isFolded ? "+" : "-";
+	foldBtn.title = isFolded ? "Unfold group" : "Fold group";
+	foldBtn.addEventListener('click', (e) => {
+		e.stopPropagation();
+		e.preventDefault();
+		appStateManager.getEvents().trigger(PluginEvent.UpdateGroupFoldPending, {
+			groupName
+		});
+	});
+	arrowContainer.appendChild(foldBtn);
 
 	header.appendChild(arrowContainer);
 
@@ -133,7 +150,9 @@ export function BoardTaskGroup(
 	container.appendChild(header);
 
 	tasks.forEach((task) => {
-		const card = BoardTaskCard(task, settings, appStateManager, isDebugMode, sharedTooltip, arrowOverlay);
+		const card = isFolded
+			? createFoldedTaskIndicator(task, settings)
+			: BoardTaskCard(task, settings, appStateManager, isDebugMode, sharedTooltip, arrowOverlay);
 
 		const startX = (task.xStart ?? 1);
 		const endX = (task.xEnd ?? startX);
@@ -143,11 +162,19 @@ export function BoardTaskGroup(
 		const span = Math.max(1, endX - startX + 1);
 		card.style.gridColumnEnd = `span ${span}`;
 
-		const startY = (task.y ?? 0) + 1;
+		const startY = isFolded ? 1 : (task.y ?? 0) + 1;
 		card.style.gridRowStart = startY.toString();
 
 		container.appendChild(card);
 	});
 
 	return container;
+}
+
+function createFoldedTaskIndicator(task: ITask, settings: ITaskTimelineSettings): HTMLElement {
+	const indicator = document.createElement("div");
+	indicator.className = "task-timeline-folded-card";
+	indicator.style.backgroundColor = settings.defaultCardColor || DEFAULT_COLOR;
+	indicator.setAttribute('aria-label', task.name || "Task");
+	return indicator;
 }

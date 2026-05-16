@@ -9,6 +9,7 @@ import { debounce } from "../../core/utils/layoutUtils";
 import { isTaskHidden } from "../../core/utils/colorUtils";
 import { TimeUnit } from "../../enums/TimeUnit";
 import { snapToUnitBoundary, countDateUnits } from "../../core/update/updateLayout";
+import { isGroupFolded } from "../../core/update/updateGroupFold";
 import { addTime } from "../../core/utils/dateUtils";
 import { BoardArrowOverlay } from "./BoardArrowOverlay";
 import { ITaskTimelineSettings } from "../../interfaces/ITaskTimelineSettings";
@@ -79,6 +80,7 @@ export class BoardContainer {
         this.appStateManager.getEvents().on(PluginEvent.UpdateBoardGroupingDone, this.boundDebouncedRender);
         this.appStateManager.getEvents().on(PluginEvent.UpdateColorMappingsDone, this.boundDebouncedRender);
         this.appStateManager.getEvents().on(PluginEvent.UpdateGroupOrderDone, this.boundDebouncedRender);
+        this.appStateManager.getEvents().on(PluginEvent.UpdateGroupFoldDone, this.boundDebouncedRender);
 
         // Setup zoom, pan, and scroll persistence handlers
         this.zoomCleanup = this.setupZoomHandler();
@@ -376,6 +378,7 @@ export class BoardContainer {
 
                 const tasksInGroup = taskGrid.tasks as ITask[];
                 const persistentState = this.appStateManager.getPersistentState();
+                const isFolded = isGroupFolded(persistentState, groupName);
                 const validTasks = tasksInGroup.filter(task => {
                     const validation = validateTask(task);
                     if (!validation.isValid) return false;
@@ -396,7 +399,7 @@ export class BoardContainer {
                 }
 
                 const maxY = validTasks.reduce((max: number, task: ITask) => Math.max(max, task.y ?? -1), -1);
-                const gridHeight = Math.max(1, maxY + 1);
+                const gridHeight = isFolded ? 1 : Math.max(1, maxY + 1);
 
                 const gridConfig = {
                     gridWidth: boardLayout.columnHeaders.length,
@@ -407,11 +410,11 @@ export class BoardContainer {
 
                 const existingGroup = this.groupElements.get(groupName);
                 if (existingGroup) {
-                    const newGroupEl = BoardTaskGroup(groupName, validTasks, gridConfig, settings, this.appStateManager, this.app, this.isDebugMode, this.sharedTooltip, groupIdx, totalGroups, this.arrowOverlay ?? undefined);
+                    const newGroupEl = BoardTaskGroup(groupName, validTasks, gridConfig, settings, this.appStateManager, this.app, this.isDebugMode, this.sharedTooltip, groupIdx, totalGroups, isFolded, this.arrowOverlay ?? undefined);
                     existingGroup.replaceWith(newGroupEl);
                     this.groupElements.set(groupName, newGroupEl);
                 } else {
-                    const taskGroupEl = BoardTaskGroup(groupName, validTasks, gridConfig, settings, this.appStateManager, this.app, this.isDebugMode, this.sharedTooltip, groupIdx, totalGroups, this.arrowOverlay ?? undefined);
+                    const taskGroupEl = BoardTaskGroup(groupName, validTasks, gridConfig, settings, this.appStateManager, this.app, this.isDebugMode, this.sharedTooltip, groupIdx, totalGroups, isFolded, this.arrowOverlay ?? undefined);
                     this.groupsContainer!.appendChild(taskGroupEl);
                     this.groupElements.set(groupName, taskGroupEl);
                 }
@@ -455,6 +458,7 @@ export class BoardContainer {
         this.appStateManager.getEvents().off(PluginEvent.UpdateBoardGroupingDone, this.boundDebouncedRender);
         this.appStateManager.getEvents().off(PluginEvent.UpdateColorMappingsDone, this.boundDebouncedRender);
         this.appStateManager.getEvents().off(PluginEvent.UpdateGroupOrderDone, this.boundDebouncedRender);
+        this.appStateManager.getEvents().off(PluginEvent.UpdateGroupFoldDone, this.boundDebouncedRender);
 
         if (this.zoomCleanup) {
             this.zoomCleanup();

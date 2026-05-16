@@ -20,6 +20,8 @@ export interface IPersistentState {
     };
     // Row header ordering: project -> variable -> ordered levels
     groupingOrderings?: Record<string, Record<string, string[]>>;
+    // Folded row groups: project -> variable -> folded group names
+    foldedGroups?: Record<string, Record<string, string[]>>;
     // Zoom level persistence
     zoomLevel?: { modeIndex: number; columnWidth: number };
     // Scroll position persistence (pan position on the timeline)
