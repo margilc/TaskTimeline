@@ -128,30 +128,30 @@ body.theme-dark .tt-dropdown-trigger {
   height: 100%;
   width: 100%;
   overflow: hidden;
-  background-color: var(--tt-bg);
-  color: var(--tt-text);
+  background-color: var(--background-primary);
+  color: var(--text-normal);
 }
 
 .horizontal-task-grid {
   height: 100%;
   width: 100%;
-  display: grid;
-  grid-template-columns: repeat(var(--horizontal-task-column-count), minmax(0, 1fr));
-  gap: var(--spacing-sm);
-  padding: var(--spacing-sm);
+  display: flex;
+  padding: var(--spacing-md) var(--spacing-lg);
   box-sizing: border-box;
   overflow: hidden;
 }
 
 .horizontal-task-column {
+  flex: 1 1 0;
   min-width: 0;
   min-height: 0;
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  background-color: var(--tt-surface-1);
-  border: 1px solid var(--tt-border);
-  border-radius: var(--border-radius);
+  background: transparent;
+  border: none;
+  border-right: 1px solid var(--background-modifier-border);
+  border-radius: 0;
 }
 
 .horizontal-task-column-header {
@@ -160,9 +160,9 @@ body.theme-dark .tt-dropdown-trigger {
   align-items: center;
   justify-content: space-between;
   gap: var(--spacing-sm);
-  padding: var(--spacing-sm);
-  background-color: var(--tt-surface-2);
-  border-bottom: 1px solid var(--tt-border);
+  padding: 0 var(--spacing-md) var(--spacing-sm);
+  background: transparent;
+  border-bottom: none;
 }
 
 .horizontal-task-column-title {
@@ -170,23 +170,24 @@ body.theme-dark .tt-dropdown-trigger {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: var(--tt-font-size-label);
+  font-size: var(--font-ui-small);
   font-weight: var(--tt-font-weight-label);
   line-height: var(--tt-line-height-normal);
+  color: var(--text-muted);
 }
 
 .horizontal-task-fold-toggle {
   flex: 0 0 auto;
-  width: 24px;
-  height: 24px;
+  width: 18px;
+  height: 18px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   padding: 0;
-  border: 1px solid var(--tt-border);
-  border-radius: var(--border-radius);
-  background-color: var(--interactive-normal);
-  color: var(--text-normal);
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  color: var(--text-muted);
   cursor: pointer;
   font-size: var(--tt-font-size-label);
   font-weight: var(--tt-font-weight-label);
@@ -194,27 +195,78 @@ body.theme-dark .tt-dropdown-trigger {
 }
 
 .horizontal-task-fold-toggle:hover {
-  background-color: var(--interactive-hover);
+  color: var(--text-normal);
+  background: transparent;
 }
 
 .horizontal-task-column-body {
   flex: 1 1 auto;
   min-height: 0;
   overflow: hidden;
-  padding: var(--spacing-sm);
+  padding: 0 var(--spacing-md);
+}
+
+.horizontal-task-preview {
+  height: 100%;
+  overflow: hidden;
+  cursor: text;
+}
+
+.horizontal-task-preview.is-empty {
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+.horizontal-task-preview:focus {
+  outline: 1px solid var(--background-modifier-border);
+  outline-offset: 4px;
+}
+
+.horizontal-task-column.is-folded {
+  flex: 0 0 32px;
+}
+
+.horizontal-task-column.is-folded .horizontal-task-column-header {
+  height: 100%;
+  padding: 0;
+  flex-direction: column-reverse;
+  justify-content: flex-end;
+  gap: var(--spacing-sm);
+}
+
+.horizontal-task-column.is-folded .horizontal-task-column-title {
+  writing-mode: vertical-rl;
+  transform: rotate(180deg);
+  text-overflow: clip;
+  white-space: nowrap;
+  padding: var(--spacing-sm) 0;
+}
+
+.horizontal-task-column.is-folded .horizontal-task-fold-toggle {
+  margin-top: var(--spacing-xs);
 }
 
 .horizontal-task-column.is-folded .horizontal-task-column-body {
   display: none;
 }
 
-.horizontal-task-frontmatter {
-  margin: 0;
-  white-space: pre-wrap;
+.horizontal-task-column-body .cm-editor {
+  height: 100%;
+  background: transparent;
+  color: var(--text-normal);
+}
+
+.horizontal-task-column-body .cm-scroller {
   overflow: hidden;
-  font-family: var(--font-monospace);
+}
+
+.horizontal-task-column-body .cm-content {
+  caret-color: var(--text-normal);
+}
+
+.horizontal-task-column-body.is-frontmatter .cm-editor {
+  color: var(--text-muted);
   font-size: var(--tt-font-size-caption);
-  line-height: var(--tt-line-height-normal);
 }
 
 .horizontal-task-empty-column,

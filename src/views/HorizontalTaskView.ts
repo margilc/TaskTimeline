@@ -1,5 +1,7 @@
 import { App, ItemView, MarkdownRenderer, Notice, TFile, ViewStateResult, WorkspaceLeaf } from 'obsidian';
-import { IHorizontalTaskColumn, parseHorizontalTaskContent } from '../core/utils/horizontalTaskUtils';
+import { EditorState } from '@codemirror/state';
+import { EditorView } from '@codemirror/view';
+import { IHorizontalTaskColumn, parseHorizontalTaskContent, serializeHorizontalTaskColumns } from '../core/utils/horizontalTaskUtils';
 
 export const HORIZONTAL_TASK_VIEW_TYPE = 'task-timeline-horizontal-task-view';
 
@@ -16,6 +18,10 @@ function isHorizontalTaskViewState(state: unknown): state is HorizontalTaskViewS
 export class HorizontalTaskView extends ItemView {
     private filePath: string | null = null;
     private foldedColumnIds: Set<string> = new Set();
+    private columns: IHorizontalTaskColumn[] = [];
+    private saveTimer: number | null = null;
+    private editorViews: EditorView[] = [];
+    private editingColumnId: string | null = null;
 
     constructor(leaf: WorkspaceLeaf, appRef: App) {
         super(leaf);
@@ -48,6 +54,7 @@ export class HorizontalTaskView extends ItemView {
         const nextFilePath = state.filePath ?? null;
         if (nextFilePath !== this.filePath) {
             this.foldedColumnIds.clear();
+            this.editingColumnId = null;
         }
 
         this.filePath = nextFilePath;
@@ -60,10 +67,17 @@ export class HorizontalTaskView extends ItemView {
     }
 
     async onClose(): Promise<void> {
+        if (this.saveTimer !== null) {
+            window.clearTimeout(this.saveTimer);
+            this.saveTimer = null;
+        }
+        this.destroyEditors();
+        this.editingColumnId = null;
         this.foldedColumnIds.clear();
     }
 
     private async render(): Promise<void> {
+        this.destroyEditors();
         this.contentEl.empty();
         this.contentEl.addClass('horizontal-task-view');
 
@@ -72,8 +86,8 @@ export class HorizontalTaskView extends ItemView {
             return;
         }
 
-        const file = this.app.vault.getAbstractFileByPath(this.filePath);
-        if (!(file instanceof TFile)) {
+        const file = this.getCurrentFile();
+        if (!file) {
             this.renderMessage(`Task file not found: ${this.filePath}`);
             return;
         }
@@ -81,14 +95,14 @@ export class HorizontalTaskView extends ItemView {
         try {
             const fileContent = await this.app.vault.read(file);
             const parsedTask = parseHorizontalTaskContent(fileContent);
+            this.columns = parsedTask.columns.map(column => ({ ...column }));
+
             const grid = document.createElement('div');
             grid.className = 'horizontal-task-grid';
-            grid.style.setProperty('--horizontal-task-column-count', String(Math.max(parsedTask.columns.length, 1)));
-
             this.contentEl.appendChild(grid);
 
-            for (const column of parsedTask.columns) {
-                await this.renderColumn(grid, column);
+            for (const column of this.columns) {
+                this.renderColumn(grid, column);
             }
         } catch (error) {
             console.error('Failed to render horizontal task view:', error);
@@ -97,7 +111,7 @@ export class HorizontalTaskView extends ItemView {
         }
     }
 
-    private async renderColumn(parent: HTMLElement, column: IHorizontalTaskColumn): Promise<void> {
+    private renderColumn(parent: HTMLElement, column: IHorizontalTaskColumn): void {
         const isFolded = this.foldedColumnIds.has(column.id);
         const columnEl = document.createElement('section');
         columnEl.className = 'horizontal-task-column';
@@ -139,23 +153,11 @@ export class HorizontalTaskView extends ItemView {
             return;
         }
 
-        if (column.type === 'frontmatter') {
-            const preEl = document.createElement('pre');
-            preEl.className = 'horizontal-task-frontmatter';
-            const codeEl = document.createElement('code');
-            codeEl.textContent = column.content;
-            preEl.appendChild(codeEl);
-            bodyEl.appendChild(preEl);
-            return;
-        }
-
-        if (column.content.trim()) {
-            await MarkdownRenderer.render(this.app, column.content, bodyEl, this.filePath ?? '', this);
+        bodyEl.classList.toggle('is-frontmatter', column.type === 'frontmatter');
+        if (this.editingColumnId === column.id) {
+            this.editorViews.push(this.createColumnEditor(bodyEl, column));
         } else {
-            const emptyEl = document.createElement('div');
-            emptyEl.className = 'horizontal-task-empty-column';
-            emptyEl.textContent = 'No content';
-            bodyEl.appendChild(emptyEl);
+            this.renderColumnPreview(bodyEl, column);
         }
     }
 
@@ -164,5 +166,152 @@ export class HorizontalTaskView extends ItemView {
         messageEl.className = 'horizontal-task-message';
         messageEl.textContent = message;
         this.contentEl.appendChild(messageEl);
+    }
+
+    private getCurrentFile(): TFile | null {
+        if (!this.filePath) return null;
+
+        const file = this.app.vault.getAbstractFileByPath(this.filePath);
+        if (!file || typeof (file as { path?: unknown }).path !== 'string') {
+            return null;
+        }
+
+        return file as TFile;
+    }
+
+    private queueSave(): void {
+        if (this.saveTimer !== null) {
+            window.clearTimeout(this.saveTimer);
+        }
+
+        this.saveTimer = window.setTimeout(() => {
+            this.saveTimer = null;
+            this.saveColumns();
+        }, 500);
+    }
+
+    private async saveColumns(): Promise<void> {
+        const file = this.getCurrentFile();
+        if (!file) return;
+
+        try {
+            await this.app.vault.modify(file, serializeHorizontalTaskColumns(this.columns));
+        } catch (error) {
+            console.error('Failed to save horizontal task view:', error);
+            new Notice('Failed to save horizontal task view.');
+        }
+    }
+
+    private renderColumnPreview(parent: HTMLElement, column: IHorizontalTaskColumn): void {
+        const previewEl = document.createElement('div');
+        previewEl.className = 'horizontal-task-preview markdown-rendered';
+        previewEl.tabIndex = 0;
+        previewEl.setAttribute('role', 'button');
+        previewEl.setAttribute('aria-label', `Edit ${column.title}`);
+        previewEl.addEventListener('click', (event) => this.handlePreviewClick(event, column.id));
+        previewEl.addEventListener('keydown', (event) => {
+            if (event.key === 'Enter') {
+                event.preventDefault();
+                this.startEditing(column.id);
+            }
+        });
+        parent.appendChild(previewEl);
+
+        const markdown = column.type === 'frontmatter'
+            ? `\`\`\`yaml\n${column.content}\n\`\`\``
+            : column.content;
+
+        if (markdown.trim()) {
+            MarkdownRenderer.render(this.app, markdown, previewEl, this.filePath ?? '', this);
+        } else {
+            previewEl.addClass('is-empty');
+            previewEl.textContent = 'Click to edit';
+        }
+    }
+
+    private startEditing(columnId: string): void {
+        this.editingColumnId = columnId;
+        this.render();
+    }
+
+    private handlePreviewClick(event: MouseEvent, columnId: string): void {
+        const target = event.target;
+        if (!(target instanceof HTMLElement)) {
+            this.startEditing(columnId);
+            return;
+        }
+
+        const linkEl = target.closest('a');
+        if (linkEl instanceof HTMLAnchorElement) {
+            if (linkEl.hasClass('internal-link')) {
+                event.preventDefault();
+                event.stopPropagation();
+                const linkText = linkEl.getAttribute('data-href') || linkEl.getAttribute('href') || linkEl.textContent || '';
+                if (linkText.trim()) {
+                    this.app.workspace.openLinkText(linkText, this.filePath ?? '', event.ctrlKey || event.metaKey);
+                }
+            }
+            return;
+        }
+
+        this.startEditing(columnId);
+    }
+
+    private createColumnEditor(parent: HTMLElement, column: IHorizontalTaskColumn): EditorView {
+        return new EditorView({
+            parent,
+            state: EditorState.create({
+                doc: column.content,
+                extensions: [
+                    EditorView.lineWrapping,
+                    EditorView.updateListener.of(update => {
+                        if (!update.docChanged) return;
+                        column.content = update.state.doc.toString();
+                        this.queueSave();
+                    }),
+                    EditorView.domEventHandlers({
+                        blur: () => {
+                            this.finishEditing();
+                        },
+                    }),
+                    EditorView.theme({
+                        '&': {
+                            height: '100%',
+                            backgroundColor: 'transparent',
+                        },
+                        '.cm-scroller': {
+                            overflow: 'hidden',
+                            fontFamily: column.type === 'frontmatter'
+                                ? 'var(--font-monospace)'
+                                : 'var(--font-text)',
+                            lineHeight: 'var(--line-height-normal)',
+                        },
+                        '.cm-content': {
+                            padding: '0',
+                            minHeight: '100%',
+                        },
+                        '.cm-line': {
+                            padding: '0',
+                        },
+                        '&.cm-focused': {
+                            outline: 'none',
+                        },
+                    }),
+                ],
+            }),
+        });
+    }
+
+    private async finishEditing(): Promise<void> {
+        await this.saveColumns();
+        this.editingColumnId = null;
+        await this.render();
+    }
+
+    private destroyEditors(): void {
+        for (const editorView of this.editorViews) {
+            editorView.destroy();
+        }
+        this.editorViews = [];
     }
 }

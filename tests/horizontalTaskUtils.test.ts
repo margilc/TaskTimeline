@@ -1,4 +1,4 @@
-import { hasHorizontalModeFrontmatter, parseHorizontalTaskContent, shouldUseHorizontalTaskView } from '../src/core/utils/horizontalTaskUtils';
+import { hasHorizontalModeFrontmatter, parseHorizontalTaskContent, serializeHorizontalTaskColumns, shouldUseHorizontalTaskView } from '../src/core/utils/horizontalTaskUtils';
 
 describe('parseHorizontalTaskContent', () => {
     test('creates frontmatter and top-level section columns', () => {
@@ -62,6 +62,42 @@ describe('shouldUseHorizontalTaskView', () => {
         expect(shouldUseHorizontalTaskView({ horizontalMode: true })).toBe(true);
         expect(shouldUseHorizontalTaskView({ horizontalMode: false })).toBe(false);
         expect(shouldUseHorizontalTaskView({})).toBe(false);
+    });
+});
+
+describe('serializeHorizontalTaskColumns', () => {
+    test('serializes editable columns back to markdown', () => {
+        const parsed = parseHorizontalTaskContent(`---
+name: Horizontal Task
+start: 2024-01-15
+horizontal_mode: true
+---
+Intro
+
+# First
+First content
+
+# Second
+Second content`);
+
+        parsed.columns[0].content = 'name: Edited Task\nstart: 2024-01-15\nhorizontal_mode: true';
+        parsed.columns[1].content = 'Edited intro';
+        parsed.columns[2].content = 'Edited first';
+
+        expect(serializeHorizontalTaskColumns(parsed.columns)).toBe(`---
+name: Edited Task
+start: 2024-01-15
+horizontal_mode: true
+---
+
+Edited intro
+
+# First
+Edited first
+
+# Second
+Second content
+`);
     });
 });
 

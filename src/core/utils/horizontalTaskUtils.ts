@@ -59,6 +59,24 @@ export function parseHorizontalTaskContent(fileContent: string): IHorizontalTask
     };
 }
 
+export function serializeHorizontalTaskColumns(columns: IHorizontalTaskColumn[]): string {
+    const frontmatterColumn = columns.find(column => column.type === 'frontmatter');
+    const bodyColumns = columns.filter(column => column.type === 'body');
+    const sectionColumns = columns.filter(column => column.type === 'section');
+
+    const frontmatter = frontmatterColumn?.content.trim() ?? '';
+    const bodyParts = [
+        ...bodyColumns.map(column => column.content.trim()).filter(Boolean),
+        ...sectionColumns.map(column => {
+            const content = column.content.trim();
+            return content ? `# ${column.title}\n${content}` : `# ${column.title}`;
+        }),
+    ];
+
+    const body = bodyParts.join('\n\n').trim();
+    return body ? `---\n${frontmatter}\n---\n\n${body}\n` : `---\n${frontmatter}\n---\n`;
+}
+
 function parseTopLevelSections(content: string): IHorizontalTaskColumn[] {
     const lines = content.replace(/\r\n/g, '\n').split('\n');
     const sections: IHorizontalTaskColumn[] = [];
