@@ -11,6 +11,7 @@ import { nameToIdentifier } from './fileRenameUtils';
  *      portion of a task ID (the part after the date prefix)
  *
  * Mutates tasks in-place. Self-links and duplicates are excluded.
+ * Also derives reverse links in linkedFromTaskIds.
  */
 export function resolveTaskLinks(tasks: ITask[]): void {
     const byId = new Map<string, string>();
@@ -18,6 +19,7 @@ export function resolveTaskLinks(tasks: ITask[]): void {
     const byIdentifier = new Map<string, string>();
 
     for (const task of tasks) {
+        task.linkedFromTaskIds = undefined;
         byId.set(task.id, task.id);
         byNameLower.set(task.name.toLowerCase(), task.id);
 
@@ -43,6 +45,27 @@ export function resolveTaskLinks(tasks: ITask[]): void {
         }
 
         task.linkedTaskIds = resolved.size > 0 ? [...resolved] : undefined;
+    }
+
+    const linkedFromByTaskId = new Map<string, Set<string>>();
+    for (const task of tasks) {
+        if (!task.linkedTaskIds) continue;
+
+        for (const targetId of task.linkedTaskIds) {
+            let sourceIds = linkedFromByTaskId.get(targetId);
+            if (!sourceIds) {
+                sourceIds = new Set<string>();
+                linkedFromByTaskId.set(targetId, sourceIds);
+            }
+            sourceIds.add(task.id);
+        }
+    }
+
+    for (const task of tasks) {
+        const linkedFromTaskIds = linkedFromByTaskId.get(task.id);
+        task.linkedFromTaskIds = linkedFromTaskIds && linkedFromTaskIds.size > 0
+            ? [...linkedFromTaskIds]
+            : undefined;
     }
 }
 

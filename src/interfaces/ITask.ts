@@ -11,6 +11,7 @@ export interface ITask {
     totalSubtasks: number;
     completedSubtasks: number;
     linkedTaskIds?: string[];  // Resolved task IDs from [[wiki-links]] in content
+    linkedFromTaskIds?: string[];  // Resolved task IDs that link to this task
     // Layout properties (added by layout business logic)
     xStart?: number;  // 1-based column start
     xEnd?: number;    // 1-based column end

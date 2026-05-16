@@ -79,10 +79,12 @@ export function BoardTaskCard(
 		}
 	});
 
-	// Arrow overlay: show arrows on hover if task has links
-	if (arrowOverlay && task.linkedTaskIds && task.linkedTaskIds.length > 0) {
+	const relatedTaskIds = getRelatedTaskIds(task);
+
+	// Arrow overlay: show arrows on hover if task has outgoing or incoming links
+	if (arrowOverlay && relatedTaskIds.length > 0) {
 		card.addEventListener("mouseenter", () => {
-			arrowOverlay.showArrows(task.id, task.linkedTaskIds!);
+			arrowOverlay.showArrows(task.id, relatedTaskIds);
 		});
 		card.addEventListener("mouseleave", () => {
 			arrowOverlay.clearArrows();
@@ -90,6 +92,13 @@ export function BoardTaskCard(
 	}
 
 	return card;
+}
+
+function getRelatedTaskIds(task: ITask): string[] {
+	return [...new Set([
+		...(task.linkedTaskIds ?? []),
+		...(task.linkedFromTaskIds ?? [])
+	])];
 }
 
 function getContrastingTextColor(color: string): string | null {
