@@ -41,6 +41,36 @@ describe('Row group ordering (persistent drag reorder)', () => {
             // Default ordering from groupingUtils: Not Started < In Progress < Blocked
             expect(groups).toEqual(['Not Started', 'In Progress', 'Blocked']);
         });
+
+        it('deduplicates stored order entries before appending discovered groups', () => {
+            const tasks: any[] = [
+                { category: 'internal' },
+                { category: 'external' },
+            ];
+
+            const persistent: any = {
+                groupingOrderings: {
+                    'Project A': {
+                        category: ['internal', 'internal', 'external']
+                    }
+                }
+            };
+
+            const groups = generateAvailableGroups(tasks as any, 'category', persistent, 'Project A');
+
+            expect(groups).toEqual(['internal', 'external']);
+        });
+
+        it('normalizes whitespace around group values', () => {
+            const tasks: any[] = [
+                { category: 'internal' },
+                { category: ' internal ' },
+            ];
+
+            const groups = generateAvailableGroups(tasks as any, 'category');
+
+            expect(groups).toEqual(['internal']);
+        });
     });
 });
 

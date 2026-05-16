@@ -85,7 +85,7 @@ export function updateLayout(app: App, currentState: IAppState): IAppState {
 function getEffectiveGrouping(currentState: IAppState, tasks: ITask[]): { groupBy: string; availableGroups: string[] } {
     const persistedGrouping = currentState.persistent.boardGrouping;
     const groupBy = persistedGrouping?.groupBy || 'none';
-    const availableGroups = persistedGrouping?.availableGroups || [];
+    const availableGroups = [...new Set(persistedGrouping?.availableGroups || [])];
 
     if (availableGroups.length > 0) {
         return { groupBy, availableGroups };

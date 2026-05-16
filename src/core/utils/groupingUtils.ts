@@ -4,14 +4,19 @@ import { IPersistentState } from '../../interfaces/IAppState';
 export function getGroupValue(task: ITask, groupBy: string): string {
     switch (groupBy) {
         case 'status':
-            return task.status || 'No Status';
+            return normalizeGroupValue(task.status, 'No Status');
         case 'priority':
-            return task.priority ? task.priority.toString() : 'No Priority';
+            return normalizeGroupValue(task.priority?.toString(), 'No Priority');
         case 'category':
-            return task.category || 'No Category';
+            return normalizeGroupValue(task.category, 'No Category');
         default:
             return 'default';
     }
+}
+
+function normalizeGroupValue(value: string | undefined, fallback: string): string {
+    const normalized = value?.trim();
+    return normalized || fallback;
 }
 
 export function groupTasks(tasks: ITask[], groupBy: string): Record<string, ITask[]> {
@@ -75,7 +80,7 @@ function getStableOrder(
 ): string[] {
     const groupingOrderings = persistent.groupingOrderings || {};
     const projectOrderings = groupingOrderings[projectId] || {};
-    const existingOrder = projectOrderings[groupBy] || [];
+    const existingOrder = [...new Set(projectOrderings[groupBy] || [])];
     
     // If there is no stored order yet, use the default ordering for this groupBy.
     // Once the user has a stored order (via drag-reorder), that order is authoritative.

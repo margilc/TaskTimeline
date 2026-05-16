@@ -111,6 +111,21 @@ describe('Layout Core Tests', () => {
             expect(layout.taskGrids.map(grid => grid.group)).toEqual(['Not Started', 'In Progress', 'Done']);
             expect(getPositionedTasks(layout)).toHaveLength(tasks.length);
         });
+
+        test('should dedupe persisted available groups before layout', () => {
+            const tasks = createSampleTasks();
+            const state = createLayoutTestState(tasks);
+            state.persistent.boardGrouping = {
+                groupBy: 'category',
+                availableGroups: ['development', 'development', 'testing']
+            };
+
+            const result = updateLayout(mockApp, state);
+            const layout = result.volatile.boardLayout!;
+
+            expect(layout.taskGrids.map(grid => grid.group)).toEqual(['development', 'testing']);
+            expect(getPositionedTasks(layout)).toHaveLength(tasks.length);
+        });
     });
 
     describe('Column Count Settings', () => {
