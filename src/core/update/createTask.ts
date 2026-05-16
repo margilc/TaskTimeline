@@ -43,7 +43,8 @@ export async function createTask(app: App, state: IAppState, taskData: NewTaskFo
 		...(taskData.end && { end: taskData.end }),
 		...(taskData.category && { category: taskData.category }),
 		...(taskData.status && { status: taskData.status }),
-		priority: taskData.priority || "5"  // Always include priority, default to 5
+		priority: taskData.priority || "5",  // Always include priority, default to 5
+		...(taskData.horizontalMode && { horizontal_mode: "true" })
 	};
 	
 	// Create markdown content

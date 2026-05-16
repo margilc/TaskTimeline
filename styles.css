@@ -185,18 +185,18 @@ body.theme-dark .tt-dropdown-trigger {
   justify-content: center;
   padding: 0;
   border: none;
-  border-radius: 0;
+  border-radius: 4px;
   background: transparent;
   color: var(--text-muted);
   cursor: pointer;
-  font-size: var(--tt-font-size-label);
-  font-weight: var(--tt-font-weight-label);
+  font-size: 16px;
+  font-weight: 400;
   line-height: 1;
 }
 
 .horizontal-task-fold-toggle:hover {
   color: var(--text-normal);
-  background: transparent;
+  background: color-mix(in srgb, var(--background-modifier-hover) 70%, black 30%);
 }
 
 .horizontal-task-column-body {
@@ -267,6 +267,48 @@ body.theme-dark .tt-dropdown-trigger {
 .horizontal-task-column-body.is-frontmatter .cm-editor {
   color: var(--text-muted);
   font-size: var(--tt-font-size-caption);
+}
+
+.horizontal-task-completion {
+  position: fixed;
+  z-index: 1000;
+  min-width: 220px;
+  max-width: 360px;
+  max-height: 260px;
+  overflow: hidden;
+  background: var(--background-primary);
+  border: 1px solid var(--background-modifier-border);
+  box-shadow: var(--shadow-s);
+  color: var(--text-normal);
+  font-size: var(--font-ui-small);
+}
+
+.horizontal-task-completion-item {
+  display: flex;
+  gap: var(--spacing-sm);
+  justify-content: space-between;
+  padding: var(--spacing-xs) var(--spacing-sm);
+  cursor: pointer;
+}
+
+.horizontal-task-completion-item.is-selected,
+.horizontal-task-completion-item:hover {
+  background: var(--background-modifier-hover);
+}
+
+.horizontal-task-completion-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.horizontal-task-completion-detail {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-muted);
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .horizontal-task-empty-column,

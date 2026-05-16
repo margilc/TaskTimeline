@@ -15,6 +15,7 @@ export function parseTemplateFromContent(fileContent: string, filename: string):
     let defaultStatus: string | undefined;
     let defaultPriority: number | undefined;
     let defaultCategory: string | undefined;
+    let horizontalMode: boolean | undefined;
 
     if (frontmatterMatch) {
         const lines = frontmatterMatch[1].split('\n');
@@ -42,6 +43,9 @@ export function parseTemplateFromContent(fileContent: string, filename: string):
                 case 'default_category':
                     defaultCategory = value;
                     break;
+                case 'horizontal_mode':
+                    horizontalMode = value.toLowerCase() === 'true';
+                    break;
             }
         }
     }
@@ -50,12 +54,12 @@ export function parseTemplateFromContent(fileContent: string, filename: string):
         ? fileContent.replace(frontmatterRegex, '').trim()
         : fileContent.trim();
 
-    return { name, defaultLengthDays, defaultStatus, defaultPriority, defaultCategory, bodyContent };
+    return { name, defaultLengthDays, defaultStatus, defaultPriority, defaultCategory, horizontalMode, bodyContent };
 }
 
 /**
  * Load all templates from {taskDirectory}/templates/.
- * Looks for files matching template_*.md.
+ * Looks for files matching template_*.md and default_*.md.
  */
 export async function loadTemplates(app: App, taskDirectory: string): Promise<ITemplate[]> {
     const templatesPath = `${taskDirectory}/templates`;
@@ -68,7 +72,7 @@ export async function loadTemplates(app: App, taskDirectory: string): Promise<IT
     for (const child of dir.children) {
         if (!(child instanceof TFile)) continue;
         if (child.extension !== 'md') continue;
-        if (!child.name.startsWith('template_')) continue;
+        if (!isTemplateFileName(child.name)) continue;
 
         try {
             const content = await app.vault.read(child);
@@ -93,6 +97,27 @@ default_category: default
 - [ ] Add your subtasks here
 `;
 
+const DEFAULT_WEEKLY_TEMPLATE_CONTENT = `---
+default_length_days: 5
+default_status: 01 To Do
+default_priority: 1
+default_category: internal
+horizontal_mode: true
+---
+# Monday
+- [ ] internal
+\t- [ ] meeting
+# Tuesday
+- [ ] internal
+\t- [ ] meeting
+# Wednesday
+- [ ] internal
+\t- [ ] meeting
+# Thursday
+- [ ] internal
+\t- [ ] meeting
+`;
+
 /**
  * Ensure the templates folder and template_default.md exist.
  * Creates them if missing.
@@ -100,6 +125,7 @@ default_category: default
 export async function ensureTemplatesFolder(app: App, taskDirectory: string): Promise<void> {
     const templatesPath = `${taskDirectory}/templates`;
     const defaultTemplatePath = `${templatesPath}/template_default.md`;
+    const weeklyTemplatePath = `${templatesPath}/default_weekly.md`;
 
     // Create folder if missing
     if (!app.vault.getAbstractFileByPath(templatesPath)) {
@@ -110,4 +136,13 @@ export async function ensureTemplatesFolder(app: App, taskDirectory: string): Pr
     if (!app.vault.getAbstractFileByPath(defaultTemplatePath)) {
         await app.vault.create(defaultTemplatePath, DEFAULT_TEMPLATE_CONTENT);
     }
+
+    // Create default weekly horizontal template if missing
+    if (!app.vault.getAbstractFileByPath(weeklyTemplatePath)) {
+        await app.vault.create(weeklyTemplatePath, DEFAULT_WEEKLY_TEMPLATE_CONTENT);
+    }
+}
+
+function isTemplateFileName(filename: string): boolean {
+    return filename.startsWith('template_') || filename.startsWith('default_');
 }

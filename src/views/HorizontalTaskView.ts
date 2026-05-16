@@ -1,4 +1,4 @@
-import { App, ItemView, MarkdownRenderer, Notice, TFile, ViewStateResult, WorkspaceLeaf } from 'obsidian';
+import { App, getAllTags, ItemView, MarkdownRenderer, Notice, TFile, ViewStateResult, WorkspaceLeaf } from 'obsidian';
 import { EditorState } from '@codemirror/state';
 import { EditorView } from '@codemirror/view';
 import { IHorizontalTaskColumn, parseHorizontalTaskContent, serializeHorizontalTaskColumns } from '../core/utils/horizontalTaskUtils';
@@ -7,6 +7,20 @@ export const HORIZONTAL_TASK_VIEW_TYPE = 'task-timeline-horizontal-task-view';
 
 interface HorizontalTaskViewState {
     filePath?: string;
+}
+
+interface HorizontalCompletion {
+    label: string;
+    detail: string;
+    apply: string;
+}
+
+interface HorizontalCompletionState {
+    view: EditorView;
+    from: number;
+    to: number;
+    options: HorizontalCompletion[];
+    selectedIndex: number;
 }
 
 function isHorizontalTaskViewState(state: unknown): state is HorizontalTaskViewState {
@@ -22,6 +36,8 @@ export class HorizontalTaskView extends ItemView {
     private saveTimer: number | null = null;
     private editorViews: EditorView[] = [];
     private editingColumnId: string | null = null;
+    private completionEl: HTMLElement | null = null;
+    private completionState: HorizontalCompletionState | null = null;
 
     constructor(leaf: WorkspaceLeaf, appRef: App) {
         super(leaf);
@@ -72,6 +88,7 @@ export class HorizontalTaskView extends ItemView {
             this.saveTimer = null;
         }
         this.destroyEditors();
+        this.closeCompletion();
         this.editingColumnId = null;
         this.foldedColumnIds.clear();
     }
@@ -208,7 +225,7 @@ export class HorizontalTaskView extends ItemView {
         previewEl.tabIndex = 0;
         previewEl.setAttribute('role', 'button');
         previewEl.setAttribute('aria-label', `Edit ${column.title}`);
-        previewEl.addEventListener('click', (event) => this.handlePreviewClick(event, column.id));
+        previewEl.addEventListener('click', (event) => this.handlePreviewClick(event, column.id), { capture: true });
         previewEl.addEventListener('keydown', (event) => {
             if (event.key === 'Enter') {
                 event.preventDefault();
@@ -241,6 +258,14 @@ export class HorizontalTaskView extends ItemView {
             return;
         }
 
+        const checkboxEl = target.closest('input[type="checkbox"]');
+        if (checkboxEl instanceof HTMLInputElement) {
+            event.preventDefault();
+            event.stopPropagation();
+            this.togglePreviewCheckbox(checkboxEl, columnId);
+            return;
+        }
+
         const linkEl = target.closest('a');
         if (linkEl instanceof HTMLAnchorElement) {
             if (linkEl.hasClass('internal-link')) {
@@ -268,8 +293,10 @@ export class HorizontalTaskView extends ItemView {
                         if (!update.docChanged) return;
                         column.content = update.state.doc.toString();
                         this.queueSave();
+                        this.updateCompletion(update.view);
                     }),
                     EditorView.domEventHandlers({
+                        keydown: (event, view) => this.handleCompletionKeydown(event, view),
                         blur: () => {
                             this.finishEditing();
                         },
@@ -303,6 +330,7 @@ export class HorizontalTaskView extends ItemView {
     }
 
     private async finishEditing(): Promise<void> {
+        this.closeCompletion();
         await this.saveColumns();
         this.editingColumnId = null;
         await this.render();
@@ -313,5 +341,186 @@ export class HorizontalTaskView extends ItemView {
             editorView.destroy();
         }
         this.editorViews = [];
+    }
+
+    private togglePreviewCheckbox(checkboxEl: HTMLInputElement, columnId: string): void {
+        const column = this.columns.find(item => item.id === columnId);
+        if (!column) return;
+
+        const previewEl = checkboxEl.closest('.horizontal-task-preview');
+        if (!previewEl) return;
+
+        const checkboxes = Array.from(previewEl.querySelectorAll('input[type="checkbox"]'));
+        const checkboxIndex = checkboxes.indexOf(checkboxEl);
+        if (checkboxIndex < 0) return;
+
+        let currentIndex = -1;
+        const nextLines = column.content.split('\n').map(line => {
+            if (!/^\s*[-*]\s+\[[ xX]\]/.test(line)) return line;
+            currentIndex += 1;
+            if (currentIndex !== checkboxIndex) return line;
+
+            const isChecked = /^\s*[-*]\s+\[[xX]\]/.test(line);
+            return line.replace(/^(\s*[-*]\s+\[)[ xX](\])/, `$1${isChecked ? ' ' : 'x'}$2`);
+        });
+
+        column.content = nextLines.join('\n');
+        this.saveColumns();
+        this.render();
+    }
+
+    private handleCompletionKeydown(event: KeyboardEvent, view: EditorView): boolean {
+        if (!this.completionState || this.completionState.view !== view) return false;
+
+        if (event.key === 'Escape') {
+            event.preventDefault();
+            this.closeCompletion();
+            return true;
+        }
+
+        if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+            event.preventDefault();
+            const delta = event.key === 'ArrowDown' ? 1 : -1;
+            this.completionState.selectedIndex = (
+                this.completionState.selectedIndex + delta + this.completionState.options.length
+            ) % this.completionState.options.length;
+            this.renderCompletion();
+            return true;
+        }
+
+        if (event.key === 'Enter' || event.key === 'Tab') {
+            event.preventDefault();
+            this.applyCompletion(this.completionState.options[this.completionState.selectedIndex]);
+            return true;
+        }
+
+        return false;
+    }
+
+    private updateCompletion(view: EditorView): void {
+        const cursor = view.state.selection.main.head;
+        const beforeCursor = view.state.doc.sliceString(0, cursor);
+        const linkMatch = beforeCursor.match(/\[\[([^\]\n]*)$/);
+
+        if (linkMatch) {
+            const query = linkMatch[1].toLowerCase();
+            this.openCompletion(view, cursor - linkMatch[1].length, cursor, this.getFileCompletions(query));
+            return;
+        }
+
+        const tagMatch = beforeCursor.match(/(^|\s)#([A-Za-z0-9_/-]*)$/);
+        if (tagMatch) {
+            const query = tagMatch[2].toLowerCase();
+            this.openCompletion(view, cursor - tagMatch[2].length, cursor, this.getTagCompletions(query));
+            return;
+        }
+
+        this.closeCompletion();
+    }
+
+    private openCompletion(view: EditorView, from: number, to: number, options: HorizontalCompletion[]): void {
+        if (options.length === 0) {
+            this.closeCompletion();
+            return;
+        }
+
+        this.completionState = { view, from, to, options: options.slice(0, 20), selectedIndex: 0 };
+        this.renderCompletion();
+    }
+
+    private renderCompletion(): void {
+        if (!this.completionState) return;
+
+        if (!this.completionEl) {
+            this.completionEl = document.createElement('div');
+            this.completionEl.className = 'horizontal-task-completion';
+            document.body.appendChild(this.completionEl);
+        }
+
+        this.completionEl.empty();
+        const coords = this.completionState.view.coordsAtPos(this.completionState.to);
+        if (coords) {
+            this.completionEl.style.left = `${coords.left}px`;
+            this.completionEl.style.top = `${coords.bottom + 4}px`;
+        }
+
+        this.completionState.options.forEach((option, index) => {
+            const itemEl = document.createElement('div');
+            itemEl.className = 'horizontal-task-completion-item';
+            if (index === this.completionState?.selectedIndex) {
+                itemEl.classList.add('is-selected');
+            }
+
+            const labelEl = document.createElement('span');
+            labelEl.className = 'horizontal-task-completion-label';
+            labelEl.textContent = option.label;
+            itemEl.appendChild(labelEl);
+
+            const detailEl = document.createElement('span');
+            detailEl.className = 'horizontal-task-completion-detail';
+            detailEl.textContent = option.detail;
+            itemEl.appendChild(detailEl);
+
+            itemEl.addEventListener('mousedown', event => {
+                event.preventDefault();
+                this.applyCompletion(option);
+            });
+
+            this.completionEl?.appendChild(itemEl);
+        });
+    }
+
+    private applyCompletion(option: HorizontalCompletion): void {
+        if (!this.completionState) return;
+
+        this.completionState.view.dispatch({
+            changes: {
+                from: this.completionState.from,
+                to: this.completionState.to,
+                insert: option.apply,
+            },
+        });
+        this.completionState.view.focus();
+        this.closeCompletion();
+    }
+
+    private closeCompletion(): void {
+        this.completionState = null;
+        if (this.completionEl) {
+            this.completionEl.remove();
+            this.completionEl = null;
+        }
+    }
+
+    private getFileCompletions(query: string): HorizontalCompletion[] {
+        return this.app.vault.getMarkdownFiles()
+            .map(file => {
+                const basename = file.name.replace(/\.md$/, '');
+                return {
+                    label: basename,
+                    detail: file.path,
+                    apply: basename,
+                };
+            })
+            .filter(option => option.label.toLowerCase().includes(query) || option.detail.toLowerCase().includes(query))
+            .sort((a, b) => a.label.localeCompare(b.label));
+    }
+
+    private getTagCompletions(query: string): HorizontalCompletion[] {
+        const tags = new Set<string>();
+        for (const file of this.app.vault.getMarkdownFiles()) {
+            const cache = this.app.metadataCache.getFileCache(file);
+            const fileTags = cache ? getAllTags(cache) : null;
+            fileTags?.forEach(tag => tags.add(tag.replace(/^#/, '')));
+        }
+
+        return Array.from(tags)
+            .filter(tag => tag.toLowerCase().includes(query))
+            .sort((a, b) => a.localeCompare(b))
+            .map(tag => ({
+                label: `#${tag}`,
+                detail: 'tag',
+                apply: tag,
+            }));
     }
 }

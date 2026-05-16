@@ -4,5 +4,6 @@ export interface ITemplate {
     defaultStatus?: string;
     defaultPriority?: number;
     defaultCategory?: string;
+    horizontalMode?: boolean;
     bodyContent: string;    // Markdown body below frontmatter
 }

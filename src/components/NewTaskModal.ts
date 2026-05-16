@@ -10,6 +10,7 @@ export interface NewTaskFormData {
 	start: string;
 	end?: string;
 	templateContent?: string;
+	horizontalMode?: boolean;
 }
 
 export class NewTaskModal extends Modal {
@@ -178,6 +179,7 @@ export class NewTaskModal extends Modal {
 			this.formData.status = "default";
 			this.formData.priority = "5";
 			this.formData.templateContent = undefined;
+			this.formData.horizontalMode = undefined;
 		} else {
 			const template = this.templates.find(t => t.name === templateName);
 			if (!template) return;
@@ -187,6 +189,7 @@ export class NewTaskModal extends Modal {
 			if (template.defaultStatus) this.formData.status = template.defaultStatus;
 			if (template.defaultPriority) this.formData.priority = String(template.defaultPriority);
 			if (template.bodyContent) this.formData.templateContent = template.bodyContent;
+			this.formData.horizontalMode = template.horizontalMode;
 		}
 
 		// Recompute end date from current start + new length
