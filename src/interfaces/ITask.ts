@@ -8,6 +8,7 @@ export interface ITask {
     filePath: string;
     content: string;
     priority: number;
+    horizontalMode?: boolean;
     totalSubtasks: number;
     completedSubtasks: number;
     linkedTaskIds?: string[];  // Resolved task IDs from [[wiki-links]] in content

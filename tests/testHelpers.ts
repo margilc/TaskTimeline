@@ -100,6 +100,7 @@ export function createLayoutTestState(
         numberOfColumns = 8,
         groupBy = 'none'
     } = options;
+    const dateBounds = createDateBounds(currentDate, numberOfColumns, timeUnit);
 
     return {
         persistent: {
@@ -112,8 +113,59 @@ export function createLayoutTestState(
         },
         volatile: {
             currentTasks: tasks,
+            dateBounds,
         }
     };
+}
+
+export async function updateTestTimeUnit(
+    app: any,
+    persistent: IAppState['persistent'],
+    volatile: IAppState['volatile'],
+    timeUnit: TimeUnit
+): Promise<IAppState> {
+    const columnCount = persistent.settings && 'numberOfColumns' in persistent.settings
+        ? Number((persistent.settings as any).numberOfColumns)
+        : 8;
+    const currentDate = persistent.currentDate || volatile.dateBounds?.earliest || '2024-01-15';
+
+    return {
+        persistent: {
+            ...persistent,
+            currentTimeUnit: timeUnit,
+        },
+        volatile: {
+            ...volatile,
+            dateBounds: createDateBounds(currentDate, columnCount, timeUnit),
+        },
+    };
+}
+
+function createDateBounds(currentDate: string, columnCount: number, timeUnit: TimeUnit): { earliest: string; latest: string } {
+    const earliest = normalizeToDateOnly(new Date(`${currentDate}T00:00:00.000Z`));
+    const latest = addTestTime(earliest, Math.max(columnCount - 1, 0), timeUnit);
+
+    return {
+        earliest: earliest.toISOString(),
+        latest: latest.toISOString(),
+    };
+}
+
+function addTestTime(date: Date, amount: number, unit: TimeUnit): Date {
+    const result = new Date(date);
+    if (unit === TimeUnit.MONTH) {
+        result.setUTCMonth(result.getUTCMonth() + amount);
+        result.setUTCDate(1);
+    } else if (unit === TimeUnit.WEEK) {
+        result.setUTCDate(result.getUTCDate() + amount * 7);
+    } else {
+        result.setUTCDate(result.getUTCDate() + amount);
+    }
+    return result;
+}
+
+function normalizeToDateOnly(date: Date): Date {
+    return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
 }
 
 // Overlap detection for layout tests

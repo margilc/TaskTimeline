@@ -46,6 +46,26 @@ describe('parseTaskFromContent', () => {
         expect(task.completedSubtasks).toBe(2);
     });
 
+    test('parses horizontal mode flag', () => {
+        const content = `---
+name: Horizontal Task
+start: 2024-01-15
+horizontal_mode: true
+---
+# Notes
+Content`;
+        const task = parseTaskFromContent(content, 'test.md');
+
+        expect(task.horizontalMode).toBe(true);
+    });
+
+    test('defaults horizontal mode to false', () => {
+        const content = readTestFile('valid_task_basic.md');
+        const task = parseTaskFromContent(content, 'test.md');
+
+        expect(task.horizontalMode).toBe(false);
+    });
+
     test('throws error for missing name', () => {
         const content = readTestFile('invalid_task_no_name.md');
         expect(() => parseTaskFromContent(content, 'test.md')).toThrow('Task must have a valid name field');

@@ -124,6 +124,109 @@ body.theme-dark .tt-dropdown-trigger {
   overflow: hidden;
 }
 
+.horizontal-task-view {
+  height: 100%;
+  width: 100%;
+  overflow: hidden;
+  background-color: var(--tt-bg);
+  color: var(--tt-text);
+}
+
+.horizontal-task-grid {
+  height: 100%;
+  width: 100%;
+  display: grid;
+  grid-template-columns: repeat(var(--horizontal-task-column-count), minmax(0, 1fr));
+  gap: var(--spacing-sm);
+  padding: var(--spacing-sm);
+  box-sizing: border-box;
+  overflow: hidden;
+}
+
+.horizontal-task-column {
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background-color: var(--tt-surface-1);
+  border: 1px solid var(--tt-border);
+  border-radius: var(--border-radius);
+}
+
+.horizontal-task-column-header {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-sm);
+  padding: var(--spacing-sm);
+  background-color: var(--tt-surface-2);
+  border-bottom: 1px solid var(--tt-border);
+}
+
+.horizontal-task-column-title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--tt-font-size-label);
+  font-weight: var(--tt-font-weight-label);
+  line-height: var(--tt-line-height-normal);
+}
+
+.horizontal-task-fold-toggle {
+  flex: 0 0 auto;
+  width: 24px;
+  height: 24px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 1px solid var(--tt-border);
+  border-radius: var(--border-radius);
+  background-color: var(--interactive-normal);
+  color: var(--text-normal);
+  cursor: pointer;
+  font-size: var(--tt-font-size-label);
+  font-weight: var(--tt-font-weight-label);
+  line-height: 1;
+}
+
+.horizontal-task-fold-toggle:hover {
+  background-color: var(--interactive-hover);
+}
+
+.horizontal-task-column-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+  padding: var(--spacing-sm);
+}
+
+.horizontal-task-column.is-folded .horizontal-task-column-body {
+  display: none;
+}
+
+.horizontal-task-frontmatter {
+  margin: 0;
+  white-space: pre-wrap;
+  overflow: hidden;
+  font-family: var(--font-monospace);
+  font-size: var(--tt-font-size-caption);
+  line-height: var(--tt-line-height-normal);
+}
+
+.horizontal-task-empty-column,
+.horizontal-task-message {
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+.horizontal-task-message {
+  padding: var(--spacing-lg);
+}
+
 .board-container {
   flex: 1;
   width: 100%;

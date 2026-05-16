@@ -2,7 +2,8 @@ import { App, PluginSettingTab, Setting, Notice } from "obsidian";
 import TaskTimelinePlugin from "../main";
 import { AppStateManager } from "../core/AppStateManager";
 import { ITaskTimelineSettings } from "../interfaces/ITaskTimelineSettings";
-import { getAvailableBackgrounds, DEFAULT_COLOR } from "../core/utils/colorUtils";
+import { getAvailableBackgrounds } from "../core/utils/colorUtils";
+import { DEFAULT_TASK_TIMELINE_SETTINGS } from "./defaultSettings";
 
 export class TaskTimelineSettingTab extends PluginSettingTab {
 	plugin: TaskTimelinePlugin;
@@ -49,25 +50,25 @@ export class TaskTimelineSettingTab extends PluginSettingTab {
 				}));
 
 		this.addIntSetting(containerEl, settings, "rowHeight", "Row height (px)",
-			"Height of task cards in pixels", 80);
+			"Height of task cards in pixels", DEFAULT_TASK_TIMELINE_SETTINGS.rowHeight);
 
 		// --- Zoom Settings ---
 		containerEl.createEl('h3', { text: 'Zoom' });
 
 		this.addIntSetting(containerEl, settings, "minColWidth", "Min column width (px)",
-			"Narrowest column width before switching to coarser time unit", 30);
+			"Narrowest column width before switching to coarser time unit", DEFAULT_TASK_TIMELINE_SETTINGS.minColWidth);
 
 		this.addIntSetting(containerEl, settings, "maxColWidth", "Max column width (px)",
-			"Widest column width before switching to finer time unit", 150);
+			"Widest column width before switching to finer time unit", DEFAULT_TASK_TIMELINE_SETTINGS.maxColWidth);
 
 		this.addIntSetting(containerEl, settings, "zoomStep", "Zoom step (px)",
-			"Pixels added/removed per scroll tick", 10);
+			"Pixels added/removed per scroll tick", DEFAULT_TASK_TIMELINE_SETTINGS.zoomStep);
 
 		this.addIntSetting(containerEl, settings, "minFontSize", "Min font size (px)",
-			"Smallest card font at narrowest column width", 8);
+			"Smallest card font at narrowest column width", DEFAULT_TASK_TIMELINE_SETTINGS.minFontSize);
 
 		this.addIntSetting(containerEl, settings, "maxFontSize", "Max font size (px)",
-			"Largest card font at widest column width", 14);
+			"Largest card font at widest column width", DEFAULT_TASK_TIMELINE_SETTINGS.maxFontSize);
 
 		// Default Card Color Setting with color preview
 		const backgroundColors = getAvailableBackgrounds();
@@ -84,13 +85,13 @@ export class TaskTimelineSettingTab extends PluginSettingTab {
 			margin-right: 8px;
 			flex-shrink: 0;
 		`;
-		colorPreview.style.backgroundColor = settings.defaultCardColor || DEFAULT_COLOR;
+		colorPreview.style.backgroundColor = settings.defaultCardColor || DEFAULT_TASK_TIMELINE_SETTINGS.defaultCardColor;
 
 		colorSetting.addDropdown(dropdown => {
 			backgroundColors.forEach(({ name, value }) => {
 				dropdown.addOption(value, name);
 			});
-			dropdown.setValue(settings.defaultCardColor || DEFAULT_COLOR);
+			dropdown.setValue(settings.defaultCardColor || DEFAULT_TASK_TIMELINE_SETTINGS.defaultCardColor);
 			dropdown.onChange(async (value) => {
 				colorPreview.style.backgroundColor = value;
 				await this.updateSetting("defaultCardColor", value);
@@ -119,18 +120,7 @@ export class TaskTimelineSettingTab extends PluginSettingTab {
 	}
 
 	private getDefaultSettings(): ITaskTimelineSettings {
-		return {
-			taskDirectory: "Taskdown",
-			openByDefault: true,
-			openInNewPane: false,
-			rowHeight: 80,
-			defaultCardColor: DEFAULT_COLOR,
-			minColWidth: 30,
-			maxColWidth: 150,
-			zoomStep: 10,
-			minFontSize: 8,
-			maxFontSize: 14,
-		};
+		return { ...DEFAULT_TASK_TIMELINE_SETTINGS };
 	}
 
 	private addIntSetting(

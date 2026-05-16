@@ -62,20 +62,20 @@ describe('Color Logic Tests', () => {
                 colorMappings: {
                     'TestProject': {
                         'category': {
-                            'development': PREDEFINED_COLORS.Red,
+                            'development': PREDEFINED_COLORS.Rose,
                             'testing': PREDEFINED_COLORS.Green,
-                            'design': PREDEFINED_COLORS.Cyan,
+                            'design': PREDEFINED_COLORS.Violet,
                             'hidden-category': HIDE_VALUE
                         },
                         'status': {
-                            'In Progress': PREDEFINED_COLORS.Orange,
+                            'In Progress': PREDEFINED_COLORS.Amber,
                             'Done': PREDEFINED_COLORS.Green,
                             'Not Started': PREDEFINED_COLORS.Blue
                         },
                         'priority': {
-                            '1': PREDEFINED_COLORS.Red,
-                            '2': PREDEFINED_COLORS.Orange,
-                            '3': PREDEFINED_COLORS.Yellow
+                            '1': PREDEFINED_COLORS.Rose,
+                            '2': PREDEFINED_COLORS.Amber,
+                            '3': PREDEFINED_COLORS.Blue
                         }
                     }
                 }
@@ -94,19 +94,19 @@ describe('Color Logic Tests', () => {
 
     it('should return correct color based on category', () => {
         const color = getTaskColor(baseTask, baseState);
-        expect(color).toBe(PREDEFINED_COLORS.Red);
+        expect(color).toBe(PREDEFINED_COLORS.Rose);
     });
 
     it('should return correct color when color variable is status', () => {
         baseState.persistent.colorVariable = 'status';
         const color = getTaskColor(baseTask, baseState);
-        expect(color).toBe(PREDEFINED_COLORS.Orange);
+        expect(color).toBe(PREDEFINED_COLORS.Amber);
     });
 
     it('should return correct color when color variable is priority', () => {
         baseState.persistent.colorVariable = 'priority';
         const color = getTaskColor(baseTask, baseState);
-        expect(color).toBe(PREDEFINED_COLORS.Red);
+        expect(color).toBe(PREDEFINED_COLORS.Rose);
     });
 
     it('should return hide color when task value maps to hide', () => {
@@ -148,7 +148,7 @@ describe('Color Logic Tests', () => {
         // Test design category
         const designTask = { ...baseTask, category: 'design' };
         const designColor = getTaskColor(designTask, baseState);
-        expect(designColor).toBe(PREDEFINED_COLORS.Cyan);
+        expect(designColor).toBe(PREDEFINED_COLORS.Violet);
     });
 
     it('should handle priority as number correctly', () => {
@@ -157,12 +157,12 @@ describe('Color Logic Tests', () => {
         // Test priority 2
         const priority2Task = { ...baseTask, priority: 2 };
         const priority2Color = getTaskColor(priority2Task, baseState);
-        expect(priority2Color).toBe(PREDEFINED_COLORS.Orange);
+        expect(priority2Color).toBe(PREDEFINED_COLORS.Amber);
 
         // Test priority 3
         const priority3Task = { ...baseTask, priority: 3 };
         const priority3Color = getTaskColor(priority3Task, baseState);
-        expect(priority3Color).toBe(PREDEFINED_COLORS.Yellow);
+        expect(priority3Color).toBe(PREDEFINED_COLORS.Blue);
     });
 
     it('should handle missing color mappings gracefully', () => {

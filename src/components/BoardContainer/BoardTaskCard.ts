@@ -5,6 +5,8 @@ import { ITaskTimelineSettings } from "../../interfaces/ITaskTimelineSettings";
 import { AppStateManager } from "../../core/AppStateManager";
 import { DEFAULT_COLOR, HIDE_VALUE } from "../../core/utils/colorUtils";
 import { BoardArrowOverlay } from "./BoardArrowOverlay";
+import { HORIZONTAL_TASK_VIEW_TYPE } from "../../views/HorizontalTaskView";
+import { hasHorizontalModeFrontmatter, shouldUseHorizontalTaskView } from "../../core/utils/horizontalTaskUtils";
 
 export function BoardTaskCard(
 	task: ITask,
@@ -59,7 +61,7 @@ export function BoardTaskCard(
 	card.addEventListener("click", (e) => {
 		e.stopPropagation();
 		if (task.filePath) {
-			openTaskFile(task.filePath, appStateManager);
+			openTaskFile(task.filePath, appStateManager, shouldUseHorizontalTaskView(task));
 		}
 	});
 
@@ -170,13 +172,19 @@ function updateSharedTooltipContent(tooltip: HTMLElement, task: ITask, isDebugMo
 
 // Track the task file leaf ID to reuse the same split pane
 let taskFileLeafId: string | null = null;
+let horizontalTaskViewLeafId: string | null = null;
 
-function openTaskFile(filePath: string, appStateManager: AppStateManager): void {
+async function openTaskFile(filePath: string, appStateManager: AppStateManager, useHorizontalView = false): Promise<void> {
 	const app = (window as any).app;
 	if (!app) return;
 
 	const file = app.vault.getAbstractFileByPath(filePath);
 	if (!file) return;
+
+	if (useHorizontalView || await shouldOpenHorizontalTaskView(app, file as TFile, filePath)) {
+		await openHorizontalTaskView(filePath);
+		return;
+	}
 
 	// Try to reuse existing leaf
 	if (taskFileLeafId) {
@@ -191,6 +199,50 @@ function openTaskFile(filePath: string, appStateManager: AppStateManager): void 
 	const newLeaf = app.workspace.getLeaf("split", "vertical");
 	taskFileLeafId = newLeaf.id;
 	newLeaf.openFile(file as TFile);
+}
+
+async function shouldOpenHorizontalTaskView(app: any, file: TFile, filePath: string): Promise<boolean> {
+	try {
+		const fileContent = await app.vault.read(file);
+		return hasHorizontalModeFrontmatter(fileContent);
+	} catch (error) {
+		return false;
+	}
+}
+
+async function openHorizontalTaskView(filePath: string): Promise<void> {
+	const app = (window as any).app;
+	if (!app) return;
+
+	const file = app.vault.getAbstractFileByPath(filePath);
+	if (!file) return;
+
+	try {
+		if (horizontalTaskViewLeafId) {
+			const existingLeaf = app.workspace.getLeafById(horizontalTaskViewLeafId);
+			if (existingLeaf) {
+				await existingLeaf.setViewState({
+					type: HORIZONTAL_TASK_VIEW_TYPE,
+					state: { filePath },
+					active: true,
+				});
+				app.workspace.revealLeaf(existingLeaf);
+				return;
+			}
+			horizontalTaskViewLeafId = null;
+		}
+
+		const newLeaf = app.workspace.getLeaf("split", "horizontal");
+		horizontalTaskViewLeafId = newLeaf.id;
+		await newLeaf.setViewState({
+			type: HORIZONTAL_TASK_VIEW_TYPE,
+			state: { filePath },
+			active: true,
+		});
+		app.workspace.revealLeaf(newLeaf);
+	} catch (error) {
+		console.error('Failed to open horizontal task view:', error);
+	}
 }
 
 function getTaskColor(task: ITask, appStateManager: AppStateManager): string {

@@ -1,7 +1,9 @@
-import { Plugin, WorkspaceLeaf, Notice } from "obsidian";
+import { Plugin, WorkspaceLeaf, Notice, TFile } from "obsidian";
 import { TaskTimelineView, TASK_TIMELINE_VIEW_TYPE } from "./views/TaskTimelineView";
+import { HorizontalTaskView, HORIZONTAL_TASK_VIEW_TYPE } from "./views/HorizontalTaskView";
 import { AppStateManager } from "./core/AppStateManager";
 import { TaskTimelineSettingTab } from "./settings/TaskTimelineSettingTab";
+import { hasHorizontalModeFrontmatter } from "./core/utils/horizontalTaskUtils";
 
 export default class TaskTimelinePlugin extends Plugin {
 	appStateManager: AppStateManager;
@@ -15,6 +17,13 @@ export default class TaskTimelinePlugin extends Plugin {
 			TASK_TIMELINE_VIEW_TYPE,
 			(leaf) => new TaskTimelineView(leaf, this.app, this.appStateManager)
 		);
+
+		this.registerView(
+			HORIZONTAL_TASK_VIEW_TYPE,
+			(leaf) => new HorizontalTaskView(leaf, this.app)
+		);
+
+		this.registerHorizontalModeFileInterceptor();
 		
 		this.addSettingTab(
 			new TaskTimelineSettingTab(
@@ -44,6 +53,28 @@ export default class TaskTimelinePlugin extends Plugin {
 		});
 	}
 
+	private registerHorizontalModeFileInterceptor(): void {
+		this.registerEvent(this.app.workspace.on('file-open', async (file: TFile | null) => {
+			if (!file || file.extension !== 'md') return;
+
+			const activeLeaf = this.app.workspace.activeLeaf;
+			if (!activeLeaf || activeLeaf.view.getViewType() === HORIZONTAL_TASK_VIEW_TYPE) return;
+
+			try {
+				const content = await this.app.vault.read(file);
+				if (!hasHorizontalModeFrontmatter(content)) return;
+
+				await activeLeaf.setViewState({
+					type: HORIZONTAL_TASK_VIEW_TYPE,
+					state: { filePath: file.path },
+					active: true,
+				});
+			} catch (error) {
+				console.error('TaskTimeline: Failed to open horizontal task view', error);
+			}
+		}));
+	}
+
 	async activateView() {
 		try {
 			let leaf: WorkspaceLeaf | null = null;
@@ -68,6 +99,7 @@ export default class TaskTimelinePlugin extends Plugin {
 
 	onunload() {
 		this.appStateManager?.destroy();
+		this.app.workspace.detachLeavesOfType(HORIZONTAL_TASK_VIEW_TYPE);
 		this.app.workspace.detachLeavesOfType(TASK_TIMELINE_VIEW_TYPE);
 	}
 } 

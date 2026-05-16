@@ -1,11 +1,11 @@
 import { updateLayout, clearLayoutCache } from '../src/core/update/updateLayout';
-import { updateTimeUnit } from '../src/core/update/updateTimeUnit';
 import { ITask } from '../src/interfaces/ITask';
 import { TimeUnit } from '../src/enums/TimeUnit';
 import {
     createLayoutTestState,
     getPositionedTasks,
-    expectValidTaskPosition
+    expectValidTaskPosition,
+    updateTestTimeUnit as updateTimeUnit
 } from './testHelpers';
 
 const mockApp = {} as any;
@@ -19,7 +19,10 @@ describe('Layout Edge Cases', () => {
     describe('Date Boundaries', () => {
         describe('Month Boundaries', () => {
             test('should show correct month start dates in column headers', async () => {
-                const state = createLayoutTestState([], { currentDate: '2025-06-15', numberOfColumns: 5 });
+                const tasks: ITask[] = [
+                    { name: 'June Task', start: '2025-06-15', end: '2025-06-15', filePath: '/june.md', content: '' }
+                ];
+                const state = createLayoutTestState(tasks, { currentDate: '2025-06-15', numberOfColumns: 5 });
 
                 const timeUnitResult = await updateTimeUnit(mockApp, state.persistent, state.volatile, TimeUnit.MONTH);
                 const result = updateLayout(mockApp, {
@@ -62,7 +65,10 @@ describe('Layout Edge Cases', () => {
 
         describe('Week Boundaries', () => {
             test('should show correct week start dates (Monday) in column headers', async () => {
-                const state = createLayoutTestState([], { currentDate: '2025-06-15', numberOfColumns: 5 });
+                const tasks: ITask[] = [
+                    { name: 'Week Task', start: '2025-06-16', end: '2025-06-16', filePath: '/week.md', content: '' }
+                ];
+                const state = createLayoutTestState(tasks, { currentDate: '2025-06-15', numberOfColumns: 5 });
 
                 const timeUnitResult = await updateTimeUnit(mockApp, state.persistent, state.volatile, TimeUnit.WEEK);
                 const result = updateLayout(mockApp, {
@@ -104,7 +110,10 @@ describe('Layout Edge Cases', () => {
 
         describe('Day Boundaries', () => {
             test('should have sequential day columns', () => {
-                const state = createLayoutTestState([], { currentDate: '2025-06-15', numberOfColumns: 5 });
+                const tasks: ITask[] = [
+                    { name: 'Day Task', start: '2025-06-15', end: '2025-06-15', filePath: '/day.md', content: '' }
+                ];
+                const state = createLayoutTestState(tasks, { currentDate: '2025-06-15', numberOfColumns: 5 });
                 const result = updateLayout(mockApp, state);
                 const layout = result.volatile.boardLayout!;
 
@@ -160,7 +169,7 @@ describe('Layout Edge Cases', () => {
                 { name: 'Multi-Day', start: '2024-01-14', end: '2024-01-16', filePath: '/multi.md', content: '' }
             ];
 
-            const state = createLayoutTestState(tasks);
+            const state = createLayoutTestState(tasks, { currentDate: '2024-01-14' });
             const result = updateLayout(mockApp, state);
             const positioned = getPositionedTasks(result.volatile.boardLayout!);
 
@@ -283,7 +292,9 @@ describe('Layout Edge Cases', () => {
             '2025-12-31', // End of year
             '2025-02-28', // End of February
         ])('should handle current date %s', (currentDate) => {
-            const state = createLayoutTestState([], { currentDate });
+            const state = createLayoutTestState([
+                { name: 'Anchor', start: currentDate, end: currentDate, filePath: '/anchor.md', content: '' }
+            ], { currentDate });
 
             expect(() => {
                 const result = updateLayout(mockApp, state);

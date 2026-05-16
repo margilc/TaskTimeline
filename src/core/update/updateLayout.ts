@@ -3,7 +3,7 @@ import { IAppState } from '../../interfaces/IAppState';
 import { ITask } from '../../interfaces/ITask';
 import { TimeUnit } from '../../enums/TimeUnit';
 import { addTime, formatDateByTimeUnit, formatWeekWithMonth, normalizeDate } from '../utils/dateUtils';
-import { groupTasks } from '../utils/groupingUtils';
+import { generateAvailableGroups, groupTasks } from '../utils/groupingUtils';
 
 const layoutCache = new Map<string, any>();
 
@@ -38,7 +38,7 @@ export function updateLayout(app: App, currentState: IAppState): IAppState {
     const totalColumns = countDateUnits(startDate, endDate, timeUnit);
 
     const tasksVersion = currentState.volatile.tasksVersion || 0;
-    const grouping = currentState.persistent.boardGrouping || { groupBy: 'none', availableGroups: [] };
+    const grouping = getEffectiveGrouping(currentState, tasks);
     const cacheKey = generateCacheKey(tasksVersion, timeUnit, dateBounds.earliest, dateBounds.latest, grouping, totalColumns);
 
     if (layoutCache.has(cacheKey)) {
@@ -79,6 +79,26 @@ export function updateLayout(app: App, currentState: IAppState): IAppState {
             ...currentState.volatile,
             boardLayout: result
         }
+    };
+}
+
+function getEffectiveGrouping(currentState: IAppState, tasks: ITask[]): { groupBy: string; availableGroups: string[] } {
+    const persistedGrouping = currentState.persistent.boardGrouping;
+    const groupBy = persistedGrouping?.groupBy || 'none';
+    const availableGroups = persistedGrouping?.availableGroups || [];
+
+    if (availableGroups.length > 0) {
+        return { groupBy, availableGroups };
+    }
+
+    return {
+        groupBy,
+        availableGroups: generateAvailableGroups(
+            tasks,
+            groupBy,
+            currentState.persistent,
+            currentState.persistent.currentProjectName
+        ),
     };
 }
 

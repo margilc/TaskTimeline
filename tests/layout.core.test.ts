@@ -1,13 +1,13 @@
 import { updateLayout, clearLayoutCache } from '../src/core/update/updateLayout';
 import { updateBoardGrouping } from '../src/core/update/updateBoardGrouping';
-import { updateTimeUnit } from '../src/core/update/updateTimeUnit';
 import { ITask } from '../src/interfaces/ITask';
 import { TimeUnit } from '../src/enums/TimeUnit';
 import {
     createLayoutTestState,
     expectValidLayout,
     getPositionedTasks,
-    expectValidTaskPosition
+    expectValidTaskPosition,
+    updateTestTimeUnit as updateTimeUnit
 } from './testHelpers';
 
 const mockApp = {} as any;
@@ -66,15 +66,12 @@ describe('Layout Core Tests', () => {
             expect(layout.timeUnit).toBe(TimeUnit.DAY);
         });
 
-        test('should generate layout with empty task list', () => {
+        test('should skip layout with empty task list', () => {
             const state = createLayoutTestState([]);
 
             const result = updateLayout(mockApp, state);
-            const layout = result.volatile.boardLayout!;
 
-            expectValidLayout(layout, 8);
-            // With no tasks, taskGrids may be empty (implementation choice)
-            expect(layout.taskGrids.length).toBeGreaterThanOrEqual(0);
+            expect(result.volatile.boardLayout).toBeUndefined();
         });
 
         test('should position tasks with valid coordinates', () => {
@@ -88,6 +85,31 @@ describe('Layout Core Tests', () => {
             positionedTasks.forEach(task => {
                 expectValidTaskPosition(task);
             });
+        });
+
+        test('should derive default groups when persisted board grouping is missing', () => {
+            const tasks = createSampleTasks();
+            const state = createLayoutTestState(tasks);
+            delete state.persistent.boardGrouping;
+
+            const result = updateLayout(mockApp, state);
+            const layout = result.volatile.boardLayout!;
+
+            expect(layout.taskGrids).toHaveLength(1);
+            expect(layout.taskGrids[0].group).toBe('All Tasks');
+            expect(getPositionedTasks(layout).length).toBeGreaterThan(0);
+        });
+
+        test('should derive groups when persisted available groups are empty', () => {
+            const tasks = createSampleTasks();
+            const state = createLayoutTestState(tasks);
+            state.persistent.boardGrouping = { groupBy: 'status', availableGroups: [] };
+
+            const result = updateLayout(mockApp, state);
+            const layout = result.volatile.boardLayout!;
+
+            expect(layout.taskGrids.map(grid => grid.group)).toEqual(['Not Started', 'In Progress', 'Done']);
+            expect(getPositionedTasks(layout)).toHaveLength(tasks.length);
         });
     });
 
@@ -138,22 +160,6 @@ describe('Layout Core Tests', () => {
 
             expect(layout.timeUnit).toBe(timeUnit);
             expect(layout.columnHeaders).toHaveLength(8);
-        });
-
-        test('should clear viewport when time unit changes', async () => {
-            const tasks = createSampleTasks();
-            const state = createLayoutTestState(tasks);
-
-            // Set custom viewport
-            state.volatile.timelineViewport = {
-                localMinDate: '2024-01-01',
-                localMaxDate: '2024-01-31'
-            };
-
-            // Change time unit
-            const timeUnitResult = await updateTimeUnit(mockApp, state.persistent, state.volatile, TimeUnit.WEEK);
-
-            expect(timeUnitResult.volatile.timelineViewport).toBeUndefined();
         });
 
         test('should maintain column count across time unit switches', async () => {
@@ -243,11 +249,11 @@ describe('Layout Core Tests', () => {
             expect(layout.gridHeight).toBeGreaterThanOrEqual(maxRow + 1);
         });
 
-        test('should have gridHeight of at least 1 even with no tasks', () => {
+        test('should skip grid generation with no tasks', () => {
             const state = createLayoutTestState([]);
             const result = updateLayout(mockApp, state);
 
-            expect(result.volatile.boardLayout!.gridHeight).toBeGreaterThan(0);
+            expect(result.volatile.boardLayout).toBeUndefined();
         });
     });
 

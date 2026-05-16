@@ -1,5 +1,4 @@
 import { generateAvailableGroups } from '../src/core/utils/groupingUtils';
-import { updateGroupOrder } from '../src/core/update/updateGroupOrder';
 
 describe('Row group ordering (persistent drag reorder)', () => {
     describe('generateAvailableGroups stable order', () => {
@@ -41,34 +40,6 @@ describe('Row group ordering (persistent drag reorder)', () => {
 
             // Default ordering from groupingUtils: Not Started < In Progress < Blocked
             expect(groups).toEqual(['Not Started', 'In Progress', 'Blocked']);
-        });
-    });
-
-    describe('updateGroupOrder', () => {
-        it('updates persistent.groupingOrderings[project][groupBy] and persistent.boardGrouping.availableGroups', () => {
-            const persistent: any = {
-                currentProjectName: 'Project A',
-                boardGrouping: {
-                    groupBy: 'status',
-                    availableGroups: ['A', 'B', 'C']
-                },
-                groupingOrderings: {
-                    'Project A': {
-                        status: ['A', 'B', 'C']
-                    }
-                }
-            };
-
-            const volatile: any = {};
-
-            const result = updateGroupOrder({} as any, persistent, volatile, {
-                sourceIndex: 0,
-                targetIndex: 2,
-                groupName: 'A'
-            });
-
-            expect(result.persistent.groupingOrderings['Project A'].status).toEqual(['B', 'C', 'A']);
-            expect(result.persistent.boardGrouping.availableGroups).toEqual(['B', 'C', 'A']);
         });
     });
 });

@@ -34,6 +34,7 @@ export function parseTaskFromContent(fileContent: string, filePath: string): ITa
         priority: frontmatter.priority ?? 5,
         filePath,
         content: contentBody,
+        horizontalMode: frontmatter.horizontal_mode === true,
         totalSubtasks,
         completedSubtasks,
         linkedTaskIds: rawLinks.length > 0 ? rawLinks : undefined
@@ -86,6 +87,8 @@ function parseFrontmatter(frontmatterText: string): Record<string, any> {
         if (key && value) {
             if (key === 'priority') {
                 result[key] = parseInt(value, 10);
+            } else if (key === 'horizontal_mode') {
+                result[key] = value.toLowerCase() === 'true';
             } else {
                 result[key] = value;
             }

@@ -1,6 +1,5 @@
 import { updateLayout, clearLayoutCache } from '../src/core/update/updateLayout';
 import { updateBoardGrouping } from '../src/core/update/updateBoardGrouping';
-import { updateTimeUnit } from '../src/core/update/updateTimeUnit';
 import { ITask } from '../src/interfaces/ITask';
 import { TimeUnit } from '../src/enums/TimeUnit';
 import {
@@ -8,7 +7,8 @@ import {
     generateSeededRandomTasks,
     measurePerformance,
     detectOverlaps,
-    generateRandomTasks
+    generateRandomTasks,
+    updateTestTimeUnit as updateTimeUnit
 } from './testHelpers';
 
 const mockApp = {} as any;

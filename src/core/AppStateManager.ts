@@ -18,6 +18,7 @@ import { TaskIndex } from './TaskIndex';
 import { ensureTemplatesFolder } from './utils/templateUtils';
 import { parseTaskFromContent } from './utils/taskUtils';
 import { TimeUnit } from '../enums/TimeUnit';
+import { DEFAULT_TASK_TIMELINE_SETTINGS } from '../settings/defaultSettings';
 
 // Ordered from finest to coarsest: index 0=day, 1=week, 2=month
 const ZOOM_TIME_UNITS = [TimeUnit.DAY, TimeUnit.WEEK, TimeUnit.MONTH];
@@ -460,18 +461,7 @@ export class AppStateManager extends Component {
 
         const defaultPersistent: IPersistentState = {
             currentProjectName: "All Projects",
-            settings: {
-                taskDirectory: "Taskdown",
-                openByDefault: true,
-                openInNewPane: false,
-                rowHeight: 80,
-                defaultCardColor: "#002b36",
-                minColWidth: 30,
-                maxColWidth: 150,
-                zoomStep: 10,
-                minFontSize: 8,
-                maxFontSize: 14,
-            },
+            settings: { ...DEFAULT_TASK_TIMELINE_SETTINGS },
             lastOpenedDate: new Date().toISOString(),
             colorVariable: "none",
             colorMappings: {},

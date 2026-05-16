@@ -13,10 +13,10 @@ import {
 
 describe('colorUtils', () => {
     describe('constants', () => {
-        test('PREDEFINED_COLORS contains Solarized accent colors', () => {
-            expect(PREDEFINED_COLORS.Yellow).toBe("#b58900");
-            expect(PREDEFINED_COLORS.Blue).toBe("#268bd2");
-            expect(Object.keys(PREDEFINED_COLORS)).toHaveLength(8);
+        test('PREDEFINED_COLORS contains muted accent colors', () => {
+            expect(PREDEFINED_COLORS.Blue).toBe("#4E6E8E");
+            expect(PREDEFINED_COLORS.Amber).toBe("#9E8A5A");
+            expect(Object.keys(PREDEFINED_COLORS)).toHaveLength(5);
         });
 
         test('GREY_BACKGROUNDS contains expected colors', () => {
@@ -45,7 +45,7 @@ describe('colorUtils', () => {
         test('returns array of color objects', () => {
             const colors = getAvailableColors();
             expect(Array.isArray(colors)).toBe(true);
-            expect(colors).toHaveLength(8);
+            expect(colors).toHaveLength(5);
             expect(colors[0]).toHaveProperty('name');
             expect(colors[0]).toHaveProperty('value');
         });
@@ -63,8 +63,8 @@ describe('colorUtils', () => {
 
     describe('isValidColor', () => {
         test('validates predefined accent colors', () => {
-            expect(isValidColor("#b58900")).toBe(true);  // Yellow
-            expect(isValidColor("#268bd2")).toBe(true);  // Blue
+            expect(isValidColor("#9E8A5A")).toBe(true);  // Amber
+            expect(isValidColor("#4E6E8E")).toBe(true);  // Blue
         });
 
         test('validates grey background colors', () => {
