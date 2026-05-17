@@ -684,7 +684,7 @@ body.theme-dark .groups-container {
   transition: all 0.2s ease;
   z-index: 1;
   box-sizing: border-box;
-  overflow: hidden;
+  overflow: clip;
   font-size: var(--tt-card-font-size, 14px);
 }
 
@@ -709,6 +709,12 @@ body.theme-dark .task-timeline-task:hover {
   margin: 0;
   padding: 0;
   line-height: var(--tt-line-height-compact);
+
+  align-self: flex-start;
+  max-width: 100%;
+  position: sticky;
+  left: calc(var(--tt-board-column-width, 90px) + var(--spacing-sm));
+  z-index: 2;
 }
 
 

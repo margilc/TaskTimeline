@@ -380,6 +380,8 @@ export class BoardContainer {
     private updateGroups(boardLayout: any, settings: any, columnWidth: number, rowHeight: number): void {
         if (!this.groupsContainer) return;
 
+        this.contentElement.style.setProperty('--tt-board-column-width', `${columnWidth}px`);
+
         const currentGroupNames = new Set<string>();
 
         const totalGroups = boardLayout.taskGrids.length;
