@@ -1047,3 +1047,94 @@ h3 {
     cursor: not-allowed;
 }
 
+/* =================
+   DRAG / DROP / RESIZE
+   ================= */
+
+.task-timeline-task {
+  cursor: grab;
+}
+
+.task-timeline-task.is-dragging-source {
+  opacity: 0.30;
+  cursor: grabbing;
+}
+
+.task-timeline-task.is-dragging-source:hover {
+  transform: none;
+  box-shadow: none;
+}
+
+/* Resize handles: invisible by default, tinted on hover */
+.task-timeline-task .resize-handle {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 8px;
+  cursor: ew-resize;
+  z-index: 2;
+  user-select: none;
+}
+.task-timeline-task .resize-handle-left { left: 0; }
+.task-timeline-task .resize-handle-right { right: 0; }
+
+.task-timeline-task .resize-handle-left:hover {
+  background: linear-gradient(90deg, rgba(255, 255, 255, 0.22), transparent);
+}
+.task-timeline-task .resize-handle-right:hover {
+  background: linear-gradient(270deg, rgba(255, 255, 255, 0.22), transparent);
+}
+body.theme-dark .task-timeline-task .resize-handle-left:hover {
+  background: linear-gradient(90deg, rgba(255, 255, 255, 0.14), transparent);
+}
+body.theme-dark .task-timeline-task .resize-handle-right:hover {
+  background: linear-gradient(270deg, rgba(255, 255, 255, 0.14), transparent);
+}
+
+/*
+ * Drag ghost — a CHILD of the target group's CSS grid. It is placed via
+ * grid-column / grid-row inline styles (set from the controller), so the
+ * browser handles all pixel math (column-gap, row-gap, padding). The ghost
+ * doubles as the drop-target highlight via its accent border.
+ *
+ * Colors are hardcoded so the ghost remains visible regardless of the user's
+ * theme (some themes leave --color-accent-rgb undefined).
+ */
+.task-drag-ghost {
+  pointer-events: none;
+  z-index: 50;
+  opacity: 0.95;
+  border: 3px solid rgba(125, 175, 255, 0.95);
+  border-radius: var(--border-radius);
+  background-color: rgba(125, 175, 255, 0.18);
+  filter: drop-shadow(0 0 8px rgba(125, 175, 255, 0.55));
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--spacing-sm);
+  font-size: var(--tt-card-font-size, 14px);
+  font-weight: 600;
+  overflow: hidden;
+  box-sizing: border-box;
+  transition: none;
+}
+
+/*
+ * Grid backdrop — an SVG overlay drawn inside .groups-container during a
+ * drag. The SVG itself sets its own position:absolute / left / top inline,
+ * but the container must establish a positioning context.
+ */
+.groups-container {
+  position: relative;
+}
+
+.drag-grid-backdrop {
+  pointer-events: none;
+}
+
+/* Suppress hover lift on cards during a drag to reduce visual noise. */
+.groups-container.is-drag-active .task-timeline-task:hover {
+  transform: none;
+  box-shadow: none;
+}
+

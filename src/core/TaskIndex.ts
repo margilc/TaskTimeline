@@ -119,6 +119,24 @@ export class TaskIndex {
     }
 
     /**
+     * Upsert a task directly without reading the file.
+     * Used to keep the index consistent with optimistic state updates
+     * before the vault modify event fires.
+     */
+    upsertTask(filePath: string, task: ITask): void {
+        this.tasksByPath.set(filePath, task);
+    }
+
+    /**
+     * Remove an entry from the index by path. Used by the revert/error path
+     * to clear stale optimistic entries when the underlying file no longer
+     * exists at that path (e.g., after a rename succeeded).
+     */
+    removeByPath(filePath: string): void {
+        this.tasksByPath.delete(filePath);
+    }
+
+    /**
      * Clear the entire index.
      */
     clear(): void {

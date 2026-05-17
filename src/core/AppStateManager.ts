@@ -1,4 +1,5 @@
 import { IAppState, IPersistentState, IVolatileState, IZoomState } from '../interfaces/IAppState';
+import { ITask } from '../interfaces/ITask';
 import { PluginEvent } from '../enums/events';
 import { Plugin, App, TAbstractFile, TFile, TFolder, Component, Events, Notice } from 'obsidian';
 import { updateProjects } from './update/updateProjects';
@@ -10,8 +11,9 @@ import { updateBoardGrouping } from './update/updateBoardGrouping';
 import { updateGroupFold } from './update/updateGroupFold';
 import { updateSettings } from './update/updateSettings';
 import { createTask } from './update/createTask';
-import { renameTaskFileForNewStartDate, renameTaskFileForNewName, parseTaskFilename, identifierToName } from './utils/fileRenameUtils';
+import { parseTaskFilename, identifierToName, nameToIdentifier } from './utils/fileRenameUtils';
 import { updateTaskFrontmatter } from './utils/frontmatterUtils';
+import { canonicalizeFile } from './utils/canonicalizeFile';
 import { updateDateBounds } from './update/updateDateBounds';
 import { DEFAULT_COLOR } from './utils/colorUtils';
 import { TaskIndex } from './TaskIndex';
@@ -40,9 +42,16 @@ export class AppStateManager extends Component {
     private pendingLayoutUpdate = false;
     private rafId: number | null = null;
 
-    // Loop prevention for bidirectional name-filename sync
-    private pendingRenames: Set<string> = new Set();
-    private pendingFrontmatterUpdates: Set<string> = new Set();
+    // Per-file mutex for write operations. Drag/resize commits, modify-event
+    // canonicalization, and rename-event name-sync all acquire withFileLock
+    // for the affected path so concurrent writers serialize cleanly.
+    private fileLocks: Map<string, Promise<unknown>> = new Map();
+
+    // Refcounted per-path "explicit commit in progress" tracker. While a
+    // commit (drag/resize) owns a path's alignment, the synchronous modify-
+    // event handler checks this set and defers instead of racing against
+    // the commit's write→rename sequence.
+    private mutationCounts: Map<string, number> = new Map();
 
     constructor(plugin: Plugin) {
         super();
@@ -123,13 +132,11 @@ export class AppStateManager extends Component {
                     await this.taskIndex.handleFileRename(file, oldPath);
                 }
 
-                // Check if this rename was triggered by our own name→filename sync
-                if (this.pendingRenames.has(oldPath)) {
-                    this.pendingRenames.delete(oldPath);
-                } else {
-                    // External rename: sync filename identifier → frontmatter name
-                    await this.syncNameFromFilename(file, oldPath);
-                }
+                // Always run name-sync. syncNameFromFilename is idempotent
+                // (compares the existing frontmatter name's slug against the
+                // new filename identifier) so cascading renames from our own
+                // canonicalizeFile no longer trigger redundant writes.
+                await this.syncNameFromFilename(file, oldPath);
 
                 this.events.trigger(PluginEvent.UpdateTasksPending);
             }
@@ -145,38 +152,20 @@ export class AppStateManager extends Component {
         }
     }
 
-    private async handleFileModifyWithRenaming(file: TFile): Promise<void> {
-        // Guard: skip if this modify was triggered by our own filename→name sync
-        if (this.pendingFrontmatterUpdates.has(file.path)) {
-            this.pendingFrontmatterUpdates.delete(file.path);
+    private handleFileModifyWithRenaming(file: TFile): void {
+        // Defer to an in-flight commit. Modify events fire synchronously
+        // inside processFrontMatter, so this check must remain synchronous.
+        if (this.isMutationInProgress(file.path)) {
             this.events.trigger(PluginEvent.UpdateTasksPending);
             return;
         }
 
-        try {
-            const currentTasks = this.state.volatile.currentTasks || [];
-            const taskBeforeUpdate = currentTasks.find(task => task.filePath === file.path);
-
-            const content = await this.app.vault.read(file);
-            const parsedTask = parseTaskFromContent(content, file.path);
-
-            if (parsedTask && taskBeforeUpdate) {
-                if (parsedTask.start !== taskBeforeUpdate.start) {
-                    await renameTaskFileForNewStartDate(this.app, taskBeforeUpdate, parsedTask.start);
-                } else if (parsedTask.name !== taskBeforeUpdate.name) {
-                    this.pendingRenames.add(file.path);
-                    const newPath = await renameTaskFileForNewName(this.app, file.path, parsedTask.name);
-                    if (!newPath) {
-                        this.pendingRenames.delete(file.path);
-                    }
-                }
-            }
-
-            this.events.trigger(PluginEvent.UpdateTasksPending);
-        } catch (error) {
-            console.error('Error handling file modification with renaming:', error);
-            this.events.trigger(PluginEvent.UpdateTasksPending);
-        }
+        // Fire-and-forget: do NOT await. Awaiting here would block (or
+        // deadlock) Obsidian's listener dispatch since the modify event is
+        // dispatched synchronously from inside processFrontMatter.
+        this.withFileLock(file.path, () => canonicalizeFile(this.app, file))
+            .catch(err => console.error('TaskTimeline: canonicalize failed for', file.path, err))
+            .finally(() => this.events.trigger(PluginEvent.UpdateTasksPending));
     }
 
     private async syncNameFromFilename(file: TFile, oldPath: string): Promise<void> {
@@ -186,14 +175,24 @@ export class AppStateManager extends Component {
 
             const oldParsed = parseTaskFilename(oldFileName);
             const newParsed = parseTaskFilename(newFileName);
-
             if (!oldParsed || !newParsed) return;
+            if (oldParsed.identifier === newParsed.identifier) return;
 
-            if (oldParsed.identifier !== newParsed.identifier) {
-                const newName = identifierToName(newParsed.identifier);
-                this.pendingFrontmatterUpdates.add(file.path);
-                await updateTaskFrontmatter(this.app, file.path, { name: newName });
+            // Idempotency: if the current frontmatter name already slugs to
+            // the new filename identifier, no write is needed. This breaks
+            // the rename→modify→rename loop without any guard flags.
+            const content = await this.app.vault.read(file);
+            try {
+                const parsed = parseTaskFromContent(content, file.path);
+                if (parsed && nameToIdentifier(parsed.name) === newParsed.identifier) return;
+            } catch {
+                // unparseable file — fall through to write
             }
+
+            const newName = identifierToName(newParsed.identifier);
+            await this.withFileLock(file.path, () =>
+                updateTaskFrontmatter(this.app, file.path, { name: newName })
+            );
         } catch (error) {
             console.error('Error syncing name from filename:', error);
         }
@@ -625,14 +624,95 @@ export class AppStateManager extends Component {
         this.events.trigger(event, data);
     }
 
+    /**
+     * Serialize async work for a given file path. The provided function runs
+     * after any previously queued work for the same path completes (regardless
+     * of whether that previous work succeeded or threw). This eliminates races
+     * between our explicit drag-commit renames and the cascading vault events
+     * those renames produce.
+     */
+    public async withFileLock<T>(filePath: string, fn: () => Promise<T>): Promise<T> {
+        const prev = this.fileLocks.get(filePath) ?? Promise.resolve();
+        const next = prev.then(fn, fn);
+        this.fileLocks.set(filePath, next);
+        try {
+            return await next;
+        } finally {
+            if (this.fileLocks.get(filePath) === next) {
+                this.fileLocks.delete(filePath);
+            }
+        }
+    }
+
+    public applyOptimisticTaskUpdate(taskId: string, patch: Partial<ITask>): void {
+        const tasks = this.state.volatile.currentTasks || [];
+        const idx = tasks.findIndex(t => t.id === taskId);
+        if (idx === -1) return;
+
+        const updated: ITask = { ...tasks[idx], ...patch };
+        const newTasks = tasks.slice();
+        newTasks[idx] = updated;
+
+        this.state.volatile.currentTasks = newTasks;
+        this.state.volatile.tasksVersion = (this.state.volatile.tasksVersion || 0) + 1;
+
+        const bounds = updateDateBounds(newTasks);
+        this.state.volatile.dateBounds = bounds ?? undefined;
+
+        clearLayoutCache();
+
+        if (this.taskIndex) {
+            this.taskIndex.upsertTask(updated.filePath, updated);
+        }
+
+        this.triggerLayoutUpdate();
+    }
+
+    /**
+     * Mark a path as currently owned by an explicit commit (drag/resize).
+     * Refcounted so concurrent commits / retried rename candidates all
+     * contribute. While a path is marked, handleFileModifyWithRenaming
+     * defers to the commit and does NOT attempt its own canonicalize.
+     */
+    public markMutationStart(filePath: string): void {
+        this.mutationCounts.set(filePath, (this.mutationCounts.get(filePath) ?? 0) + 1);
+    }
+
+    public markMutationEnd(filePath: string): void {
+        const c = (this.mutationCounts.get(filePath) ?? 0) - 1;
+        if (c <= 0) this.mutationCounts.delete(filePath);
+        else this.mutationCounts.set(filePath, c);
+    }
+
+    public isMutationInProgress(filePath: string): boolean {
+        return this.mutationCounts.has(filePath);
+    }
+
+    /**
+     * Robust error-path re-sync: re-read the given file from disk (or remove
+     * any stale index entry if the file is no longer at that path). Then
+     * trigger UpdateTasksPending so state rebuilds from the (now disk-
+     * consistent) index.
+     */
+    public async resyncFileFromDisk(filePath: string): Promise<void> {
+        if (!this.taskIndex) return;
+        const file = this.app.vault.getAbstractFileByPath(filePath);
+        if (file instanceof TFile && file.extension === 'md') {
+            await this.taskIndex.handleFileModify(file);
+        } else {
+            this.taskIndex.removeByPath(filePath);
+        }
+        this.events.trigger(PluginEvent.UpdateTasksPending);
+    }
+
     public destroy(): void {
         if (this.rafId !== null) {
             cancelAnimationFrame(this.rafId);
             this.rafId = null;
         }
         this.pendingLayoutUpdate = false;
-        this.pendingRenames.clear();
-        this.pendingFrontmatterUpdates.clear();
+        this.fileLocks.clear();
+        this.mutationCounts.clear();
 
         if (this.taskIndex) {
             this.taskIndex.clear();

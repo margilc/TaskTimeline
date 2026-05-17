@@ -30,4 +30,8 @@ export enum PluginEvent {
     // Zoom events
     UpdateZoomPending = 'update_zoom_pending',
     UpdateZoomDone = 'update_zoom_done',
+
+    // Drag/resize lifecycle
+    TaskDragStarted = 'task_drag_started',
+    TaskDragEnded = 'task_drag_ended',
 }

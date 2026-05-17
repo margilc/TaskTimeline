@@ -13,6 +13,7 @@ import { isGroupFolded } from "../../core/update/updateGroupFold";
 import { addTime } from "../../core/utils/dateUtils";
 import { BoardArrowOverlay } from "./BoardArrowOverlay";
 import { ITaskTimelineSettings } from "../../interfaces/ITaskTimelineSettings";
+import { CardInteractionController } from "./interaction/CardInteractionController";
 
 export class BoardContainer {
     public element: HTMLElement;
@@ -44,6 +45,9 @@ export class BoardContainer {
 
     // Arrow overlay for task link visualization
     private arrowOverlay: BoardArrowOverlay | null = null;
+
+    // Drag/drop + resize controller
+    private cardInteraction: CardInteractionController | null = null;
 
     constructor(app: App, appStateManager: AppStateManager, isDebugMode = false) {
         this.app = app;
@@ -87,6 +91,14 @@ export class BoardContainer {
         this.panCleanup = this.setupPanHandler();
         this.scrollCleanup = this.setupScrollPersistence();
 
+        // Drag/drop + resize controller
+        this.cardInteraction = new CardInteractionController(
+            this.app,
+            this.appStateManager,
+            this.groupsContainer!,
+            this.contentElement
+        );
+
         this.renderBoard();
     }
 
@@ -99,6 +111,8 @@ export class BoardContainer {
 
     private setupZoomHandler(): () => void {
         const handler = (e: WheelEvent) => {
+            // Suppress zoom while a drag/resize is in progress.
+            if (this.cardInteraction?.isActive()) return;
             e.preventDefault();
 
             const state = this.appStateManager.getState();
@@ -454,6 +468,10 @@ export class BoardContainer {
     }
 
     public destroy(): void {
+        if (this.cardInteraction) {
+            this.cardInteraction.destroy();
+            this.cardInteraction = null;
+        }
         this.appStateManager.getEvents().off(PluginEvent.UpdateLayoutDone, this.boundRenderBoard);
         this.appStateManager.getEvents().off(PluginEvent.UpdateBoardGroupingDone, this.boundDebouncedRender);
         this.appStateManager.getEvents().off(PluginEvent.UpdateColorMappingsDone, this.boundDebouncedRender);

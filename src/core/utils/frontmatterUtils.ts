@@ -11,7 +11,8 @@ import { App, TFile } from 'obsidian';
 export async function updateTaskFrontmatter(
     app: App,
     filePath: string,
-    updates: Record<string, string | number | undefined>
+    updates: Record<string, string | number | undefined>,
+    deleteKeys: string[] = []
 ): Promise<void> {
     const file = app.vault.getAbstractFileByPath(filePath);
     if (!file || !(file instanceof TFile)) {
@@ -23,6 +24,9 @@ export async function updateTaskFrontmatter(
             if (value !== undefined) {
                 frontmatter[key] = value;
             }
+        }
+        for (const key of deleteKeys) {
+            delete frontmatter[key];
         }
     });
 }

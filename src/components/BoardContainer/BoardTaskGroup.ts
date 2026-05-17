@@ -35,6 +35,8 @@ export function BoardTaskGroup(
 	if (isFolded) {
 		container.classList.add("is-folded");
 	}
+	container.dataset.groupName = groupName;
+	container.dataset.folded = isFolded ? "true" : "false";
 
 	const columnWidth = gridConfig.columnWidth || 100;
 

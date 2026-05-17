@@ -55,6 +55,20 @@ export function BoardTaskCard(
 
 	card.classList.add("hover-enabled");
 	card.setAttribute('data-task-id', task.id || '');
+	card.setAttribute('data-task-start', task.start || '');
+	card.setAttribute('data-task-end', task.end || task.start || '');
+
+	// Resize handles (outer 8px on each edge). Clicks on the handle should not
+	// bubble up to open the task file — only drag interactions on them are meaningful.
+	const stopHandleClick = (e: MouseEvent) => e.stopPropagation();
+	const leftHandle = document.createElement("div");
+	leftHandle.className = "resize-handle resize-handle-left";
+	leftHandle.addEventListener('click', stopHandleClick);
+	card.appendChild(leftHandle);
+	const rightHandle = document.createElement("div");
+	rightHandle.className = "resize-handle resize-handle-right";
+	rightHandle.addEventListener('click', stopHandleClick);
+	card.appendChild(rightHandle);
 
 	// Click to open task file
 	card.style.cursor = 'pointer';
