@@ -66,6 +66,24 @@ Content`;
         expect(task.horizontalMode).toBe(false);
     });
 
+    test('strips surrounding quotes from frontmatter values', () => {
+        // Obsidian writes some manually-typed property values quoted; without
+        // stripping, `category: "Foo"` and `category: Foo` produce different
+        // group keys and the layout shows duplicate group headers.
+        const doubleQuoted = `---
+name: "Quoted Task"
+start: "2024-01-15"
+category: "Marketing"
+status: 'in-progress'
+---
+Body`;
+        const task = parseTaskFromContent(doubleQuoted, 'test.md');
+        expect(task.name).toBe('Quoted Task');
+        expect(task.start).toBe('2024-01-15');
+        expect(task.category).toBe('Marketing');
+        expect(task.status).toBe('in-progress');
+    });
+
     test('throws error for missing name', () => {
         const content = readTestFile('invalid_task_no_name.md');
         expect(() => parseTaskFromContent(content, 'test.md')).toThrow('Task must have a valid name field');

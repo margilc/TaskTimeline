@@ -82,8 +82,20 @@ function parseFrontmatter(frontmatterText: string): Record<string, any> {
         if (colonIndex === -1) continue;
         
         const key = line.substring(0, colonIndex).trim();
-        const value = line.substring(colonIndex + 1).trim();
-        
+        let value = line.substring(colonIndex + 1).trim();
+
+        // Strip surrounding YAML quotes. Obsidian's property editor sometimes
+        // writes values quoted (e.g. when typed manually rather than picked
+        // from the autocomplete dropdown), and without this `"Foo"` and `Foo`
+        // hash to different group keys — producing duplicate group headers.
+        if (value.length >= 2) {
+            const first = value[0];
+            const last = value[value.length - 1];
+            if ((first === '"' && last === '"') || (first === "'" && last === "'")) {
+                value = value.substring(1, value.length - 1);
+            }
+        }
+
         if (key && value) {
             if (key === 'priority') {
                 result[key] = parseInt(value, 10);

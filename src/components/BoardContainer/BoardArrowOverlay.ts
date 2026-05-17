@@ -31,7 +31,12 @@ export class BoardArrowOverlay {
         this.svg.setAttribute('viewBox', `0 0 ${w} ${h}`);
     }
 
-    /** Draw soft curved lines from source card center to all linked target card centers. */
+    /**
+     * Draw soft curved lines from source card to each linked target card.
+     * Each card exposes one anchor per column it spans (centered at the column,
+     * at the card's vertical midline). For each line, pick the (src, tgt) anchor
+     * pair that minimizes horizontal distance.
+     */
     showArrows(sourceTaskId: string, linkedTaskIds: string[]): void {
         this.clearArrows();
 
@@ -39,17 +44,19 @@ export class BoardArrowOverlay {
         if (!sourceCard) return;
 
         const parentOffset = this.getParentOffset();
-        const srcCenter = this.cardCenter(sourceCard.getBoundingClientRect(), parentOffset);
+        const srcAnchors = this.cardAnchors(sourceCard, parentOffset);
+        if (srcAnchors.length === 0) return;
 
         for (let i = 0; i < linkedTaskIds.length; i++) {
             const targetCard = this.findCard(linkedTaskIds[i]);
             if (!targetCard) continue;
 
-            const tgtCenter = this.cardCenter(targetCard.getBoundingClientRect(), parentOffset);
+            const tgtAnchors = this.cardAnchors(targetCard, parentOffset);
+            if (tgtAnchors.length === 0) continue;
 
-            // Alternate bow direction for multiple lines to reduce overlap
-            const bowSign = i % 2 === 0 ? 1 : -1;
-            const d = this.buildSoftCurve(srcCenter, tgtCenter, bowSign);
+            const { from, to } = this.pickClosestPair(srcAnchors, tgtAnchors);
+
+            const d = this.buildSoftCurve(from, to);
 
             const path = document.createElementNS(SVG_NS, 'path');
             path.setAttribute('d', d);
@@ -58,29 +65,11 @@ export class BoardArrowOverlay {
             path.setAttribute('stroke-width', '2.5');
             path.setAttribute('stroke-opacity', '0.5');
             path.classList.add('board-arrow-path');
-
             this.lineGroup.appendChild(path);
 
-            // Small circle at target center
-            const dot = document.createElementNS(SVG_NS, 'circle');
-            dot.setAttribute('cx', String(tgtCenter.x));
-            dot.setAttribute('cy', String(tgtCenter.y));
-            dot.setAttribute('r', '4');
-            dot.setAttribute('fill', '#000000');
-            dot.setAttribute('fill-opacity', '0.5');
-            dot.classList.add('board-arrow-path');
-            this.lineGroup.appendChild(dot);
+            this.appendDot(from);
+            this.appendDot(to);
         }
-
-        // Small circle at source center
-        const srcDot = document.createElementNS(SVG_NS, 'circle');
-        srcDot.setAttribute('cx', String(srcCenter.x));
-        srcDot.setAttribute('cy', String(srcCenter.y));
-        srcDot.setAttribute('r', '4');
-        srcDot.setAttribute('fill', '#000000');
-        srcDot.setAttribute('fill-opacity', '0.5');
-        srcDot.classList.add('board-arrow-path');
-        this.lineGroup.appendChild(srcDot);
     }
 
     /** Remove all drawn lines. */
@@ -112,22 +101,88 @@ export class BoardArrowOverlay {
         };
     }
 
-    private cardCenter(r: DOMRect, offset: { left: number; top: number }): { x: number; y: number } {
-        return {
-            x: r.left - offset.left + r.width / 2,
-            y: r.top - offset.top + r.height / 2,
-        };
+    /**
+     * Anchor points along a card's vertical midline, one per column it spans,
+     * each at the horizontal center of that column.
+     *
+     * Accounts for grid `column-gap`: a span-N card occupies
+     * `N*colW + (N-1)*gap` pixels, so we recover colW and step by `colW + gap`.
+     */
+    private cardAnchors(
+        card: HTMLElement,
+        offset: { left: number; top: number }
+    ): { x: number; y: number }[] {
+        const r = card.getBoundingClientRect();
+        const span = this.cardColumnSpan(card);
+        const gap = this.gridColumnGap(card);
+        const colWidth = (r.width - (span - 1) * gap) / span;
+        const y = r.top - offset.top + r.height / 2;
+        const leftEdge = r.left - offset.left;
+        const anchors: { x: number; y: number }[] = [];
+        for (let i = 0; i < span; i++) {
+            anchors.push({ x: leftEdge + i * (colWidth + gap) + colWidth / 2, y });
+        }
+        return anchors;
+    }
+
+    /** Column gap of the card's grid parent (0 if none / not parseable). */
+    private gridColumnGap(card: HTMLElement): number {
+        const parent = card.parentElement;
+        if (!parent) return 0;
+        const cs = window.getComputedStyle(parent);
+        const raw = cs.columnGap || cs.gap || '0';
+        const n = parseFloat(raw);
+        return isFinite(n) ? n : 0;
+    }
+
+    /** Parse `grid-column-end: span N` from the card's inline style; defaults to 1. */
+    private cardColumnSpan(card: HTMLElement): number {
+        const end = card.style.gridColumnEnd || '';
+        const m = end.match(/span\s+(\d+)/);
+        const span = m ? parseInt(m[1], 10) : 1;
+        return Math.max(1, span);
+    }
+
+    /** Pick the (src, tgt) anchor pair with the smallest |Δx|. */
+    private pickClosestPair(
+        srcAnchors: { x: number; y: number }[],
+        tgtAnchors: { x: number; y: number }[]
+    ): { from: { x: number; y: number }; to: { x: number; y: number } } {
+        let bestFrom = srcAnchors[0];
+        let bestTo = tgtAnchors[0];
+        let bestDist = Infinity;
+        for (const s of srcAnchors) {
+            for (const t of tgtAnchors) {
+                const d = Math.abs(s.x - t.x);
+                if (d < bestDist) {
+                    bestDist = d;
+                    bestFrom = s;
+                    bestTo = t;
+                }
+            }
+        }
+        return { from: bestFrom, to: bestTo };
+    }
+
+    private appendDot(p: { x: number; y: number }): void {
+        const dot = document.createElementNS(SVG_NS, 'circle');
+        dot.setAttribute('cx', String(p.x));
+        dot.setAttribute('cy', String(p.y));
+        dot.setAttribute('r', '4');
+        dot.setAttribute('fill', '#000000');
+        dot.setAttribute('fill-opacity', '0.5');
+        dot.classList.add('board-arrow-path');
+        this.lineGroup.appendChild(dot);
     }
 
     /**
      * Cubic bezier with 90-degree exit/entry angles.
      * Control points extend along the best cardinal direction (up/down/left/right)
-     * from each center, so the curve always leaves and arrives axis-aligned.
+     * from each anchor, so the curve always leaves and arrives axis-aligned.
      */
     private buildSoftCurve(
         from: { x: number; y: number },
-        to: { x: number; y: number },
-        _bowSign: number
+        to: { x: number; y: number }
     ): string {
         const dx = to.x - from.x;
         const dy = to.y - from.y;
