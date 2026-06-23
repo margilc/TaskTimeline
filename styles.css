@@ -339,6 +339,9 @@ body.theme-dark .tt-dropdown-trigger {
   overflow: auto;
   min-height: 0;
   position: relative;
+  /* Don't let the browser auto-adjust scroll offset when the workspace reflows
+     (e.g. when opening a task file in a side-by-side split shrinks this pane). */
+  overflow-anchor: none;
   /* Hide scrollbars - navigation via right-click pan */
   scrollbar-width: none;           /* Firefox */
   -ms-overflow-style: none;        /* IE/Edge */

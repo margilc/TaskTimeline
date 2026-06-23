@@ -70,13 +70,25 @@ export function BoardTaskCard(
 	rightHandle.addEventListener('click', stopHandleClick);
 	card.appendChild(rightHandle);
 
-	// Click to open task file
+	// Click to open task file. Opening the file in a side-by-side split reflows the
+	// workspace; snapshot and restore the board's scroll position so the timeline
+	// doesn't drift horizontally when the pane shifts.
 	card.style.cursor = 'pointer';
 	card.addEventListener("click", (e) => {
 		e.stopPropagation();
-		if (task.filePath) {
-			openTaskFile(task.filePath, appStateManager, shouldUseHorizontalTaskView(task));
-		}
+		if (!task.filePath) return;
+
+		const scroller = card.closest('.board-content') as HTMLElement | null;
+		const sl = scroller?.scrollLeft ?? 0;
+		const st = scroller?.scrollTop ?? 0;
+
+		void openTaskFile(task.filePath, appStateManager, shouldUseHorizontalTaskView(task))
+			.then(() => {
+				if (!scroller) return;
+				const restore = () => { scroller.scrollLeft = sl; scroller.scrollTop = st; };
+				restore();                      // immediately after the open resolves
+				requestAnimationFrame(restore); // and after the next layout frame
+			});
 	});
 
 	// Shared tooltip
