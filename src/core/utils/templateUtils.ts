@@ -1,12 +1,14 @@
-import { App, TFile, TFolder } from 'obsidian';
+import { App, TFile, TFolder, normalizePath } from 'obsidian';
 import { ITemplate } from '../../interfaces/ITemplate';
+import DEFAULT_PROJECT_TEMPLATE_CONTENT from '../../templates/default_project.md';
+import DEFAULT_WEEKLY_TEMPLATE_CONTENT from '../../templates/default_weekly.md';
 
 /**
  * Parse a template file's content into an ITemplate.
  * Expects frontmatter with default_length_days, default_status, default_priority, default_category.
  */
 export function parseTemplateFromContent(fileContent: string, filename: string): ITemplate {
-    const name = filename.replace(/^template_/, '').replace(/\.md$/, '');
+    const name = filename.replace(/^(template|default)_/, '').replace(/\.md$/, '');
 
     const frontmatterRegex = /^---\n([\s\S]*?)\n---/;
     const frontmatterMatch = fileContent.match(frontmatterRegex);
@@ -86,61 +88,50 @@ export async function loadTemplates(app: App, taskDirectory: string): Promise<IT
     return templates.sort((a, b) => a.name.localeCompare(b.name));
 }
 
-const DEFAULT_TEMPLATE_CONTENT = `---
-default_length_days: 7
-default_status: default
-default_priority: 5
-default_category: default
----
-
-## Subtasks
-- [ ] Add your subtasks here
-`;
-
-const DEFAULT_WEEKLY_TEMPLATE_CONTENT = `---
-default_length_days: 5
-default_status: 01 To Do
-default_priority: 1
-default_category: internal
-horizontal_mode: true
----
-# Monday
-- [ ] internal
-\t- [ ] meeting
-# Tuesday
-- [ ] internal
-\t- [ ] meeting
-# Wednesday
-- [ ] internal
-\t- [ ] meeting
-# Thursday
-- [ ] internal
-\t- [ ] meeting
-`;
-
 /**
- * Ensure the templates folder and template_default.md exist.
- * Creates them if missing.
+ * Ensure the templates folder and the two default templates exist.
+ * Default template contents live as editable .md files under src/templates/
+ * and are inlined into the bundle at build time (esbuild text loader).
+ * Only creates files that are missing — never overwrites user edits.
  */
 export async function ensureTemplatesFolder(app: App, taskDirectory: string): Promise<void> {
     const templatesPath = `${taskDirectory}/templates`;
-    const defaultTemplatePath = `${templatesPath}/template_default.md`;
-    const weeklyTemplatePath = `${templatesPath}/default_weekly.md`;
 
-    // Create folder if missing
-    if (!app.vault.getAbstractFileByPath(templatesPath)) {
-        await app.vault.createFolder(templatesPath);
-    }
+    await ensureFolder(app, templatesPath);
+    await ensureFile(app, `${templatesPath}/default_project.md`, DEFAULT_PROJECT_TEMPLATE_CONTENT);
+    await ensureFile(app, `${templatesPath}/default_weekly.md`, DEFAULT_WEEKLY_TEMPLATE_CONTENT);
+}
 
-    // Create default template if missing
-    if (!app.vault.getAbstractFileByPath(defaultTemplatePath)) {
-        await app.vault.create(defaultTemplatePath, DEFAULT_TEMPLATE_CONTENT);
+/**
+ * Create a folder unless it already exists on disk.
+ * Uses adapter.exists() (real filesystem) rather than getAbstractFileByPath()
+ * (metadata cache), which can miss folders on some setups — e.g. NTFS via WSL —
+ * causing createFolder to throw "Folder already exists" on every load.
+ * The catch is a final guard against that same race.
+ */
+async function ensureFolder(app: App, path: string): Promise<void> {
+    const normalized = normalizePath(path);
+    if (await app.vault.adapter.exists(normalized)) return;
+    try {
+        await app.vault.createFolder(normalized);
+    } catch (e) {
+        if (!isAlreadyExistsError(e)) throw e;
     }
+}
 
-    // Create default weekly horizontal template if missing
-    if (!app.vault.getAbstractFileByPath(weeklyTemplatePath)) {
-        await app.vault.create(weeklyTemplatePath, DEFAULT_WEEKLY_TEMPLATE_CONTENT);
+/** Create a file unless it already exists. Never overwrites user edits. */
+async function ensureFile(app: App, path: string, content: string): Promise<void> {
+    const normalized = normalizePath(path);
+    if (await app.vault.adapter.exists(normalized)) return;
+    try {
+        await app.vault.create(normalized, content);
+    } catch (e) {
+        if (!isAlreadyExistsError(e)) throw e;
     }
+}
+
+function isAlreadyExistsError(e: unknown): boolean {
+    return e instanceof Error && /already exists/i.test(e.message);
 }
 
 function isTemplateFileName(filename: string): boolean {

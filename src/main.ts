@@ -9,10 +9,11 @@ export default class TaskTimelinePlugin extends Plugin {
 	appStateManager: AppStateManager;
 
 	async onload() {
-		// AppStateManager - Includes vault event listening functionality
+		// AppStateManager's constructor registers the vault event listeners, so it
+		// must be created here in onload(). Its vault-dependent initialize() is
+		// deferred to onLayoutReady() below.
 		this.appStateManager = new AppStateManager(this);
-		await this.appStateManager.initialize();
-		
+
 		this.registerView(
 			TASK_TIMELINE_VIEW_TYPE,
 			(leaf) => new TaskTimelineView(leaf, this.app, this.appStateManager)
@@ -45,7 +46,15 @@ export default class TaskTimelinePlugin extends Plugin {
 			},
 		});
 		
-		this.app.workspace.onLayoutReady(() => {
+		// Defer vault-dependent initialization until the metadata cache is fully
+		// populated. Running it during onload() reads a cold/partial file tree:
+		// on WSL/NTFS vaults that surfaced as a "Folder already exists" throw from
+		// ensureTemplatesFolder (which aborted all of initialize()), and could
+		// leave the board empty on first load because project/task enumeration ran
+		// before the folder tree was indexed. onLayoutReady fires immediately if
+		// the layout is already ready (e.g. plugin enabled after Obsidian boot).
+		this.app.workspace.onLayoutReady(async () => {
+			await this.appStateManager.initialize();
 			const settings = this.appStateManager.getPersistentState().settings;
 			if (settings?.openByDefault) {
 				this.activateView();

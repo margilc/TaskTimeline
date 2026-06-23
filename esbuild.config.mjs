@@ -37,6 +37,7 @@ const buildOptions = {
   ],
   format: "cjs",
   target: "es2018",
+  loader: { ".md": "text" }, // inline default template files as raw strings
   logLevel: "info",
   sourcemap: prod ? false : "inline",
   treeShaking: true,

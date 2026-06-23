@@ -22,7 +22,6 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 - `npm run dev` - Build and watch for changes in development mode (auto-copies to test vault)
 - `npm run test` - Run Jest tests
-- `npm run graph:deps` - Generate dependency graph visualization
 - `esbuild.config.mjs production` - Build for production
 
 ## Architecture Overview
