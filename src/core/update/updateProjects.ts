@@ -1,5 +1,6 @@
 import { App, TAbstractFile } from 'obsidian';
 import { IVolatileState, IPersistentState } from '../../interfaces/IAppState';
+import { isPathIgnored } from '../utils/ignoreUtils';
 
 export interface UpdateProjectsOptions {
     resetMissingProject?: boolean;
@@ -8,22 +9,23 @@ export interface UpdateProjectsOptions {
 /**
  * Lists all subfolder names within a given directory path.
  */
-async function listSubfolderNames(app: App, directoryPath: string): Promise<string[]> {
+async function listSubfolderNames(app: App, directoryPath: string, ignorePatterns: string[]): Promise<string[]> {
     try {
         const directory = app.vault.getAbstractFileByPath(directoryPath);
-        
+
         if (!directory || !('children' in directory)) {
             return [];
         }
-        
+
         const folderWithChildren = directory as any;
-        
+
         const subfolderNames = folderWithChildren.children
-            .filter((item: TAbstractFile) => 'children' in item && item.name !== 'templates')
+            // Trailing slash so folder-scoped patterns (e.g. "templates/") match.
+            .filter((item: TAbstractFile) => 'children' in item && !isPathIgnored(item.path + '/', ignorePatterns))
             .map((folder: TAbstractFile) => folder.name);
-        
+
         return subfolderNames;
-        
+
     } catch (error) {
         return [];
     }
@@ -48,7 +50,8 @@ export async function updateProjects(
     options: UpdateProjectsOptions = {}
 ): Promise<{ volatile: IVolatileState; persistent: IPersistentState }> {
     const taskDirectory = currentPersistentState.settings?.taskDirectory;
-    
+    const ignorePatterns = currentPersistentState.settings?.ignorePatterns ?? [];
+
     if (!taskDirectory) {
         return {
             volatile: { ...currentVolatileState, availableProjects: ['All Projects'] },
@@ -64,7 +67,7 @@ export async function updateProjects(
             };
         }
 
-        const projectFolders = await listSubfolderNames(app, taskDirectory);
+        const projectFolders = await listSubfolderNames(app, taskDirectory, ignorePatterns);
         const availableProjects = ['All Projects', ...projectFolders];
         
         let updatedPersistent = currentPersistentState;

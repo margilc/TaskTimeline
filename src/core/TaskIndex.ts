@@ -1,6 +1,7 @@
 import { App, TFile, TFolder, TAbstractFile } from 'obsidian';
 import { ITask } from '../interfaces/ITask';
 import { parseTaskFromContent } from './utils/taskUtils';
+import { isPathIgnored } from './utils/ignoreUtils';
 
 /**
  * TaskIndex maintains an incremental index of tasks by file path.
@@ -10,11 +11,13 @@ export class TaskIndex {
     private app: App;
     private tasksByPath: Map<string, ITask> = new Map();
     private taskDirectory: string;
+    private ignorePatterns: string[];
     private initialized: boolean = false;
 
-    constructor(app: App, taskDirectory: string) {
+    constructor(app: App, taskDirectory: string, ignorePatterns: string[] = []) {
         this.app = app;
         this.taskDirectory = taskDirectory;
+        this.ignorePatterns = ignorePatterns;
     }
 
     /**
@@ -34,11 +37,15 @@ export class TaskIndex {
     }
 
     /**
-     * Update task directory and reinitialize if changed.
+     * Update the task directory and/or ignore patterns, reinitializing the
+     * index once if either changed.
      */
-    async setTaskDirectory(taskDirectory: string): Promise<void> {
-        if (this.taskDirectory !== taskDirectory) {
+    async configure(taskDirectory: string, ignorePatterns: string[]): Promise<void> {
+        const dirChanged = this.taskDirectory !== taskDirectory;
+        const ignoreChanged = this.ignorePatterns.join('\n') !== ignorePatterns.join('\n');
+        if (dirChanged || ignoreChanged) {
             this.taskDirectory = taskDirectory;
+            this.ignorePatterns = ignorePatterns;
             await this.initialize();
         }
     }
@@ -159,12 +166,12 @@ export class TaskIndex {
     }
 
     /**
-     * Check if a path is within the task directory.
+     * Check if a path is within the task directory and not excluded by an
+     * ignore pattern.
      */
     private isRelevantPath(path: string): boolean {
         if (!path.startsWith(this.taskDirectory + '/')) return false;
-        // Exclude template files
-        if (path.startsWith(this.taskDirectory + '/templates/')) return false;
+        if (isPathIgnored(path, this.ignorePatterns)) return false;
         return true;
     }
 
@@ -191,10 +198,12 @@ export class TaskIndex {
 
         for (const child of dir.children) {
             if (child instanceof TFolder) {
-                if (child.name === 'templates') continue;
+                // Trailing slash so folder-scoped patterns (e.g. "templates/") match.
+                if (isPathIgnored(child.path + '/', this.ignorePatterns)) continue;
                 // Recurse into subdirectories (projects)
                 await this.scanDirectory(child.path);
             } else if (child instanceof TFile && child.extension === 'md') {
+                if (isPathIgnored(child.path, this.ignorePatterns)) continue;
                 await this.indexFile(child);
             }
         }

@@ -32,6 +32,20 @@ export class TaskTimelineSettingTab extends PluginSettingTab {
 				}));
 
 		new Setting(containerEl)
+			.setName("Ignore list")
+			.setDesc("Paths excluded from the timeline. One pattern per line, matched anywhere in a file's path. Use * to match within a folder and ** to match across folders (e.g. templates/, .claude/, archive/**).")
+			.addTextArea(text => {
+				text.inputEl.rows = 4;
+				text.inputEl.style.width = "100%";
+				text.setPlaceholder("templates/\n.claude/");
+				text.setValue((settings.ignorePatterns ?? []).join("\n"));
+				text.onChange(async (value) => {
+					const patterns = value.split("\n").map(s => s.trim()).filter(Boolean);
+					await this.updateSetting("ignorePatterns", patterns);
+				});
+			});
+
+		new Setting(containerEl)
 			.setName("Open by default")
 			.setDesc("Automatically open Task Timeline when Obsidian starts")
 			.addToggle(toggle => toggle

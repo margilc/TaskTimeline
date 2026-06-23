@@ -3,6 +3,7 @@ import { ITaskTimelineSettings } from "../interfaces/ITaskTimelineSettings";
 
 export const DEFAULT_TASK_TIMELINE_SETTINGS: ITaskTimelineSettings = {
 	taskDirectory: "Taskdown",
+	ignorePatterns: ["templates/", ".claude/", "CLAUDE.md"],
 	openByDefault: true,
 	openInNewPane: false,
 	rowHeight: 40,

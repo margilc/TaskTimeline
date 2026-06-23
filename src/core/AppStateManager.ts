@@ -17,6 +17,7 @@ import { canonicalizeFile } from './utils/canonicalizeFile';
 import { updateDateBounds } from './update/updateDateBounds';
 import { DEFAULT_COLOR } from './utils/colorUtils';
 import { TaskIndex } from './TaskIndex';
+import { isPathIgnored } from './utils/ignoreUtils';
 import { ensureTemplatesFolder } from './utils/templateUtils';
 import { parseTaskFromContent } from './utils/taskUtils';
 import { TimeUnit } from '../enums/TimeUnit';
@@ -203,9 +204,10 @@ export class AppStateManager extends Component {
     }
 
     private isRelevantPath(path: string): boolean {
-        const taskDirectory = this.state.persistent.settings?.taskDirectory || 'Taskdown';
+        const settings = this.state.persistent.settings;
+        const taskDirectory = settings?.taskDirectory || 'Taskdown';
         if (!path.startsWith(taskDirectory + '/')) return false;
-        if (path.startsWith(taskDirectory + '/templates/')) return false;
+        if (isPathIgnored(path, settings?.ignorePatterns)) return false;
         return true;
     }
 
@@ -337,7 +339,10 @@ export class AppStateManager extends Component {
 
     private async handleUpdateSettingsPending(newSettings: any): Promise<void> {
         try {
-            const oldTaskDirectory = this.state.persistent.settings?.taskDirectory;
+            const oldSettings = this.state.persistent.settings;
+            const oldTaskDirectory = oldSettings?.taskDirectory;
+            const oldIgnore = (oldSettings?.ignorePatterns ?? []).join('\n');
+
             const result = updateSettings(this.app, this.state, newSettings);
 
             this.state.persistent = result.persistent;
@@ -345,11 +350,18 @@ export class AppStateManager extends Component {
 
             await this.saveData(this.state.persistent);
 
-            if (oldTaskDirectory !== newSettings.taskDirectory) {
+            const dirChanged = oldTaskDirectory !== newSettings.taskDirectory;
+            const ignoreChanged = oldIgnore !== (newSettings.ignorePatterns ?? []).join('\n');
+
+            // The task directory and ignore patterns both control which files the
+            // index holds; if either changed, rebuild the index and refresh the
+            // project list and task list from it.
+            if (dirChanged || ignoreChanged) {
                 if (this.taskIndex) {
-                    await this.taskIndex.setTaskDirectory(newSettings.taskDirectory);
+                    await this.taskIndex.configure(newSettings.taskDirectory, newSettings.ignorePatterns ?? []);
                 }
                 this.handleUpdateProjectsPending({ resetMissingProject: true });
+                this.events.trigger(PluginEvent.UpdateTasksPending);
             }
 
             this.triggerLayoutUpdate();
@@ -511,8 +523,9 @@ export class AppStateManager extends Component {
             this.state.persistent = projectResult.persistent;
 
             const taskDirectory = this.state.persistent.settings?.taskDirectory || 'Taskdown';
+            const ignorePatterns = this.state.persistent.settings?.ignorePatterns ?? [];
             await ensureTemplatesFolder(this.app, taskDirectory);
-            this.taskIndex = new TaskIndex(this.app, taskDirectory);
+            this.taskIndex = new TaskIndex(this.app, taskDirectory, ignorePatterns);
             await this.taskIndex.initialize();
 
             const taskResult = updateTasksFromIndex(this.taskIndex, this.state.volatile, this.state.persistent);
