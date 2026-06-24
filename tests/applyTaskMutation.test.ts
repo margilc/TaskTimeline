@@ -71,7 +71,9 @@ beforeEach(() => {
     mockUpdateFm.mockClear();
     mockCanonicalize.mockClear();
     mockUpdateFm.mockResolvedValue(undefined);
-    mockCanonicalize.mockResolvedValue(undefined);
+    // canonicalizeFile resolves to the (possibly renamed) TFile. The default
+    // mock doesn't rename, so it returns the file it was handed.
+    mockCanonicalize.mockImplementation(async (_app: any, file: any) => file);
 });
 
 describe('applyTaskMutation - horizontal drag', () => {
@@ -265,7 +267,7 @@ describe('applyTaskMutation - lock ordering', () => {
             return r;
         });
         mockUpdateFm.mockImplementation(async () => { callOrder.push('write'); });
-        mockCanonicalize.mockImplementation(async () => { callOrder.push('canonicalize'); });
+        mockCanonicalize.mockImplementation(async (_app: any, file: any) => { callOrder.push('canonicalize'); return file; });
 
         await applyTaskMutation(app, asm, {
             taskId: 't1',
@@ -310,6 +312,7 @@ describe('applyTaskMutation - mutation tracking lifecycle', () => {
         mockCanonicalize.mockImplementation(
             async (_app: any, _file: any, onWillRename?: (p: string) => void) => {
                 onWillRename?.(predictedNew);
+                return new FakeTFile(predictedNew);
             },
         );
 
@@ -360,6 +363,7 @@ describe('applyTaskMutation - mutation tracking lifecycle', () => {
             async (_app: any, _file: any, onWillRename?: (p: string) => void) => {
                 onWillRename?.(same);
                 onWillRename?.(same);
+                return new FakeTFile(same);
             },
         );
 
@@ -386,5 +390,93 @@ describe('applyTaskMutation - mutation tracking lifecycle', () => {
 
         expect(asm.markMutationStart).not.toHaveBeenCalled();
         expect(asm.markMutationEnd).not.toHaveBeenCalled();
+    });
+});
+
+describe('applyTaskMutation - inverse entry for undo', () => {
+    // In production a task's id IS its filename without extension, so use a
+    // realistic id that matches filePath (the inverse targets the file's id).
+    const realTask = (overrides: any = {}) => makeTask({
+        id: '20260110_task',
+        filePath: 'Taskdown/Project/20260110_task.md',
+        ...overrides,
+    });
+
+    it('returns null on a no-op mutation', async () => {
+        const task = realTask();
+        const asm = makeAppStateManager(task);
+        const result = await applyTaskMutation(makeApp(), asm, {
+            taskId: '20260110_task', newStart: task.start, newEnd: task.end,
+        });
+        expect(result).toBeNull();
+    });
+
+    it('returns null when the frontmatter write fails', async () => {
+        mockUpdateFm.mockRejectedValueOnce(new Error('disk error'));
+        const task = realTask();
+        const asm = makeAppStateManager(task);
+        const result = await applyTaskMutation(makeApp(), asm, {
+            taskId: '20260110_task', newStart: '2026-02-01',
+        });
+        expect(result).toBeNull();
+    });
+
+    it('move: inverse restores old dates and targets the renamed id', async () => {
+        const task = realTask();
+        const fakeFile = new FakeTFile(task.filePath);
+        const app = makeApp({ [task.filePath]: fakeFile });
+        const asm = makeAppStateManager(task);
+        // A start change renames the file; canonicalize reports the new path.
+        const newPath = 'Taskdown/Project/20260201_task.md';
+        mockCanonicalize.mockImplementation(async () => new FakeTFile(newPath));
+
+        const result = await applyTaskMutation(app, asm, {
+            taskId: '20260110_task', newStart: '2026-02-01', newEnd: '2026-02-03',
+        });
+
+        expect(result).toEqual({
+            mutation: {
+                taskId: '20260201_task',
+                newStart: '2026-01-10',
+                newEnd: '2026-01-12',
+            },
+            label: 'move',
+        });
+    });
+
+    it('status change: inverse restores old status, same id (no rename)', async () => {
+        const task = realTask({ status: 'To Do' });
+        const asm = makeAppStateManager(task);
+
+        const result = await applyTaskMutation(makeApp(), asm, {
+            taskId: '20260110_task',
+            newGroupValue: { groupBy: 'status', value: 'Done' },
+        });
+
+        expect(result).toEqual({
+            mutation: {
+                taskId: '20260110_task',
+                newGroupValue: { groupBy: 'status', value: 'To Do' },
+            },
+            label: 'status change',
+        });
+    });
+
+    it('priority set: inverse restores "No Priority" when prev had none', async () => {
+        const task = realTask({ priority: 0 });
+        const asm = makeAppStateManager(task);
+
+        const result = await applyTaskMutation(makeApp(), asm, {
+            taskId: '20260110_task',
+            newGroupValue: { groupBy: 'priority', value: '5' },
+        });
+
+        expect(result).toEqual({
+            mutation: {
+                taskId: '20260110_task',
+                newGroupValue: { groupBy: 'priority', value: 'No Priority' },
+            },
+            label: 'priority change',
+        });
     });
 });

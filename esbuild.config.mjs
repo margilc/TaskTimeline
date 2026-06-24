@@ -60,32 +60,19 @@ function runCommand(command) {
   });
 }
 
-async function handleRebuild() {
-  console.log("Rebuild succeeded.");
-
+async function copyToVault() {
+  // Dev convenience only: mirror the freshly built plugin into the test vault.
+  // Deliberately does NOT bump the version — versioning is a manual release
+  // step (see "Releasing" in CLAUDE.md). Auto-bumping on every rebuild used to
+  // inflate manifest/package versions and pollute versions.json.
   try {
-    // Bump patch version
-    const newVersion = await runCommand(
-      "npm version patch --no-git-tag-version"
-    );
-    console.log("Version bumped to:", newVersion);
-
-    // Run version-bump script (if needed)
-    console.log("Running version bump script (version-bump.mjs)...");
-    await runCommand("node version-bump.mjs");
-    console.log("Version bump script executed successfully.");
-    //test if plugin directory exists and create it if it doesn't
     if (!fs.existsSync(pluginDir)) {
-      fs.mkdirSync(pluginDir);
+      fs.mkdirSync(pluginDir, { recursive: true });
     }
-    // Copy files
-    console.log("Copying updated files to plugin directory...");
-    await runCommand(
-      `cp manifest.json main.js styles.css "${pluginDir}"`
-    );
-    console.log("Successfully copied files to plugin directory.");
+    await runCommand(`cp manifest.json main.js styles.css "${pluginDir}"`);
+    console.log("Copied plugin files to test vault.");
   } catch (error) {
-    console.error("Error during post-build steps:", error);
+    console.error("Error copying to test vault:", error);
   }
 }
 
@@ -95,7 +82,7 @@ async function buildProject() {
     await esbuild.build(buildOptions);
     console.log("Build completed successfully.");
     if (!prod) {
-      await handleRebuild();
+      await copyToVault();
     }
   } catch (err) {
     console.error("Build failed:", err);

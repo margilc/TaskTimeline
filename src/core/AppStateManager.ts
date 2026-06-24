@@ -17,6 +17,7 @@ import { canonicalizeFile } from './utils/canonicalizeFile';
 import { updateDateBounds } from './update/updateDateBounds';
 import { DEFAULT_COLOR } from './utils/colorUtils';
 import { TaskIndex } from './TaskIndex';
+import { TaskHistory } from './update/taskHistory';
 import { isPathIgnored } from './utils/ignoreUtils';
 import { ensureTemplatesFolder } from './utils/templateUtils';
 import { parseTaskFromContent } from './utils/taskUtils';
@@ -38,6 +39,11 @@ export class AppStateManager extends Component {
     private app: App;
     private events: Events;
     private taskIndex: TaskIndex | null = null;
+
+    // Undo/redo stacks for drag/resize/move mutations. Populated by the drag
+    // commit (via applyTaskMutation's returned inverse) and consumed by the
+    // Ctrl+Z / Ctrl+Shift+Z handlers in TaskTimelineView.
+    public readonly taskHistory = new TaskHistory();
 
     // Event coalescing state
     private pendingLayoutUpdate = false;
@@ -571,6 +577,9 @@ export class AppStateManager extends Component {
     public getEvents(): Events { return this.events; }
 
     public async selectProject(projectName: string): Promise<void> {
+        // Undo entries reference tasks by id within the current project view;
+        // switching projects makes them unresolvable, so drop them.
+        this.taskHistory.clear();
         this.state.persistent.currentProjectName = projectName;
         await this.saveData(this.state.persistent);
         this.events.trigger(PluginEvent.ProjectSelected, projectName);
@@ -726,6 +735,7 @@ export class AppStateManager extends Component {
         this.pendingLayoutUpdate = false;
         this.fileLocks.clear();
         this.mutationCounts.clear();
+        this.taskHistory.clear();
 
         if (this.taskIndex) {
             this.taskIndex.clear();

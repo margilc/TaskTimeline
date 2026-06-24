@@ -3,7 +3,6 @@ import { AppStateManager, ZOOM_TIME_UNITS } from "../../../core/AppStateManager"
 import { PluginEvent } from "../../../enums/events";
 import { TimeUnit } from "../../../enums/TimeUnit";
 import { ITask } from "../../../interfaces/ITask";
-import { getGroupValue } from "../../../core/utils/groupingUtils";
 import { applyTaskMutation } from "../../../core/update/applyTaskMutation";
 import {
     pointerToColumnIndex,
@@ -18,6 +17,11 @@ import { GridGhost } from "./DragGhost";
 
 type Mode = 'IDLE' | 'POTENTIAL' | 'DRAGGING' | 'RESIZING_L' | 'RESIZING_R';
 type HandleZone = 'BODY' | 'LEFT' | 'RIGHT';
+// A drag is constrained to a single axis, decided at the first crossed cell:
+//   HORIZONTAL = change dates (time), group locked to source
+//   VERTICAL   = change group, dates locked to source
+//   NONE       = no cell crossed yet; ghost sits on the card
+type DragAxis = 'NONE' | 'HORIZONTAL' | 'VERTICAL';
 
 const DRAG_THRESHOLD_PX = 4;
 const AUTO_SCROLL_EDGE = 40;
@@ -36,6 +40,10 @@ interface PointerCtx {
     originalY: number;
     originalSpan: number;
     originalGroup: string;
+    // The data column the pointer was over at drag-start. Axis detection
+    // measures column crossings relative to this, not the card's edge, so
+    // grabbing a multi-column card mid-body doesn't read as an instant move.
+    originPointerCol: number;
 }
 
 interface GroupRectEntry {
@@ -52,6 +60,7 @@ export class CardInteractionController {
     private contentElement: HTMLElement;
 
     private mode: Mode = 'IDLE';
+    private dragAxis: DragAxis = 'NONE';
     private ctx: PointerCtx | null = null;
     private latestEvent: PointerEvent | null = null;
     private rafId: number | null = null;
@@ -192,7 +201,16 @@ export class CardInteractionController {
             originalXEnd: layout.xEnd,
             originalY: layout.y,
             originalSpan: layout.span,
-            originalGroup: getGroupValue(task, this.groupBy),
+            // Identify the source group by the rendered group element's own name
+            // (the same value refreshGroupRects/groupAtPointer compare against).
+            // Deriving it from the task via getGroupValue is wrong for ungrouped
+            // boards, where the task's value is 'default' but the rendered group
+            // is 'All Tasks' — that mismatch left resize unable to find its own
+            // group, so the ghost never placed and the drop never committed.
+            originalGroup: sourceGroupEl.dataset.groupName ?? '',
+            originPointerCol: pointerToColumnIndex(
+                e.clientX, this.contentElement, this.columnWidth, this.columnGap, this.totalColumns
+            ),
         };
 
         this.mode = 'POTENTIAL';
@@ -222,6 +240,8 @@ export class CardInteractionController {
 
     private beginDrag(): void {
         if (!this.ctx) return;
+
+        this.dragAxis = 'NONE';
 
         if (this.ctx.handle === 'LEFT') this.mode = 'RESIZING_L';
         else if (this.ctx.handle === 'RIGHT') this.mode = 'RESIZING_R';
@@ -282,8 +302,18 @@ export class CardInteractionController {
             e.clientX, this.contentElement, this.columnWidth, this.columnGap, this.totalColumns
         );
 
+        const isResize = this.mode === 'RESIZING_L' || this.mode === 'RESIZING_R';
+
+        // A drag changes time OR group, never both. Lock to the axis of the
+        // first crossed cell boundary; until then dragAxis is NONE and the ghost
+        // simply stays on the card. Resize is always horizontal and skips this.
+        if (this.mode === 'DRAGGING' && this.dragAxis === 'NONE') {
+            this.dragAxis = this.decideDragAxis(e, pointerCol);
+        }
+
         // Compute target column range. originalSpan/originalXStart/originalXEnd
         // come from the card's inline grid-placement style (the only correct source).
+        // Dates only move for a horizontal drag; otherwise columns stay put.
         let targetStart: number;
         let targetEnd: number;
 
@@ -295,7 +325,7 @@ export class CardInteractionController {
             targetStart = this.ctx.originalXStart;
             targetEnd = clampColumn(pointerCol, this.totalColumns);
             if (targetEnd < targetStart) targetEnd = targetStart;
-        } else {
+        } else if (this.dragAxis === 'HORIZONTAL') {
             const span = this.ctx.originalSpan;
             targetStart = clampColumn(pointerCol, this.totalColumns);
             targetEnd = targetStart + span - 1;
@@ -303,33 +333,61 @@ export class CardInteractionController {
                 targetEnd = this.totalColumns;
                 targetStart = Math.max(1, targetEnd - span + 1);
             }
+        } else {
+            // Vertical (group-only) drag, or no axis chosen yet: dates stay fixed.
+            targetStart = this.ctx.originalXStart;
+            targetEnd = this.ctx.originalXEnd;
         }
         this.lastTargetStart = targetStart;
         this.lastTargetEnd = targetEnd;
 
-        // Compute target group. Resize is locked to source group.
+        // Compute target group. The group only moves for a vertical drag; resize,
+        // horizontal drag, and the undecided state all stay in the source group.
         let targetGroupEntry: GroupRectEntry | undefined;
-        if (this.mode === 'RESIZING_L' || this.mode === 'RESIZING_R') {
-            targetGroupEntry = this.groupRects.find(g => g.groupName === this.ctx!.originalGroup);
-        } else {
+        if (this.dragAxis === 'VERTICAL') {
             const found = groupAtPointer(e.clientY, this.groupRects);
             if (found) targetGroupEntry = this.groupRects.find(g => g.groupName === found.groupName);
+        } else {
+            targetGroupEntry = this.groupRects.find(g => g.groupName === this.ctx!.originalGroup);
         }
         if (!targetGroupEntry) return;
         this.lastTargetGroup = { name: targetGroupEntry.groupName, element: targetGroupEntry.element };
 
-        // Choose row: same group → keep original y; different group → row 1 (top).
-        // Resize is same-group so always keeps original y.
         // Ghost row policy:
-        //   - DRAG: always row 1 of the target group. The actual y is auto-
-        //     computed at next layout; showing row 1 is the only honest indicator
-        //     and removes "jumpy" boundary transitions.
-        //   - RESIZE: stays at the source card's row (resize never changes y/group).
-        const isResize = this.mode === 'RESIZING_L' || this.mode === 'RESIZING_R';
-        const dataRow = isResize ? this.ctx.originalY + 1 : 1;
+        //   - RESIZE / same-group drag: preview at the card's current row, so the
+        //     ghost honestly tracks the new position instead of snapping to the top.
+        //   - DRAG into a different group: the row is auto-computed at next layout
+        //     and unknowable up front, so show row 1 of the target group.
+        const sameGroup = targetGroupEntry.groupName === this.ctx.originalGroup;
+        const dataRow = (isResize || sameGroup) ? this.ctx.originalY + 1 : 1;
 
         const span = Math.max(1, targetEnd - targetStart + 1);
         this.ghost.place(targetGroupEntry.element, targetStart, span, dataRow);
+    }
+
+    /**
+     * Decide a drag's single axis at the first crossed cell boundary: a column
+     * crossing → HORIZONTAL (move time), a group crossing → VERTICAL (change
+     * group). If both are crossed in the same frame, the larger pixel delta from
+     * the start point wins. Returns NONE until a boundary is actually crossed.
+     * On ungrouped boards no other group exists, so this only ever yields
+     * HORIZONTAL or NONE.
+     */
+    private decideDragAxis(e: PointerEvent, pointerCol: number): DragAxis {
+        if (!this.ctx) return 'NONE';
+
+        const colCrossed = pointerCol !== this.ctx.originPointerCol;
+        const found = groupAtPointer(e.clientY, this.groupRects);
+        const groupCrossed = !!found && found.groupName !== this.ctx.originalGroup;
+
+        if (colCrossed && groupCrossed) {
+            const dx = Math.abs(e.clientX - this.ctx.startClientX);
+            const dy = Math.abs(e.clientY - this.ctx.startClientY);
+            return dy > dx ? 'VERTICAL' : 'HORIZONTAL';
+        }
+        if (groupCrossed) return 'VERTICAL';
+        if (colCrossed) return 'HORIZONTAL';
+        return 'NONE';
     }
 
     private applyAutoScroll(e: PointerEvent): void {
@@ -368,6 +426,7 @@ export class CardInteractionController {
 
         // Snapshot everything we need from ctx into locals BEFORE teardown.
         const priorMode: Mode = this.mode;
+        const dragAxis = this.dragAxis;
         const taskId = this.ctx.taskId;
         const originalGroup = this.ctx.originalGroup;
         const originalXStart = this.ctx.originalXStart;
@@ -424,16 +483,24 @@ export class CardInteractionController {
             if (endCol < startCol) endCol = startCol;
             sendStart = false;
         } else {
+            // DRAGGING — only the locked axis is committed.
             startCol = dropStart;
             endCol = dropStart + span - 1;
             if (endCol > totalColumns) {
                 endCol = totalColumns;
                 startCol = Math.max(1, endCol - span + 1);
             }
+            if (dragAxis !== 'HORIZONTAL') {
+                // Vertical (group-only) or undecided drag: leave dates untouched.
+                // Sending the snapped column dates here would shift the task to a
+                // unit boundary on week/month zoom, silently changing time too.
+                sendStart = false;
+                sendEnd = false;
+            }
         }
 
         const { start: newStart, end: newEnd } = snappedDatesForColumnRange(startCol, endCol, columnHeaders, timeUnit);
-        const groupChanged = priorMode === 'DRAGGING' && dropGroup.name !== originalGroup;
+        const groupChanged = priorMode === 'DRAGGING' && dragAxis === 'VERTICAL' && dropGroup.name !== originalGroup;
 
         const mutation: Parameters<typeof applyTaskMutation>[2] = { taskId };
         if (sendStart) mutation.newStart = newStart;
@@ -459,8 +526,11 @@ export class CardInteractionController {
         // with a fresh card at the new position within one frame.
         this.endDrag(true);
 
-        // Fire-and-forget; rollback is handled inside applyTaskMutation.
-        void applyTaskMutation(this.app, this.appStateManager, mutation);
+        // Fire-and-forget; rollback is handled inside applyTaskMutation. The
+        // returned inverse (null on no-op/failure) becomes an undo entry.
+        void applyTaskMutation(this.app, this.appStateManager, mutation).then((inverse) => {
+            if (inverse) this.appStateManager.taskHistory.recordForward(inverse);
+        });
     }
 
     private installClickSuppressor(): void {
@@ -534,6 +604,7 @@ export class CardInteractionController {
         }
 
         this.mode = 'IDLE';
+        this.dragAxis = 'NONE';
         this.ctx = null;
         this.latestEvent = null;
         this.lastTargetGroup = null;

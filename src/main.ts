@@ -2,6 +2,7 @@ import { Plugin, WorkspaceLeaf, Notice, TFile } from "obsidian";
 import { TaskTimelineView, TASK_TIMELINE_VIEW_TYPE } from "./views/TaskTimelineView";
 import { HorizontalTaskView, HORIZONTAL_TASK_VIEW_TYPE } from "./views/HorizontalTaskView";
 import { AppStateManager } from "./core/AppStateManager";
+import { undoTaskMutation, redoTaskMutation } from "./core/update/taskHistory";
 import { TaskTimelineSettingTab } from "./settings/TaskTimelineSettingTab";
 import { hasHorizontalModeFrontmatter } from "./core/utils/horizontalTaskUtils";
 
@@ -43,6 +44,30 @@ export default class TaskTimelinePlugin extends Plugin {
 			name: "Open Task Timeline",
 			callback: () => {
 				this.activateView();
+			},
+		});
+
+		// Undo/redo for drag/resize/move changes. No default hotkey — the view
+		// handles Ctrl+Z / Ctrl+Shift+Z directly; these expose the action in the
+		// command palette and let users bind their own keys. Only enabled when a
+		// timeline view is active.
+		this.addCommand({
+			id: "undo-task-change",
+			name: "Undo task change (timeline)",
+			checkCallback: (checking) => {
+				if (!this.app.workspace.getActiveViewOfType(TaskTimelineView)) return false;
+				if (!checking) void undoTaskMutation(this.app, this.appStateManager);
+				return true;
+			},
+		});
+
+		this.addCommand({
+			id: "redo-task-change",
+			name: "Redo task change (timeline)",
+			checkCallback: (checking) => {
+				if (!this.app.workspace.getActiveViewOfType(TaskTimelineView)) return false;
+				if (!checking) void redoTaskMutation(this.app, this.appStateManager);
+				return true;
 			},
 		});
 		

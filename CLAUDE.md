@@ -20,9 +20,23 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Development Commands
 
-- `npm run dev` - Build and watch for changes in development mode (auto-copies to test vault)
-- `npm run test` - Run Jest tests
-- `esbuild.config.mjs production` - Build for production
+- `npm run dev` — build and watch `src/` + `styles.css`; on each rebuild it copies `main.js`/`manifest.json`/`styles.css` into the test vault. It does **not** change the version.
+- `npm run test` — run Jest tests
+- `npm run build` — one-off production build (minified, no sourcemap); does not copy to the vault
+
+## Releasing
+
+A release is triggered by pushing a **git tag**. `.github/workflows/release.yml` then runs `npm run build` and creates a GitHub release with `main.js`, `manifest.json`, and `styles.css` attached (CI builds `main.js`; it is git-ignored).
+
+Conventions:
+- Tag name = the version in `manifest.json`, **bare semver, no `v` prefix** (e.g. `2.1.5`).
+- `minAppVersion` is `0.15.0`. `versions.json` maps each shipped version → minAppVersion; keep it to versions that were actually released.
+
+Cutting `X.Y.Z`:
+1. Set the version to `X.Y.Z` in `manifest.json`, `package.json`, and `package-lock.json` (`npm version X.Y.Z --no-git-tag-version` handles the latter two), and add `"X.Y.Z": "0.15.0"` to `versions.json`.
+2. `npm run build && npm test` — both must be green.
+3. Commit on `main` summarizing what's in the release.
+4. `git tag -a X.Y.Z -m X.Y.Z`, then `git push origin main && git push origin X.Y.Z`.
 
 ## Architecture Overview
 
@@ -70,10 +84,10 @@ Tasks are markdown files with YAML frontmatter:
 
 ### Development Notes
 
-- Plugin builds to `main.js` and auto-copies to test vault during development
-- TypeScript configuration targets ES6 with Obsidian-specific externals
-- Uses esbuild for fast compilation and bundling
+- Plugin builds to `main.js` and auto-copies to the test vault during development (no version bump)
+- esbuild targets `es2018` with Obsidian/CodeMirror externals; `.md` templates are inlined as raw strings
 - File watching monitors both `src/` and `styles.css`
+- A running log of notable changes is kept in `.claude/docs/working_history.md` (local, untracked)
 
 ## Test Configuration
 

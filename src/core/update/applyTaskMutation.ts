@@ -1,6 +1,6 @@
 import { App, Notice, TFile } from "obsidian";
 import { ITask } from "../../interfaces/ITask";
-import { AppStateManager } from "../AppStateManager";
+import type { AppStateManager } from "../AppStateManager";
 import { updateTaskFrontmatter } from "../utils/frontmatterUtils";
 import { canonicalizeFile } from "../utils/canonicalizeFile";
 
@@ -14,6 +14,12 @@ export interface TaskMutation {
     newStart?: string;
     newEnd?: string;
     newGroupValue?: TaskGroupAssignment;
+}
+
+/** Inverse mutation + human label needed to revert one applied change. */
+export interface TaskHistoryEntry {
+    mutation: TaskMutation;
+    label: string;
 }
 
 interface TaskSnapshot {
@@ -93,14 +99,54 @@ function buildFrontmatterUpdate(mutation: TaskMutation): FrontmatterUpdate {
     return { writes, deletes };
 }
 
+/** Task id is the filename without extension (see generateTaskId). */
+function fileIdFromPath(path: string): string {
+    const name = path.split('/').pop() || path;
+    return name.replace(/\.md$/, '');
+}
+
+function groupValueFromSnapshot(groupBy: string, prev: TaskSnapshot): string {
+    if (groupBy === 'status') return prev.status ? prev.status : 'No Status';
+    if (groupBy === 'category') return prev.category ? prev.category : 'No Category';
+    if (groupBy === 'priority') return prev.priority ? String(prev.priority) : 'No Priority';
+    return '';
+}
+
+/**
+ * Build the mutation that reverts `forward`, restoring the pre-change values
+ * from `prev`. Targeted at `taskId` — the file's id AFTER `forward` settled,
+ * which differs from the original when a start-date change renamed the file.
+ */
+function buildInverseMutation(forward: TaskMutation, prev: TaskSnapshot, taskId: string): TaskMutation {
+    const inverse: TaskMutation = { taskId };
+    if (forward.newStart !== undefined) inverse.newStart = prev.start;
+    if (forward.newEnd !== undefined) inverse.newEnd = prev.end;
+    if (forward.newGroupValue) {
+        inverse.newGroupValue = {
+            groupBy: forward.newGroupValue.groupBy,
+            value: groupValueFromSnapshot(forward.newGroupValue.groupBy, prev),
+        };
+    }
+    return inverse;
+}
+
+function describeMutation(m: TaskMutation): string {
+    if (m.newGroupValue && m.newStart === undefined && m.newEnd === undefined) {
+        return `${m.newGroupValue.groupBy} change`;
+    }
+    if (m.newStart !== undefined && m.newEnd !== undefined) return 'move';
+    if (m.newStart !== undefined || m.newEnd !== undefined) return 'resize';
+    return 'change';
+}
+
 export async function applyTaskMutation(
     app: App,
     appStateManager: AppStateManager,
     mutation: TaskMutation
-): Promise<void> {
+): Promise<TaskHistoryEntry | null> {
     const tasks = appStateManager.getVolatileState().currentTasks || [];
     const task = tasks.find((t: ITask) => t.id === mutation.taskId);
-    if (!task) return;
+    if (!task) return null;
 
     const prev: TaskSnapshot = {
         start: task.start,
@@ -123,13 +169,19 @@ export async function applyTaskMutation(
         (mutation.newGroupValue?.groupBy === 'status' && mutation.newGroupValue.value === 'No Status' && prev.status !== '') ||
         (mutation.newGroupValue?.groupBy === 'category' && mutation.newGroupValue.value === 'No Category' && prev.category !== '');
 
-    if (!willChange) return;
+    if (!willChange) return null;
 
     appStateManager.applyOptimisticTaskUpdate(mutation.taskId, patch as Partial<ITask>);
 
     const fmUpdate = buildFrontmatterUpdate(mutation);
     const startChanged = mutation.newStart !== undefined && mutation.newStart !== prev.start;
     const oldPath = task.filePath;
+
+    // A start-date change renames the file to a new YYYYMMDD_<id>.md, which
+    // changes the task's id. Track where it lands so the undo entry can target
+    // the file's final id and re-locate the task after the rename settles.
+    let finalPath = oldPath;
+    let succeeded = true;
 
     // Mark OLD before any write so the synchronous modify-event handler sees
     // the marker and defers. Mark every rename candidate canonicalize tries
@@ -142,12 +194,13 @@ export async function applyTaskMutation(
             if (startChanged) {
                 const file = app.vault.getAbstractFileByPath(oldPath);
                 if (file instanceof TFile) {
-                    await canonicalizeFile(app, file, (predictedNewPath) => {
+                    const renamed = await canonicalizeFile(app, file, (predictedNewPath) => {
                         if (!markedPaths.has(predictedNewPath)) {
                             markedPaths.add(predictedNewPath);
                             appStateManager.markMutationStart(predictedNewPath);
                         }
                     });
+                    finalPath = renamed.path;
                 }
             }
         });
@@ -155,9 +208,17 @@ export async function applyTaskMutation(
         console.error('TaskTimeline: drag/resize write failed; re-syncing from disk', err);
         await appStateManager.resyncFileFromDisk(oldPath);
         new Notice('Failed to update task — refreshed from disk.');
+        succeeded = false;
     } finally {
         for (const p of markedPaths) {
             appStateManager.markMutationEnd(p);
         }
     }
+
+    if (!succeeded) return null;
+
+    return {
+        mutation: buildInverseMutation(mutation, prev, fileIdFromPath(finalPath)),
+        label: describeMutation(mutation),
+    };
 }

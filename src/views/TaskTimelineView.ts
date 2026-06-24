@@ -4,6 +4,7 @@ import { NavBar } from '../components/NavBar/NavBar';
 import { BoardContainer } from '../components/BoardContainer/BoardContainer';
 import { PluginEvent } from '../enums/events';
 import { DEFAULT_COLOR } from '../core/utils/colorUtils';
+import { undoTaskMutation, redoTaskMutation } from '../core/update/taskHistory';
 
 export const TASK_TIMELINE_VIEW_TYPE = 'task-timeline-view';
 
@@ -15,6 +16,7 @@ export class TaskTimelineView extends ItemView {
 
     // Bound handler for event cleanup
     private readonly boundUpdateColors = this.updateColorVariables.bind(this);
+    private readonly boundKeyDown = this.onKeyDown.bind(this);
 
     constructor(leaf: WorkspaceLeaf, appRef: App, appStateManager: AppStateManager) {
         super(leaf);
@@ -41,6 +43,37 @@ export class TaskTimelineView extends ItemView {
 
         this.boardContainer = new BoardContainer(this.app, this.appStateManager, false);
         this.container.appendChild(this.boardContainer.element);
+
+        // Ctrl/Cmd+Z = undo, Ctrl/Cmd+Shift+Z (or Ctrl+Y) = redo for
+        // drag/resize/move changes. Registered on document (capture) and gated
+        // to the focused timeline leaf so it doesn't hijack the editor's undo.
+        this.registerDomEvent(document, 'keydown', this.boundKeyDown, { capture: true });
+    }
+
+    private async onKeyDown(e: KeyboardEvent): Promise<void> {
+        const mod = e.ctrlKey || e.metaKey;
+        if (!mod) return;
+
+        const key = e.key.toLowerCase();
+        if (key !== 'z' && key !== 'y') return;
+
+        // Only the active timeline leaf handles the shortcut (avoids acting from
+        // a background pane or firing once per open timeline).
+        if (this.app.workspace.getActiveViewOfType(TaskTimelineView) !== this) return;
+
+        // Don't steal undo while the user is typing in an input or editor.
+        const target = e.target as HTMLElement | null;
+        if (target?.closest('input, textarea, [contenteditable="true"], .cm-editor')) return;
+
+        const isRedo = key === 'y' || (key === 'z' && e.shiftKey);
+        e.preventDefault();
+        e.stopPropagation();
+
+        if (isRedo) {
+            await redoTaskMutation(this.app, this.appStateManager);
+        } else {
+            await undoTaskMutation(this.app, this.appStateManager);
+        }
     }
 
     private updateColorVariables(): void {
