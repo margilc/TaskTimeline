@@ -170,6 +170,28 @@ function formatDateUTC(date: Date): string {
     return date.toISOString().slice(0, 10);
 }
 
+/**
+ * Shift a YYYY-MM-DD date by whole time units, preserving intra-unit position.
+ * Used for horizontal MOVES: unlike snapping the endpoints to unit boundaries,
+ * translation never changes a task's duration or day-of-week/day-of-month.
+ * Month shifts clamp the day to the target month's length (Jan 31 +1 → Feb 28).
+ */
+export function translateDateByUnits(dateStr: string, deltaUnits: number, timeUnit: TimeUnit): string {
+    const d = new Date(dateStr);
+    if (timeUnit === TimeUnit.WEEK) {
+        d.setUTCDate(d.getUTCDate() + deltaUnits * 7);
+    } else if (timeUnit === TimeUnit.MONTH) {
+        const day = d.getUTCDate();
+        d.setUTCDate(1);
+        d.setUTCMonth(d.getUTCMonth() + deltaUnits);
+        const daysInMonth = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 0)).getUTCDate();
+        d.setUTCDate(Math.min(day, daysInMonth));
+    } else {
+        d.setUTCDate(d.getUTCDate() + deltaUnits);
+    }
+    return formatDateUTC(d);
+}
+
 export function snappedDatesForColumnRange(
     startCol: number,
     endCol: number,

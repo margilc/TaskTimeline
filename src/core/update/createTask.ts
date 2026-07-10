@@ -1,4 +1,4 @@
-import { App, TFolder } from "obsidian";
+import { App, stringifyYaml } from "obsidian";
 import { IAppState } from "../../interfaces/IAppState";
 import { NewTaskFormData } from "../../components/NewTaskModal";
 import { nameToIdentifier } from "../utils/fileRenameUtils";
@@ -36,21 +36,18 @@ export async function createTask(app: App, state: IAppState, taskData: NewTaskFo
 		counter++;
 	}
 	
-	// Create YAML frontmatter
+	// Serialize via stringifyYaml so names containing ':', '#', quotes or
+	// brackets produce valid, lossless frontmatter.
 	const frontmatter = {
 		name: taskData.name,
 		start: taskData.start,
 		...(taskData.end && { end: taskData.end }),
 		...(taskData.category && { category: taskData.category }),
 		...(taskData.status && { status: taskData.status }),
-		priority: taskData.priority || "5",  // Always include priority, default to 5
-		...(taskData.horizontalMode && { horizontal_mode: "true" })
+		priority: parseInt(taskData.priority || "5", 10) || 5,
+		...(taskData.horizontalMode && { horizontal_mode: true })
 	};
-	
-	// Create markdown content
-	const yamlContent = Object.entries(frontmatter)
-		.map(([key, value]) => `${key}: ${value}`)
-		.join('\n');
+	const yamlContent = stringifyYaml(frontmatter).trimEnd();
 
 	const bodyContent = taskData.templateContent
 		? taskData.templateContent

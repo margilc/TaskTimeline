@@ -64,6 +64,10 @@ export class NewTaskModal extends Modal {
 					for (const t of this.templates) {
 						dropdown.addOption(t.name, t.name);
 					}
+					// Restore the selection across the onOpen() re-render —
+					// without this the picker visually resets to "None" right
+					// after a template is chosen.
+					dropdown.setValue(this.selectedTemplate?.name ?? "none");
 					dropdown.onChange(value => {
 						this.applyTemplate(value);
 						// Re-render the form to reflect updated values
@@ -214,8 +218,9 @@ export class NewTaskModal extends Modal {
 		if (!this.formData.name.trim()) return false;
 		if (!this.formData.start.trim()) return false;
 		if (!this.isValidDate(this.formData.start)) return false;
+		// end === start is a valid single-day task (the parser accepts it too)
 		if (this.formData.end && !this.isValidDate(this.formData.end)) return false;
-		if (this.formData.end && new Date(this.formData.start) >= new Date(this.formData.end)) return false;
+		if (this.formData.end && this.formData.start > this.formData.end) return false;
 
 		// Validate priority if provided
 		if (this.formData.priority) {

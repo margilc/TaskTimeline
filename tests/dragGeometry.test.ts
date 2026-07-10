@@ -2,6 +2,7 @@ import { TimeUnit } from '../src/enums/TimeUnit';
 import {
     pointerToColumnIndex,
     snappedDatesForColumnRange,
+    translateDateByUnits,
     readCardLayout,
     clampColumn,
     groupAtPointer,
@@ -288,5 +289,34 @@ describe('groupAtPointer (nearest-by-distance)', () => {
 
     it('returns null when there are no groups', () => {
         expect(groupAtPointer(50, [])).toBeNull();
+    });
+});
+
+describe('translateDateByUnits (move semantics: duration/offset preserved)', () => {
+    it('shifts by days', () => {
+        expect(translateDateByUnits('2026-07-10', 3, TimeUnit.DAY)).toBe('2026-07-13');
+        expect(translateDateByUnits('2026-07-10', -10, TimeUnit.DAY)).toBe('2026-06-30');
+    });
+
+    it('shifts by weeks, preserving the day of week', () => {
+        // 2026-07-01 is a Wednesday; +2 weeks is still a Wednesday
+        expect(translateDateByUnits('2026-07-01', 2, TimeUnit.WEEK)).toBe('2026-07-15');
+        expect(translateDateByUnits('2026-07-01', -1, TimeUnit.WEEK)).toBe('2026-06-24');
+    });
+
+    it('shifts by months, preserving the day of month', () => {
+        expect(translateDateByUnits('2026-07-10', 1, TimeUnit.MONTH)).toBe('2026-08-10');
+        expect(translateDateByUnits('2026-07-10', -2, TimeUnit.MONTH)).toBe('2026-05-10');
+    });
+
+    it('clamps day-of-month to the target month length', () => {
+        expect(translateDateByUnits('2026-01-31', 1, TimeUnit.MONTH)).toBe('2026-02-28');
+        expect(translateDateByUnits('2028-01-31', 1, TimeUnit.MONTH)).toBe('2028-02-29'); // leap year
+        expect(translateDateByUnits('2026-03-31', 1, TimeUnit.MONTH)).toBe('2026-04-30');
+    });
+
+    it('crosses year boundaries', () => {
+        expect(translateDateByUnits('2026-12-15', 1, TimeUnit.MONTH)).toBe('2027-01-15');
+        expect(translateDateByUnits('2026-01-05', -1, TimeUnit.MONTH)).toBe('2025-12-05');
     });
 });

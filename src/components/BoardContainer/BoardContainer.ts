@@ -32,6 +32,10 @@ export class BoardContainer {
     // Bound handlers for proper event listener cleanup
     private readonly boundRenderBoard = this.renderBoard.bind(this);
     private readonly boundDebouncedRender: (...args: any[]) => void;
+    private readonly boundOnDragEnded = this.onDragEnded.bind(this);
+
+    // Set when a render was requested mid-drag; replayed on TaskDragEnded.
+    private renderPendingAfterDrag = false;
 
     // Zoom and pan cleanup functions
     private zoomCleanup: (() => void) | null = null;
@@ -91,6 +95,7 @@ export class BoardContainer {
         this.appStateManager.getEvents().on(PluginEvent.UpdateColorMappingsDone, this.boundDebouncedRender);
         this.appStateManager.getEvents().on(PluginEvent.UpdateGroupOrderDone, this.boundDebouncedRender);
         this.appStateManager.getEvents().on(PluginEvent.UpdateGroupFoldDone, this.boundDebouncedRender);
+        this.appStateManager.getEvents().on(PluginEvent.TaskDragEnded, this.boundOnDragEnded);
 
         // Setup zoom, pan, and scroll persistence handlers
         this.zoomCleanup = this.setupZoomHandler();
@@ -263,7 +268,22 @@ export class BoardContainer {
         this.hasRestoredScroll = true;
     }
 
+    private onDragEnded(): void {
+        if (this.renderPendingAfterDrag) {
+            this.renderPendingAfterDrag = false;
+            this.renderBoard();
+        }
+    }
+
     private renderBoard(): void {
+        // Rebuilding the board mid-drag would detach the ghost and the drag's
+        // DOM references (e.g. an undo or external file change landing during
+        // the gesture). Defer to a single render at drag end.
+        if (this.cardInteraction?.isEngaged()) {
+            this.renderPendingAfterDrag = true;
+            return;
+        }
+
         try {
             const state = this.appStateManager.getState();
             const boardLayout = state.volatile.boardLayout;
@@ -476,6 +496,7 @@ export class BoardContainer {
     }
 
     public destroy(): void {
+        this.appStateManager.getEvents().off(PluginEvent.TaskDragEnded, this.boundOnDragEnded);
         if (this.cardInteraction) {
             this.cardInteraction.destroy();
             this.cardInteraction = null;

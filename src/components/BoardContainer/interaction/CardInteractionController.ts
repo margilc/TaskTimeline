@@ -8,6 +8,7 @@ import {
     pointerToColumnIndex,
     groupAtPointer,
     snappedDatesForColumnRange,
+    translateDateByUnits,
     readCardLayout,
     buildBackdropSVG,
     clampColumn,
@@ -44,6 +45,10 @@ interface PointerCtx {
     // measures column crossings relative to this, not the card's edge, so
     // grabbing a multi-column card mid-body doesn't read as an instant move.
     originPointerCol: number;
+    // Columns between the card's start and the grab point. Horizontal drags
+    // subtract this so the card keeps its position under the cursor instead
+    // of teleporting its start column to the pointer.
+    grabOffsetCols: number;
 }
 
 interface GroupRectEntry {
@@ -108,6 +113,13 @@ export class CardInteractionController {
 
     public isActive(): boolean {
         return this.mode === 'DRAGGING' || this.mode === 'RESIZING_L' || this.mode === 'RESIZING_R';
+    }
+
+    /** True from pointerdown on a card until the interaction fully ends
+     *  (including the pre-threshold POTENTIAL window). Board re-renders are
+     *  deferred while engaged so the drag's DOM references stay valid. */
+    public isEngaged(): boolean {
+        return this.mode !== 'IDLE';
     }
 
     public destroy(): void {
@@ -208,10 +220,13 @@ export class CardInteractionController {
             // is 'All Tasks' — that mismatch left resize unable to find its own
             // group, so the ghost never placed and the drop never committed.
             originalGroup: sourceGroupEl.dataset.groupName ?? '',
-            originPointerCol: pointerToColumnIndex(
-                e.clientX, this.contentElement, this.columnWidth, this.columnGap, this.totalColumns
-            ),
+            originPointerCol: 0,
+            grabOffsetCols: 0,
         };
+        this.ctx.originPointerCol = pointerToColumnIndex(
+            e.clientX, this.contentElement, this.columnWidth, this.columnGap, this.totalColumns
+        );
+        this.ctx.grabOffsetCols = Math.max(0, this.ctx.originPointerCol - layout.xStart);
 
         this.mode = 'POTENTIAL';
 
@@ -327,7 +342,7 @@ export class CardInteractionController {
             if (targetEnd < targetStart) targetEnd = targetStart;
         } else if (this.dragAxis === 'HORIZONTAL') {
             const span = this.ctx.originalSpan;
-            targetStart = clampColumn(pointerCol, this.totalColumns);
+            targetStart = clampColumn(pointerCol - this.ctx.grabOffsetCols, this.totalColumns);
             targetEnd = targetStart + span - 1;
             if (targetEnd > this.totalColumns) {
                 targetEnd = this.totalColumns;
@@ -418,9 +433,17 @@ export class CardInteractionController {
     private onPointerUp(e: PointerEvent): void {
         if (!this.ctx || e.pointerId !== this.ctx.pointerId) return;
 
+        // pointercancel (OS gesture, window switch, capture loss) is a
+        // cancellation, never a drop — committing here would write dates the
+        // user never chose.
+        if (e.type === 'pointercancel') {
+            this.cancelDrag();
+            return;
+        }
+
         if (this.mode === 'POTENTIAL') {
             // No drag occurred. Click goes through to the card's existing handler.
-            this.endDrag(false);
+            this.endDrag();
             return;
         }
 
@@ -431,10 +454,8 @@ export class CardInteractionController {
         const originalGroup = this.ctx.originalGroup;
         const originalXStart = this.ctx.originalXStart;
         const originalXEnd = this.ctx.originalXEnd;
-        const originalSpan = this.ctx.originalSpan;
         const sourceCard = this.ctx.sourceCard;
         const groupBy = this.groupBy;
-        const totalColumns = this.totalColumns;
         const columnHeaders = this.columnHeaders;
         const timeUnit = this.timeUnit;
         const dropStart = this.lastTargetStart;
@@ -454,57 +475,41 @@ export class CardInteractionController {
         if (!dropGroup) {
             // No target — treat as cancel; unfade and reset.
             this.unfadeSource();
-            this.endDrag(true);
+            this.endDrag();
             return;
         }
 
         const task = this.appStateManager.getVolatileState().currentTasks?.find((t: ITask) => t.id === taskId);
         if (!task) {
             this.unfadeSource();
-            this.endDrag(true);
+            this.endDrag();
             return;
         }
 
-        const span = originalSpan;
-
-        let startCol: number;
-        let endCol: number;
-        let sendStart = true;
-        let sendEnd = true;
+        const mutation: Parameters<typeof applyTaskMutation>[2] = { taskId };
 
         if (priorMode === 'RESIZING_L') {
-            startCol = dropStart;
-            endCol = originalXEnd;
-            if (startCol > endCol) startCol = endCol;
-            sendEnd = false;
+            let startCol = dropStart;
+            if (startCol > originalXEnd) startCol = originalXEnd;
+            mutation.newStart = snappedDatesForColumnRange(startCol, originalXEnd, columnHeaders, timeUnit).start;
         } else if (priorMode === 'RESIZING_R') {
-            startCol = originalXStart;
-            endCol = dropEnd;
-            if (endCol < startCol) endCol = startCol;
-            sendStart = false;
-        } else {
-            // DRAGGING — only the locked axis is committed.
-            startCol = dropStart;
-            endCol = dropStart + span - 1;
-            if (endCol > totalColumns) {
-                endCol = totalColumns;
-                startCol = Math.max(1, endCol - span + 1);
-            }
-            if (dragAxis !== 'HORIZONTAL') {
-                // Vertical (group-only) or undecided drag: leave dates untouched.
-                // Sending the snapped column dates here would shift the task to a
-                // unit boundary on week/month zoom, silently changing time too.
-                sendStart = false;
-                sendEnd = false;
+            let endCol = dropEnd;
+            if (endCol < originalXStart) endCol = originalXStart;
+            mutation.newEnd = snappedDatesForColumnRange(originalXStart, endCol, columnHeaders, timeUnit).end;
+        } else if (dragAxis === 'HORIZONTAL') {
+            // A move translates the task's own dates by the columns crossed.
+            // Snapping endpoints to column boundaries here would rewrite the
+            // task's duration on week/month zoom; a task without an end date
+            // stays end-less instead of having one injected.
+            const deltaCols = dropStart - originalXStart;
+            if (deltaCols !== 0) {
+                mutation.newStart = translateDateByUnits(task.start, deltaCols, timeUnit);
+                if (task.end) mutation.newEnd = translateDateByUnits(task.end, deltaCols, timeUnit);
             }
         }
+        // Vertical (group-only) or undecided drag: dates stay untouched.
 
-        const { start: newStart, end: newEnd } = snappedDatesForColumnRange(startCol, endCol, columnHeaders, timeUnit);
         const groupChanged = priorMode === 'DRAGGING' && dragAxis === 'VERTICAL' && dropGroup.name !== originalGroup;
-
-        const mutation: Parameters<typeof applyTaskMutation>[2] = { taskId };
-        if (sendStart) mutation.newStart = newStart;
-        if (sendEnd) mutation.newEnd = newEnd;
         if (groupChanged && groupBy !== 'none') {
             mutation.newGroupValue = { groupBy, value: dropGroup.name };
         }
@@ -518,13 +523,13 @@ export class CardInteractionController {
 
         if (isNoOp) {
             sourceCard.classList.remove('is-dragging-source');
-            this.endDrag(true);
+            this.endDrag();
             return;
         }
 
         // Real change: leave the source card faded; renderBoard will replace it
         // with a fresh card at the new position within one frame.
-        this.endDrag(true);
+        this.endDrag();
 
         // Fire-and-forget; rollback is handled inside applyTaskMutation. The
         // returned inverse (null on no-op/failure) becomes an undo entry.
@@ -570,20 +575,28 @@ export class CardInteractionController {
     private onKeyDown(e: KeyboardEvent): void {
         if (e.key === 'Escape' && this.isActive()) {
             e.preventDefault();
+            // The pointer is still down; when the user eventually releases over
+            // the card, a click would fire and open the task file. Arm the
+            // suppressor at release time.
+            document.addEventListener(
+                'pointerup',
+                () => this.installClickSuppressor(),
+                { once: true, capture: true }
+            );
             this.cancelDrag();
         }
     }
 
     private cancelDrag(): void {
         if (this.mode === 'IDLE') return;
-        // Escape mid-drag: tear down visuals, unfade source (no renderBoard incoming),
-        // no write, no click suppressor (no click coming).
+        // Cancel mid-drag: tear down visuals, unfade source (no renderBoard
+        // incoming), no write.
         this.teardownVisuals();
         this.unfadeSource();
-        this.endDrag(false);
+        this.endDrag();
     }
 
-    private endDrag(wasRealDrag: boolean): void {
+    private endDrag(): void {
         if (this.ctx) {
             try { this.ctx.sourceCard.releasePointerCapture(this.ctx.pointerId); } catch { /* ignore */ }
         }
@@ -599,14 +612,15 @@ export class CardInteractionController {
             this.rafId = null;
         }
 
-        if (wasRealDrag) {
-            this.appStateManager.emit(PluginEvent.TaskDragEnded, {});
-        }
-
         this.mode = 'IDLE';
         this.dragAxis = 'NONE';
         this.ctx = null;
         this.latestEvent = null;
         this.lastTargetGroup = null;
+
+        // Emitted after the state reset so listeners (BoardContainer's render
+        // gate) observe isEngaged() === false. Fires for every interaction end,
+        // including plain clicks and cancels.
+        this.appStateManager.emit(PluginEvent.TaskDragEnded, {});
     }
 }

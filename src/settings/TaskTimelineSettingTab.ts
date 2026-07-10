@@ -1,6 +1,7 @@
 import { App, PluginSettingTab, Setting, Notice } from "obsidian";
 import TaskTimelinePlugin from "../main";
 import { AppStateManager } from "../core/AppStateManager";
+import { PluginEvent } from "../enums/events";
 import { ITaskTimelineSettings } from "../interfaces/ITaskTimelineSettings";
 import { getAvailableBackgrounds } from "../core/utils/colorUtils";
 import { DEFAULT_TASK_TIMELINE_SETTINGS } from "./defaultSettings";
@@ -21,27 +22,40 @@ export class TaskTimelineSettingTab extends PluginSettingTab {
 
 		const settings = this.getSettings();
 
+		// Both settings below rebuild the task index when changed, so they
+		// commit on blur/Enter — not per keystroke, where every intermediate
+		// prefix would trigger a rebuild and reset the selected project.
 		new Setting(containerEl)
 			.setName("Task Directory")
 			.setDesc("Directory containing task markdown files")
-			.addText(text => text
-				.setPlaceholder("Taskdown")
-				.setValue(settings.taskDirectory)
-				.onChange(async (value) => {
-					await this.updateSetting("taskDirectory", value);
-				}));
+			.addText(text => {
+				text.setPlaceholder("Taskdown").setValue(settings.taskDirectory);
+				const commit = async () => {
+					const normalized = text.getValue().trim().replace(/^\/+|\/+$/g, "");
+					text.setValue(normalized);
+					if (normalized && normalized !== this.getSettings().taskDirectory) {
+						await this.updateSetting("taskDirectory", normalized);
+					}
+				};
+				text.inputEl.addEventListener("blur", commit);
+				text.inputEl.addEventListener("keydown", (e) => {
+					if (e.key === "Enter") text.inputEl.blur();
+				});
+			});
 
 		new Setting(containerEl)
 			.setName("Ignore list")
-			.setDesc("Paths excluded from the timeline. One pattern per line, matched anywhere in a file's path. Use * to match within a folder and ** to match across folders (e.g. templates/, .claude/, archive/**).")
+			.setDesc("Paths excluded from the timeline. One pattern per line, matched against whole path segments at any depth. Use * to match within a folder and ** to match across folders (e.g. templates/, .claude/, archive/**).")
 			.addTextArea(text => {
 				text.inputEl.rows = 4;
 				text.inputEl.style.width = "100%";
 				text.setPlaceholder("templates/\n.claude/");
 				text.setValue((settings.ignorePatterns ?? []).join("\n"));
-				text.onChange(async (value) => {
-					const patterns = value.split("\n").map(s => s.trim()).filter(Boolean);
-					await this.updateSetting("ignorePatterns", patterns);
+				text.inputEl.addEventListener("blur", async () => {
+					const patterns = text.getValue().split("\n").map(s => s.trim()).filter(Boolean);
+					if (patterns.join("\n") !== (this.getSettings().ignorePatterns ?? []).join("\n")) {
+						await this.updateSetting("ignorePatterns", patterns);
+					}
 				});
 			});
 
@@ -164,11 +178,11 @@ export class TaskTimelineSettingTab extends PluginSettingTab {
 	private async updateSetting(key: keyof ITaskTimelineSettings, value: any): Promise<void> {
 		const currentSettings = this.getSettings();
 		const newSettings = { ...currentSettings, [key]: value };
-		this.appStateManager.emit("update_settings_pending", newSettings);
+		this.appStateManager.emit(PluginEvent.UpdateSettingsPending, newSettings);
 	}
 
 	private async resetToDefaults(): Promise<void> {
 		const defaultSettings = this.getDefaultSettings();
-		this.appStateManager.emit("update_settings_pending", defaultSettings);
+		this.appStateManager.emit(PluginEvent.UpdateSettingsPending, defaultSettings);
 	}
 }

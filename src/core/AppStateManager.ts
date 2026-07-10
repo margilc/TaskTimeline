@@ -199,10 +199,14 @@ export class AppStateManager extends Component {
             // Idempotency: if the current frontmatter name already slugs to
             // the new filename identifier, no write is needed. This breaks
             // the rename→modify→rename loop without any guard flags.
+            // Collision-bumped `_N` suffixes count as aligned (mirroring
+            // canonicalizeFile's own check) — otherwise dropping a task onto
+            // a colliding date would rewrite its name ("Meeting" → "Meeting 1").
             const content = await this.app.vault.read(file);
             try {
                 const parsed = parseTaskFromContent(content, file.path);
-                if (parsed && nameToIdentifier(parsed.name) === newParsed.identifier) return;
+                const slug = parsed ? nameToIdentifier(parsed.name) : '';
+                if (slug && (newParsed.identifier === slug || newParsed.identifier.startsWith(slug + '_'))) return;
             } catch {
                 // unparseable file — fall through to write
             }

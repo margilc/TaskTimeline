@@ -2,8 +2,9 @@
  * Path-based ignore matching for task discovery.
  *
  * Each pattern is matched against a vault-relative path using simple glob
- * semantics, with "contains" matching (the pattern may appear anywhere in the
- * path). Supported wildcards:
+ * semantics, anchored to whole path segments at any depth — "temp" ignores a
+ * file or folder literally named "temp" but not "templates". Supported
+ * wildcards:
  *   *   matches any run of characters except the path separator "/"
  *   **  matches any run of characters including "/"
  *
@@ -24,7 +25,11 @@ function patternToRegExp(pattern: string): RegExp {
 		.split("**")
 		.map((segment) => segment.replace(/\*/g, "[^/]*"))
 		.join(".*");
-	return new RegExp(body, "i");
+	// Anchor to segment boundaries: the match must start at the path root or
+	// right after a "/", and end at a "/" or the end of the path (a trailing
+	// "/" in the pattern already closes the segment).
+	const suffix = body.endsWith("/") ? "" : "(/|$)";
+	return new RegExp("(^|/)" + body + suffix, "i");
 }
 
 /**

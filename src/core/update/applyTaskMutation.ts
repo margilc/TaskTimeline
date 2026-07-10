@@ -45,8 +45,10 @@ interface FrontmatterUpdate {
 
 function buildPatch(mutation: TaskMutation): MutationPatch {
     const patch: MutationPatch = {};
-    if (mutation.newStart) patch.start = mutation.newStart;
-    if (mutation.newEnd) patch.end = mutation.newEnd;
+    // `!== undefined`, not truthiness: newEnd === '' means "clear the end
+    // date" (the undo of a resize on a task that had no end).
+    if (mutation.newStart !== undefined) patch.start = mutation.newStart;
+    if (mutation.newEnd !== undefined) patch.end = mutation.newEnd;
 
     if (mutation.newGroupValue) {
         const { groupBy, value } = mutation.newGroupValue;
@@ -69,8 +71,11 @@ function buildFrontmatterUpdate(mutation: TaskMutation): FrontmatterUpdate {
     const writes: Record<string, string | number | undefined> = {};
     const deletes: string[] = [];
 
-    if (mutation.newStart) writes.start = mutation.newStart;
-    if (mutation.newEnd) writes.end = mutation.newEnd;
+    if (mutation.newStart !== undefined) writes.start = mutation.newStart;
+    if (mutation.newEnd !== undefined) {
+        if (mutation.newEnd === '') deletes.push('end');
+        else writes.end = mutation.newEnd;
+    }
 
     if (mutation.newGroupValue) {
         const { groupBy, value } = mutation.newGroupValue;
