@@ -31,9 +31,10 @@ export class NavSettings {
 	}
 
 	private handleClick(): void {
-		// Open plugin settings tab
-		this.app.setting.open();
-		this.app.setting.openTabById("task-timeline");
+		// `app.setting` is Obsidian's private settings API — absent from the public typings.
+		const setting = (this.app as unknown as { setting: { open(): void; openTabById(id: string): void } }).setting;
+		setting.open();
+		setting.openTabById("task-timeline");
 	}
 
 	public getElement(): HTMLElement {

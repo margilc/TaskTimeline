@@ -7,7 +7,8 @@
 	"scripts": {
 		"dev": "node esbuild.config.mjs",
 		"build": "node esbuild.config.mjs production",
-		"test": "jest"
+		"check": "tsc --noEmit -p tsconfig.src.json",
+		"test": "npm run check && jest"
 	},
 	"keywords": [],
 	"author": "Your Name",
