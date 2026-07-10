@@ -1,3 +1,5 @@
+import { FRONTMATTER_BLOCK_REGEX, parseFrontmatter } from './taskUtils';
+
 export type HorizontalTaskColumnType = 'frontmatter' | 'body' | 'section';
 
 export interface IHorizontalTaskColumn {
@@ -16,27 +18,16 @@ export function shouldUseHorizontalTaskView(task: { horizontalMode?: boolean }):
     return task.horizontalMode === true;
 }
 
-const FRONTMATTER_REGEX = /^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n)?/;
 const TOP_LEVEL_HEADER_REGEX = /^#\s+(.+?)\s*#*\s*$/;
 
 export function hasHorizontalModeFrontmatter(fileContent: string): boolean {
-    const frontmatterMatch = fileContent.match(FRONTMATTER_REGEX);
+    const frontmatterMatch = fileContent.match(FRONTMATTER_BLOCK_REGEX);
     if (!frontmatterMatch) return false;
-
-    return frontmatterMatch[1]
-        .split(/\r?\n/)
-        .some(line => {
-            const colonIndex = line.indexOf(':');
-            if (colonIndex === -1) return false;
-
-            const key = line.substring(0, colonIndex).trim();
-            const value = line.substring(colonIndex + 1).trim().replace(/^['"]|['"]$/g, '');
-            return key === 'horizontal_mode' && value.toLowerCase() === 'true';
-        });
+    return parseFrontmatter(frontmatterMatch[1]).horizontal_mode === true;
 }
 
 export function parseHorizontalTaskContent(fileContent: string): IHorizontalTaskDocument {
-    const frontmatterMatch = fileContent.match(FRONTMATTER_REGEX);
+    const frontmatterMatch = fileContent.match(FRONTMATTER_BLOCK_REGEX);
 
     if (!frontmatterMatch) {
         throw new Error('No frontmatter found');

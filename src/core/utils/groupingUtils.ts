@@ -1,17 +1,33 @@
 import { ITask } from '../../interfaces/ITask';
 import { IPersistentState } from '../../interfaces/IAppState';
 
-export function getGroupValue(task: ITask, groupBy: string): string {
-    switch (groupBy) {
-        case 'status':
-            return normalizeGroupValue(task.status, 'No Status');
-        case 'priority':
-            return normalizeGroupValue(task.priority?.toString(), 'No Priority');
-        case 'category':
-            return normalizeGroupValue(task.category, 'No Category');
-        default:
-            return 'default';
+/** The task fields the board can group/color by, with the sentinel label
+ *  shown for tasks that lack a value. Single source for the "No X" strings
+ *  used by grouping, drag commits, and undo. */
+export const EMPTY_GROUP_LABELS: Record<'status' | 'category' | 'priority', string> = {
+    status: 'No Status',
+    category: 'No Category',
+    priority: 'No Priority',
+};
+
+/** Read a groupable/colorable field off a task as a display string. */
+export function taskFieldValue(
+    task: { category?: string; status?: string; priority?: number | string },
+    field: string
+): string | undefined {
+    switch (field) {
+        case 'status': return task.status;
+        case 'category': return task.category;
+        case 'priority': return task.priority?.toString();
+        default: return undefined;
     }
+}
+
+export function getGroupValue(task: ITask, groupBy: string): string {
+    if (groupBy === 'status' || groupBy === 'category' || groupBy === 'priority') {
+        return normalizeGroupValue(taskFieldValue(task, groupBy), EMPTY_GROUP_LABELS[groupBy]);
+    }
+    return 'default';
 }
 
 function normalizeGroupValue(value: string | undefined, fallback: string): string {

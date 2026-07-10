@@ -1,7 +1,7 @@
 import { App, stringifyYaml } from "obsidian";
 import { IAppState } from "../../interfaces/IAppState";
 import { NewTaskFormData } from "../../components/NewTaskModal";
-import { nameToIdentifier } from "../utils/fileRenameUtils";
+import { formatDateForFilename, nameToIdentifier, taskFileName } from "../utils/fileRenameUtils";
 
 export async function createTask(app: App, state: IAppState, taskData: NewTaskFormData): Promise<IAppState> {
 	const settings = state.persistent.settings;
@@ -23,17 +23,13 @@ export async function createTask(app: App, state: IAppState, taskData: NewTaskFo
 	}
 	
 	// Generate unique filename using start date and task name
-	const startDate = new Date(taskData.start);
-	const datePrefix = startDate.toISOString().split('T')[0].replace(/-/g, '');
+	const datePrefix = formatDateForFilename(new Date(taskData.start));
 	const identifier = nameToIdentifier(taskData.name);
-	
-	let filename = `${datePrefix}_${identifier}.md`;
-	let counter = 1;
-	
-	// Ensure filename is unique
+
+	let counter = 0;
+	let filename = taskFileName(datePrefix, identifier, counter);
 	while (app.vault.getAbstractFileByPath(`${targetDirectory}/${filename}`)) {
-		filename = `${datePrefix}_${identifier}_${counter}.md`;
-		counter++;
+		filename = taskFileName(datePrefix, identifier, ++counter);
 	}
 	
 	// Serialize via stringifyYaml so names containing ':', '#', quotes or

@@ -31,3 +31,14 @@ export function formatDateForFilename(date: Date): string {
     const day = String(date.getUTCDate()).padStart(2, '0');
     return `${year}${month}${day}`;
 }
+
+/**
+ * Canonical task filename: `YYYYMMDD_identifier.md`, with `_N` appended for
+ * collision-bumped variants (n > 0). Shared by task creation and rename
+ * canonicalization so the two can never drift.
+ */
+export function taskFileName(dateStr: string, identifier: string, n = 0): string {
+    return n === 0
+        ? `${dateStr}_${identifier}.md`
+        : `${dateStr}_${identifier}_${n}.md`;
+}

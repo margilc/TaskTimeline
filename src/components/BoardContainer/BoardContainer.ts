@@ -4,7 +4,7 @@ import { BoardTaskGroup } from "./BoardTaskGroup";
 import { BoardTimelineHeader } from "./BoardTimelineHeader";
 import { PluginEvent } from "../../enums/events";
 import { ITask } from "../../interfaces/ITask";
-import { createEmptyStateElement, validateTask } from "../../core/utils/boardUtils";
+import { createEmptyStateElement } from "../../core/utils/boardUtils";
 import { debounce } from "../../core/utils/layoutUtils";
 import { isTaskHidden } from "../../core/utils/colorUtils";
 import { TimeUnit } from "../../enums/TimeUnit";
@@ -424,11 +424,11 @@ export class BoardContainer {
                 const tasksInGroup = taskGrid.tasks as ITask[];
                 const persistentState = this.appStateManager.getPersistentState();
                 const isFolded = isGroupFolded(persistentState, groupName);
-                const validTasks = tasksInGroup.filter(task => {
-                    const validation = validateTask(task);
-                    if (!validation.isValid) return false;
-                    return !isTaskHidden(task, persistentState.colorVariable, persistentState.currentProjectName, persistentState.colorMappings);
-                });
+                // Tasks reaching the board came through parseTaskFromContent,
+                // which already enforces validity — only hiding is filtered here.
+                const validTasks = tasksInGroup.filter(task =>
+                    !isTaskHidden(task, persistentState.colorVariable, persistentState.currentProjectName, persistentState.colorMappings)
+                );
 
                 if (validTasks.length === 0) {
                     this.removeGroup(groupName);

@@ -3,6 +3,8 @@ import { ITask } from "../../interfaces/ITask";
 import type { AppStateManager } from "../AppStateManager";
 import { updateTaskFrontmatter } from "../utils/frontmatterUtils";
 import { canonicalizeFile } from "../utils/canonicalizeFile";
+import { EMPTY_GROUP_LABELS } from "../utils/groupingUtils";
+import { taskIdFromPath } from "../utils/taskUtils";
 
 export interface TaskGroupAssignment {
     groupBy: string;
@@ -38,82 +40,63 @@ interface MutationPatch {
     priority?: number;
 }
 
-interface FrontmatterUpdate {
+/** The in-memory patch and the frontmatter writes/deletes for one mutation,
+ *  built together so the optimistic state and the file can never diverge. */
+interface MutationChange {
+    patch: MutationPatch;
     writes: Record<string, string | number | undefined>;
     deletes: string[];
 }
 
-function buildPatch(mutation: TaskMutation): MutationPatch {
+function buildChange(mutation: TaskMutation): MutationChange {
     const patch: MutationPatch = {};
-    // `!== undefined`, not truthiness: newEnd === '' means "clear the end
-    // date" (the undo of a resize on a task that had no end).
-    if (mutation.newStart !== undefined) patch.start = mutation.newStart;
-    if (mutation.newEnd !== undefined) patch.end = mutation.newEnd;
-
-    if (mutation.newGroupValue) {
-        const { groupBy, value } = mutation.newGroupValue;
-        if (groupBy === 'status') {
-            patch.status = value === 'No Status' ? '' : value;
-        } else if (groupBy === 'category') {
-            patch.category = value === 'No Category' ? '' : value;
-        } else if (groupBy === 'priority') {
-            if (value !== 'No Priority') {
-                const n = parseInt(value, 10);
-                if (!Number.isNaN(n)) patch.priority = n;
-            }
-            // For 'No Priority', the in-memory task gets priority: 0/undefined via deletion path.
-        }
-    }
-    return patch;
-}
-
-function buildFrontmatterUpdate(mutation: TaskMutation): FrontmatterUpdate {
     const writes: Record<string, string | number | undefined> = {};
     const deletes: string[] = [];
 
-    if (mutation.newStart !== undefined) writes.start = mutation.newStart;
+    // `!== undefined`, not truthiness: newEnd === '' means "clear the end
+    // date" (the undo of a resize on a task that had no end).
+    if (mutation.newStart !== undefined) {
+        patch.start = mutation.newStart;
+        writes.start = mutation.newStart;
+    }
     if (mutation.newEnd !== undefined) {
+        patch.end = mutation.newEnd;
         if (mutation.newEnd === '') deletes.push('end');
         else writes.end = mutation.newEnd;
     }
 
     if (mutation.newGroupValue) {
         const { groupBy, value } = mutation.newGroupValue;
-        if (groupBy === 'priority') {
-            if (value === 'No Priority') {
+        if (groupBy === 'status' || groupBy === 'category') {
+            if (value === EMPTY_GROUP_LABELS[groupBy]) {
+                patch[groupBy] = '';
+                deletes.push(groupBy);
+            } else {
+                patch[groupBy] = value;
+                writes[groupBy] = value;
+            }
+        } else if (groupBy === 'priority') {
+            if (value === EMPTY_GROUP_LABELS.priority) {
+                // No patch field: the parser re-derives the default priority
+                // once the frontmatter key is deleted.
                 deletes.push('priority');
             } else {
                 const n = parseInt(value, 10);
-                if (!Number.isNaN(n)) writes.priority = n;
-            }
-        } else if (groupBy === 'status') {
-            if (value === 'No Status') {
-                deletes.push('status');
-            } else {
-                writes.status = value;
-            }
-        } else if (groupBy === 'category') {
-            if (value === 'No Category') {
-                deletes.push('category');
-            } else {
-                writes.category = value;
+                if (!Number.isNaN(n)) {
+                    patch.priority = n;
+                    writes.priority = n;
+                }
             }
         }
     }
 
-    return { writes, deletes };
-}
-
-/** Task id is the filename without extension (see generateTaskId). */
-function fileIdFromPath(path: string): string {
-    const name = path.split('/').pop() || path;
-    return name.replace(/\.md$/, '');
+    return { patch, writes, deletes };
 }
 
 function groupValueFromSnapshot(groupBy: string, prev: TaskSnapshot): string {
-    if (groupBy === 'status') return prev.status ? prev.status : 'No Status';
-    if (groupBy === 'category') return prev.category ? prev.category : 'No Category';
-    if (groupBy === 'priority') return prev.priority ? String(prev.priority) : 'No Priority';
+    if (groupBy === 'status') return prev.status ? prev.status : EMPTY_GROUP_LABELS.status;
+    if (groupBy === 'category') return prev.category ? prev.category : EMPTY_GROUP_LABELS.category;
+    if (groupBy === 'priority') return prev.priority ? String(prev.priority) : EMPTY_GROUP_LABELS.priority;
     return '';
 }
 
@@ -161,7 +144,7 @@ export async function applyTaskMutation(
         priority: task.priority,
     };
 
-    const patch = buildPatch(mutation);
+    const { patch, writes, deletes } = buildChange(mutation);
 
     // Detect no-op (same dates and same group value)
     const willChange =
@@ -170,15 +153,14 @@ export async function applyTaskMutation(
         (patch.status !== undefined && patch.status !== prev.status) ||
         (patch.category !== undefined && patch.category !== prev.category) ||
         (patch.priority !== undefined && patch.priority !== prev.priority) ||
-        (mutation.newGroupValue?.groupBy === 'priority' && mutation.newGroupValue.value === 'No Priority' && prev.priority !== 0) ||
-        (mutation.newGroupValue?.groupBy === 'status' && mutation.newGroupValue.value === 'No Status' && prev.status !== '') ||
-        (mutation.newGroupValue?.groupBy === 'category' && mutation.newGroupValue.value === 'No Category' && prev.category !== '');
+        (mutation.newGroupValue?.groupBy === 'priority' && mutation.newGroupValue.value === EMPTY_GROUP_LABELS.priority && prev.priority !== 0) ||
+        (mutation.newGroupValue?.groupBy === 'status' && mutation.newGroupValue.value === EMPTY_GROUP_LABELS.status && prev.status !== '') ||
+        (mutation.newGroupValue?.groupBy === 'category' && mutation.newGroupValue.value === EMPTY_GROUP_LABELS.category && prev.category !== '');
 
     if (!willChange) return null;
 
     appStateManager.applyOptimisticTaskUpdate(mutation.taskId, patch as Partial<ITask>);
 
-    const fmUpdate = buildFrontmatterUpdate(mutation);
     const startChanged = mutation.newStart !== undefined && mutation.newStart !== prev.start;
     const oldPath = task.filePath;
 
@@ -195,7 +177,7 @@ export async function applyTaskMutation(
     appStateManager.markMutationStart(oldPath);
     try {
         await appStateManager.withFileLock(oldPath, async () => {
-            await updateTaskFrontmatter(app, oldPath, fmUpdate.writes, fmUpdate.deletes);
+            await updateTaskFrontmatter(app, oldPath, writes, deletes);
             if (startChanged) {
                 const file = app.vault.getAbstractFileByPath(oldPath);
                 if (file instanceof TFile) {
@@ -223,7 +205,7 @@ export async function applyTaskMutation(
     if (!succeeded) return null;
 
     return {
-        mutation: buildInverseMutation(mutation, prev, fileIdFromPath(finalPath)),
+        mutation: buildInverseMutation(mutation, prev, taskIdFromPath(finalPath)),
         label: describeMutation(mutation),
     };
 }

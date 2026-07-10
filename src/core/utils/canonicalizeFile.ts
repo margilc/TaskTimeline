@@ -4,6 +4,7 @@ import {
     formatDateForFilename,
     nameToIdentifier,
     parseTaskFilename,
+    taskFileName,
 } from './fileRenameUtils';
 
 const MAX_COLLISION_RETRIES = 5;
@@ -56,10 +57,7 @@ export async function canonicalizeFile(
     }
 
     const buildPath = (name: string) => (dir ? `${dir}/${name}` : name);
-    const buildCandidate = (n: number) =>
-        n === 0
-            ? `${expectedDate}_${expectedId}.md`
-            : `${expectedDate}_${expectedId}_${n}.md`;
+    const buildCandidate = (n: number) => taskFileName(expectedDate, expectedId, n);
 
     // Monotonic counter across retries: each attempt MUST use a strictly
     // higher N than the previous one. Without this, a registry/filesystem

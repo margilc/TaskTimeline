@@ -1,31 +1,32 @@
 import { ITask } from '../../interfaces/ITask';
 
-function generateTaskId(filePath: string): string {
-    // Use the file name without extension as the ID
-    // This ensures uniqueness since task files should have unique names
+/** Task id = filename without extension (task filenames are unique). */
+export function taskIdFromPath(filePath: string): string {
     const fileName = filePath.split('/').pop() || filePath;
     return fileName.replace(/\.md$/, '');
 }
 
+/** The leading YAML frontmatter block, CRLF-tolerant. Group 1 = inner text. */
+export const FRONTMATTER_BLOCK_REGEX = /^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n)?/;
+
 export function parseTaskFromContent(fileContent: string, filePath: string): ITask {
-    const frontmatterRegex = /^---\n([\s\S]*?)\n---/;
-    const frontmatterMatch = fileContent.match(frontmatterRegex);
-    
+    const frontmatterMatch = fileContent.match(FRONTMATTER_BLOCK_REGEX);
+
     if (!frontmatterMatch) {
         throw new Error(`No frontmatter found in ${filePath}`);
     }
 
     const frontmatterText = frontmatterMatch[1];
     const frontmatter = parseFrontmatter(frontmatterText);
-    
+
     validateTaskFrontmatter(frontmatter);
-    
-    const contentBody = fileContent.replace(frontmatterRegex, '').trim();
+
+    const contentBody = fileContent.slice(frontmatterMatch[0].length).trim();
     const { totalSubtasks, completedSubtasks } = parseSubtasks(contentBody);
     const rawLinks = extractWikiLinks(contentBody);
 
     const task: ITask = {
-        id: generateTaskId(filePath),
+        id: taskIdFromPath(filePath),
         name: frontmatter.name,
         start: frontmatter.start,
         end: frontmatter.end ?? '',
@@ -73,7 +74,7 @@ export function validateTaskFrontmatter(frontmatter: Record<string, any>): void 
     }
 }
 
-function parseFrontmatter(frontmatterText: string): Record<string, any> {
+export function parseFrontmatter(frontmatterText: string): Record<string, any> {
     const result: Record<string, any> = {};
     const lines = frontmatterText.split('\n');
     
@@ -123,16 +124,27 @@ export function extractWikiLinks(content: string): string[] {
     return links;
 }
 
+// The checkbox syntaxes Obsidian renders as task-list items: -, * and +
+// bullets plus ordered items (1. / 1)), with [ ] / [x] / [X].
+const CHECKBOX_LINE_REGEX = /^\s*(?:[-*+]|\d+[.)])\s+\[([ xX])\]/;
+
+/** Parse one line as a markdown task checkbox; null if it isn't one.
+ *  Shared by subtask progress counting and the horizontal view's toggling
+ *  so the two can never disagree about which lines are checkboxes. */
+export function parseCheckboxLine(line: string): { checked: boolean } | null {
+    const m = line.match(CHECKBOX_LINE_REGEX);
+    return m ? { checked: m[1] !== ' ' } : null;
+}
+
 function parseSubtasks(content: string): { totalSubtasks: number; completedSubtasks: number } {
-    const subtaskRegex = /^\s*-\s*\[( |x)\]/gim;
-    const matches = content.match(subtaskRegex);
-    
-    if (!matches) {
-        return { totalSubtasks: 0, completedSubtasks: 0 };
+    let totalSubtasks = 0;
+    let completedSubtasks = 0;
+    for (const line of content.split(/\r?\n/)) {
+        const checkbox = parseCheckboxLine(line);
+        if (checkbox) {
+            totalSubtasks++;
+            if (checkbox.checked) completedSubtasks++;
+        }
     }
-    
-    const totalSubtasks = matches.length;
-    const completedSubtasks = matches.filter(match => match.includes('[x]')).length;
-    
     return { totalSubtasks, completedSubtasks };
 }

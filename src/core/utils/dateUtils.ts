@@ -47,11 +47,16 @@ export function localTodayISO(): string {
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
 }
 
+/** Format a Date as its UTC calendar date, YYYY-MM-DD. */
+export function toISODate(date: Date): string {
+  return date.toISOString().slice(0, 10);
+}
+
 /** Add days to a YYYY-MM-DD string in the UTC frame (DST-immune). */
 export function addDaysISO(dateStr: string, days: number): string {
   const d = new Date(dateStr);
   d.setUTCDate(d.getUTCDate() + days);
-  return d.toISOString().slice(0, 10);
+  return toISODate(d);
 }
 
 // Display formatting reads dates with UTC accessors: task/column dates are

@@ -1,3 +1,5 @@
+import { taskFieldValue } from './groupingUtils';
+
 // Muted accent colors for color variable picker (dark-mode friendly)
 export const PREDEFINED_COLORS = {
     Blue:   "#4E6E8E",  // muted steel blue
@@ -65,14 +67,7 @@ export function isTaskHidden(
 ): boolean {
     if (!colorVariable || colorVariable === 'none' || !currentProject) return false;
 
-    let taskValue: string | undefined;
-    switch (colorVariable) {
-        case 'category': taskValue = task.category; break;
-        case 'status': taskValue = task.status; break;
-        case 'priority': taskValue = task.priority?.toString(); break;
-        default: return false;
-    }
-
+    const taskValue = taskFieldValue(task, colorVariable);
     if (!taskValue) return false;
 
     return colorMappings?.[currentProject]?.[colorVariable]?.[taskValue] === HIDE_VALUE;

@@ -1,5 +1,5 @@
 import { TimeUnit } from "../../../enums/TimeUnit";
-import { addTime, normalizeDate } from "../../../core/utils/dateUtils";
+import { addTime, normalizeDate, toISODate } from "../../../core/utils/dateUtils";
 import { snapToUnitBoundary } from "../../../core/update/updateLayout";
 
 export interface ColumnHeader {
@@ -166,10 +166,6 @@ export function groupAtPointer(
     return best;
 }
 
-function formatDateUTC(date: Date): string {
-    return date.toISOString().slice(0, 10);
-}
-
 /**
  * Shift a YYYY-MM-DD date by whole time units, preserving intra-unit position.
  * Used for horizontal MOVES: unlike snapping the endpoints to unit boundaries,
@@ -189,7 +185,7 @@ export function translateDateByUnits(dateStr: string, deltaUnits: number, timeUn
     } else {
         d.setUTCDate(d.getUTCDate() + deltaUnits);
     }
-    return formatDateUTC(d);
+    return toISODate(d);
 }
 
 export function snappedDatesForColumnRange(
@@ -218,7 +214,7 @@ export function snappedDatesForColumnRange(
         end = new Date(Date.UTC(ms.getUTCFullYear(), ms.getUTCMonth() + 1, 0));
     }
 
-    return { start: formatDateUTC(start), end: formatDateUTC(end) };
+    return { start: toISODate(start), end: toISODate(end) };
 }
 
 export function clampColumn(col: number, totalColumns: number): number {
