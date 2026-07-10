@@ -136,10 +136,27 @@ export function parseCheckboxLine(line: string): { checked: boolean } | null {
     return m ? { checked: m[1] !== ' ' } : null;
 }
 
+/** Fenced-code delimiter (``` or ~~~). Callers toggle in/out-of-fence state
+ *  on each such line; checkbox and heading syntax inside fences is literal
+ *  text, not structure. */
+export function isFenceLine(line: string): boolean {
+    return /^\s*(```|~~~)/.test(line);
+}
+
+/** Flip a checkbox line between [ ] and [x]; non-checkbox lines pass through. */
+export function toggleCheckboxLine(line: string): string {
+    const checkbox = parseCheckboxLine(line);
+    if (!checkbox) return line;
+    return line.replace(/\[[ xX]\]/, checkbox.checked ? '[ ]' : '[x]');
+}
+
 function parseSubtasks(content: string): { totalSubtasks: number; completedSubtasks: number } {
     let totalSubtasks = 0;
     let completedSubtasks = 0;
+    let inFence = false;
     for (const line of content.split(/\r?\n/)) {
+        if (isFenceLine(line)) { inFence = !inFence; continue; }
+        if (inFence) continue;
         const checkbox = parseCheckboxLine(line);
         if (checkbox) {
             totalSubtasks++;

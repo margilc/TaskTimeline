@@ -122,3 +122,32 @@ name: Normal Task
 Body`)).toBe(false);
     });
 });
+
+describe('fenced code blocks (corruption guard)', () => {
+    const doc = [
+        '---', 'name: T', 'start: 2026-01-01', 'horizontal_mode: true', '---',
+        '# Notes',
+        'text',
+        '```bash',
+        '# this is a shell comment, not a section header',
+        'echo hi',
+        '```',
+        'after',
+    ].join('\n');
+    const { parseHorizontalTaskContent, serializeHorizontalTaskColumns } = require('../src/core/utils/horizontalTaskUtils');
+
+    it('does not split sections on # lines inside fences', () => {
+        const parsed = parseHorizontalTaskContent(doc);
+        const sections = parsed.columns.filter((c: any) => c.type === 'section');
+        expect(sections).toHaveLength(1);
+        expect(sections[0].title).toBe('Notes');
+        expect(sections[0].content).toContain('# this is a shell comment, not a section header');
+    });
+
+    it('round-trips fenced content losslessly', () => {
+        const parsed = parseHorizontalTaskContent(doc);
+        const serialized = serializeHorizontalTaskColumns(parsed.columns);
+        const reparsed = parseHorizontalTaskContent(serialized);
+        expect(reparsed.columns.map((c: any) => c.content)).toEqual(parsed.columns.map((c: any) => c.content));
+    });
+});

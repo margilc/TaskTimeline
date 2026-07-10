@@ -1,4 +1,4 @@
-import { FRONTMATTER_BLOCK_REGEX, parseFrontmatter } from './taskUtils';
+import { FRONTMATTER_BLOCK_REGEX, isFenceLine, parseFrontmatter } from './taskUtils';
 
 export type HorizontalTaskColumnType = 'frontmatter' | 'body' | 'section';
 
@@ -97,8 +97,12 @@ function parseTopLevelSections(content: string): IHorizontalTaskColumn[] {
         });
     };
 
+    let inFence = false;
     for (const line of lines) {
-        const headerMatch = line.match(TOP_LEVEL_HEADER_REGEX);
+        // A "# comment" inside a fenced code block is literal text — splitting
+        // on it would tear the block apart and corrupt the file on save.
+        if (isFenceLine(line)) inFence = !inFence;
+        const headerMatch = inFence ? null : line.match(TOP_LEVEL_HEADER_REGEX);
 
         if (headerMatch) {
             if (currentSection) {

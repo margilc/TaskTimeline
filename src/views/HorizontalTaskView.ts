@@ -2,6 +2,7 @@ import { App, getAllTags, ItemView, MarkdownRenderer, Notice, TFile, ViewStateRe
 import { EditorState } from '@codemirror/state';
 import { EditorView } from '@codemirror/view';
 import { IHorizontalTaskColumn, parseHorizontalTaskContent, serializeHorizontalTaskColumns } from '../core/utils/horizontalTaskUtils';
+import { isFenceLine, parseCheckboxLine, toggleCheckboxLine } from '../core/utils/taskUtils';
 import { HORIZONTAL_TASK_VIEW_TYPE } from './viewTypes';
 
 
@@ -38,6 +39,14 @@ export class HorizontalTaskView extends ItemView {
     private editingColumnId: string | null = null;
     private completionEl: HTMLElement | null = null;
     private completionState: HorizontalCompletionState | null = null;
+
+    // Columns the user changed since the last save. Saves merge these onto a
+    // fresh parse of the file, so an external edit to another column (second
+    // pane, sync) survives instead of being overwritten from stale state.
+    private dirtyColumnIds: Set<string> = new Set();
+    // True while our own vault.modify is in flight, so the modify listener
+    // can tell our writes apart from external ones.
+    private selfModify = false;
 
     constructor(leaf: WorkspaceLeaf, appRef: App) {
         super(leaf);
@@ -79,13 +88,35 @@ export class HorizontalTaskView extends ItemView {
 
     async onOpen(): Promise<void> {
         this.contentEl.addClass('horizontal-task-view');
+
+        // The plugin itself renames task files when frontmatter name/start
+        // changes (canonicalizeFile). Without following the rename, every
+        // subsequent save would silently hit a stale path and be dropped.
+        this.registerEvent(this.app.vault.on('rename', (file, oldPath) => {
+            if (this.filePath && oldPath === this.filePath) {
+                this.filePath = file.path;
+            }
+        }));
+
+        // External modification (second pane, sync client): re-render from
+        // disk when we have no local edits; pending local edits are merged
+        // per-column at save time instead.
+        this.registerEvent(this.app.vault.on('modify', (file) => {
+            if (this.selfModify || !this.filePath || file.path !== this.filePath) return;
+            if (this.editingColumnId === null && this.dirtyColumnIds.size === 0) {
+                void this.render();
+            }
+        }));
+
         await this.render();
     }
 
     async onClose(): Promise<void> {
+        // Flush, don't drop: a debounced save may still be pending.
         if (this.saveTimer !== null) {
             window.clearTimeout(this.saveTimer);
             this.saveTimer = null;
+            await this.saveColumns();
         }
         this.destroyEditors();
         this.closeCompletion();
@@ -113,6 +144,7 @@ export class HorizontalTaskView extends ItemView {
             const fileContent = await this.app.vault.read(file);
             const parsedTask = parseHorizontalTaskContent(fileContent);
             this.columns = parsedTask.columns.map(column => ({ ...column }));
+            this.dirtyColumnIds.clear();
 
             const grid = document.createElement('div');
             grid.className = 'horizontal-task-grid';
@@ -187,13 +219,8 @@ export class HorizontalTaskView extends ItemView {
 
     private getCurrentFile(): TFile | null {
         if (!this.filePath) return null;
-
         const file = this.app.vault.getAbstractFileByPath(this.filePath);
-        if (!file || typeof (file as { path?: unknown }).path !== 'string') {
-            return null;
-        }
-
-        return file as TFile;
+        return file instanceof TFile ? file : null;
     }
 
     private queueSave(): void {
@@ -208,11 +235,34 @@ export class HorizontalTaskView extends ItemView {
     }
 
     private async saveColumns(): Promise<void> {
+        if (this.dirtyColumnIds.size === 0) return;
         const file = this.getCurrentFile();
-        if (!file) return;
+        if (!file) {
+            new Notice('TaskTimeline: task file not found — changes were not saved.');
+            return;
+        }
 
         try {
-            await this.app.vault.modify(file, serializeHorizontalTaskColumns(this.columns));
+            // Merge onto a fresh parse of the file so external edits to
+            // columns the user did NOT touch survive this save.
+            try {
+                const diskColumns = parseHorizontalTaskContent(await this.app.vault.read(file)).columns;
+                this.columns = diskColumns.map(diskColumn =>
+                    this.dirtyColumnIds.has(diskColumn.id)
+                        ? this.columns.find(c => c.id === diskColumn.id) ?? diskColumn
+                        : diskColumn
+                );
+            } catch {
+                // File unreadable/unparseable — write our full local state.
+            }
+
+            this.selfModify = true;
+            try {
+                await this.app.vault.modify(file, serializeHorizontalTaskColumns(this.columns));
+            } finally {
+                this.selfModify = false;
+            }
+            this.dirtyColumnIds.clear();
         } catch (error) {
             console.error('Failed to save horizontal task view:', error);
             new Notice('Failed to save horizontal task view.');
@@ -292,6 +342,7 @@ export class HorizontalTaskView extends ItemView {
                     EditorView.updateListener.of(update => {
                         if (!update.docChanged) return;
                         column.content = update.state.doc.toString();
+                        this.dirtyColumnIds.add(column.id);
                         this.queueSave();
                         this.updateCompletion(update.view);
                     }),
@@ -354,19 +405,22 @@ export class HorizontalTaskView extends ItemView {
         const checkboxIndex = checkboxes.indexOf(checkboxEl);
         if (checkboxIndex < 0) return;
 
+        // Enumerate checkbox lines exactly the way Obsidian renders them
+        // (shared matcher: -, *, + and ordered bullets; fenced code skipped),
+        // so the DOM index maps to the right line and never toggles a
+        // neighbor.
         let currentIndex = -1;
+        let inFence = false;
         const nextLines = column.content.split('\n').map(line => {
-            if (!/^\s*[-*]\s+\[[ xX]\]/.test(line)) return line;
+            if (isFenceLine(line)) { inFence = !inFence; return line; }
+            if (inFence || !parseCheckboxLine(line)) return line;
             currentIndex += 1;
-            if (currentIndex !== checkboxIndex) return line;
-
-            const isChecked = /^\s*[-*]\s+\[[xX]\]/.test(line);
-            return line.replace(/^(\s*[-*]\s+\[)[ xX](\])/, `$1${isChecked ? ' ' : 'x'}$2`);
+            return currentIndex === checkboxIndex ? toggleCheckboxLine(line) : line;
         });
 
         column.content = nextLines.join('\n');
-        this.saveColumns();
-        this.render();
+        this.dirtyColumnIds.add(column.id);
+        void this.saveColumns().then(() => this.render());
     }
 
     private handleCompletionKeydown(event: KeyboardEvent, view: EditorView): boolean {
@@ -492,18 +546,22 @@ export class HorizontalTaskView extends ItemView {
         }
     }
 
+    // Built once per completion burst instead of on every keystroke.
+    private fileCompletionPool: { at: number; items: HorizontalCompletion[] } | null = null;
+
     private getFileCompletions(query: string): HorizontalCompletion[] {
-        return this.app.vault.getMarkdownFiles()
-            .map(file => {
-                const basename = file.name.replace(/\.md$/, '');
-                return {
-                    label: basename,
-                    detail: file.path,
-                    apply: basename,
-                };
-            })
-            .filter(option => option.label.toLowerCase().includes(query) || option.detail.toLowerCase().includes(query))
-            .sort((a, b) => a.label.localeCompare(b.label));
+        const now = Date.now();
+        if (!this.fileCompletionPool || now - this.fileCompletionPool.at > 5000) {
+            this.fileCompletionPool = {
+                at: now,
+                items: this.app.vault.getMarkdownFiles().map(file => {
+                    const basename = file.name.replace(/\.md$/, '');
+                    return { label: basename, detail: file.path, apply: basename };
+                }).sort((a, b) => a.label.localeCompare(b.label)),
+            };
+        }
+        return this.fileCompletionPool.items
+            .filter(option => option.label.toLowerCase().includes(query) || option.detail.toLowerCase().includes(query));
     }
 
     private getTagCompletions(query: string): HorizontalCompletion[] {

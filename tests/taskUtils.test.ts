@@ -116,3 +116,31 @@ describe('validateTaskFrontmatter', () => {
         expect(() => validateTaskFrontmatter({ name: 'Test', start: '2024-01-15', end: '2024-01-20' })).not.toThrow();
     });
 });
+describe('checkbox line helpers', () => {
+    const { parseCheckboxLine, toggleCheckboxLine, isFenceLine } = require('../src/core/utils/taskUtils');
+
+    it('recognizes all bullet syntaxes Obsidian renders as tasks', () => {
+        expect(parseCheckboxLine('- [ ] a')).toEqual({ checked: false });
+        expect(parseCheckboxLine('* [x] b')).toEqual({ checked: true });
+        expect(parseCheckboxLine('+ [X] c')).toEqual({ checked: true });
+        expect(parseCheckboxLine('1. [ ] d')).toEqual({ checked: false });
+        expect(parseCheckboxLine('2) [x] e')).toEqual({ checked: true });
+        expect(parseCheckboxLine('plain text')).toBeNull();
+        expect(parseCheckboxLine('-[ ] no space')).toBeNull();
+    });
+
+    it('toggles checkbox state in place', () => {
+        expect(toggleCheckboxLine('- [ ] task')).toBe('- [x] task');
+        expect(toggleCheckboxLine('  * [X] task')).toBe('  * [ ] task');
+        expect(toggleCheckboxLine('not a checkbox')).toBe('not a checkbox');
+    });
+
+    it('subtask counting skips fenced code blocks', () => {
+        const content = ['- [ ] real', '```', '- [x] fake in fence', '```', '- [x] real done'].join('\n');
+        const { parseTaskFromContent } = require('../src/core/utils/taskUtils');
+        const task = parseTaskFromContent('---\nname: T\nstart: 2026-01-01\n---\n' + content, 'p/20260101_T.md');
+        expect(task.totalSubtasks).toBe(2);
+        expect(task.completedSubtasks).toBe(1);
+        expect(isFenceLine('```')).toBe(true);
+    });
+});
