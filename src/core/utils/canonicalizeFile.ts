@@ -5,7 +5,7 @@ import {
     nameToIdentifier,
     parseTaskFilename,
     taskFileName,
-} from './fileRenameUtils';
+} from './taskFileUtils';
 
 const MAX_COLLISION_RETRIES = 5;
 const COLLISION_MESSAGE_FRAGMENT = 'Destination file already exists';

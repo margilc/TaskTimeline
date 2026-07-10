@@ -1,18 +1,9 @@
 import { App, Modal, Setting, Notice } from "obsidian";
-import { AppStateManager } from "../core/AppStateManager";
-import { ITemplate } from "../interfaces/ITemplate";
-import { addDaysISO, localTodayISO } from "../core/utils/dateUtils";
+import { AppStateManager } from "../../core/AppStateManager";
+import { ITemplate } from "../../interfaces/ITemplate";
+import { addDaysISO, localTodayISO } from "../../core/utils/dateUtils";
 
-export interface NewTaskFormData {
-	name: string;
-	category?: string;
-	status?: string;
-	priority?: string;
-	start: string;
-	end?: string;
-	templateContent?: string;
-	horizontalMode?: boolean;
-}
+import { NewTaskFormData } from "../../interfaces/NewTaskFormData";
 
 export class NewTaskModal extends Modal {
 	private appStateManager: AppStateManager;

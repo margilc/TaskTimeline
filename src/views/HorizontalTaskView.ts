@@ -2,8 +2,8 @@ import { App, getAllTags, ItemView, MarkdownRenderer, Notice, TFile, ViewStateRe
 import { EditorState } from '@codemirror/state';
 import { EditorView } from '@codemirror/view';
 import { IHorizontalTaskColumn, parseHorizontalTaskContent, serializeHorizontalTaskColumns } from '../core/utils/horizontalTaskUtils';
+import { HORIZONTAL_TASK_VIEW_TYPE } from './viewTypes';
 
-export const HORIZONTAL_TASK_VIEW_TYPE = 'task-timeline-horizontal-task-view';
 
 interface HorizontalTaskViewState {
     filePath?: string;

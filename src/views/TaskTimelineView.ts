@@ -5,8 +5,8 @@ import { BoardContainer } from '../components/BoardContainer/BoardContainer';
 import { PluginEvent } from '../enums/events';
 import { DEFAULT_COLOR } from '../core/utils/colorUtils';
 import { undoTaskMutation, redoTaskMutation } from '../core/update/taskHistory';
+import { TASK_TIMELINE_VIEW_TYPE } from './viewTypes';
 
-export const TASK_TIMELINE_VIEW_TYPE = 'task-timeline-view';
 
 export class TaskTimelineView extends ItemView {
     private appStateManager: AppStateManager;

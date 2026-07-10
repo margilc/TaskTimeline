@@ -1,7 +1,7 @@
 import { App, stringifyYaml } from "obsidian";
 import { IAppState } from "../../interfaces/IAppState";
-import { NewTaskFormData } from "../../components/NewTaskModal";
-import { formatDateForFilename, nameToIdentifier, taskFileName } from "../utils/fileRenameUtils";
+import { NewTaskFormData } from "../../interfaces/NewTaskFormData";
+import { formatDateForFilename, nameToIdentifier, taskFileName } from "../utils/taskFileUtils";
 
 export async function createTask(app: App, state: IAppState, taskData: NewTaskFormData): Promise<IAppState> {
 	const settings = state.persistent.settings;

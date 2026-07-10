@@ -1,8 +1,9 @@
 import { App, Notice } from "obsidian";
-import { AppStateManager } from "../core/AppStateManager";
-import { NewTaskModal, NewTaskFormData } from "../components/NewTaskModal";
-import { PluginEvent } from "../enums/events";
-import { loadTemplates } from "../core/utils/templateUtils";
+import { AppStateManager } from "../../core/AppStateManager";
+import { NewTaskModal } from "./NewTaskModal";
+import { NewTaskFormData } from "../../interfaces/NewTaskFormData";
+import { PluginEvent } from "../../enums/events";
+import { loadTemplates } from "../../core/utils/templateUtils";
 
 export class TaskCreationHelper {
 	constructor(private app: App, private appStateManager: AppStateManager) {}

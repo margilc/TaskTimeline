@@ -1,7 +1,14 @@
 import { App } from "obsidian";
 import { IPersistentState, IVolatileState } from "../../interfaces/IAppState";
 import { isValidColor, isValidColorVariable } from "../utils/colorUtils";
-import { createStateResult } from "../utils/updateUtils";
+
+function stateResult(
+    persistent: IPersistentState,
+    volatile: IVolatileState,
+    persistentUpdates: Partial<IPersistentState>
+): { persistent: IPersistentState, volatile: IVolatileState } {
+    return { persistent: { ...persistent, ...persistentUpdates }, volatile };
+}
 
 export async function updateColorMappings(
     app: App, 
@@ -33,7 +40,7 @@ export async function updateColorMappings(
     
     colorMappings[projectId][variable][level] = color;
     
-    return createStateResult(currentPersistent, currentVolatile, { colorMappings });
+    return stateResult(currentPersistent, currentVolatile, { colorMappings });
 }
 
 export async function updateColorVariable(
@@ -47,5 +54,5 @@ export async function updateColorVariable(
         throw new Error(`Invalid color variable: ${variable}`);
     }
     
-    return createStateResult(currentPersistent, currentVolatile, { colorVariable: variable });
+    return stateResult(currentPersistent, currentVolatile, { colorVariable: variable });
 }

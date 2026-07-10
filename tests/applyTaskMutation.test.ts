@@ -17,14 +17,14 @@ import { TFile as FakeTFileImport } from 'obsidian';
 const FakeTFile = FakeTFileImport as unknown as new (path: string) => { path: string };
 
 // Mock the frontmatter helper and the new canonicalize utility.
-jest.mock('../src/core/utils/frontmatterUtils', () => ({
+jest.mock('../src/core/utils/taskFileUtils', () => ({
     updateTaskFrontmatter: jest.fn().mockResolvedValue(undefined),
 }));
 jest.mock('../src/core/utils/canonicalizeFile', () => ({
     canonicalizeFile: jest.fn().mockResolvedValue(undefined),
 }));
 
-import { updateTaskFrontmatter } from '../src/core/utils/frontmatterUtils';
+import { updateTaskFrontmatter } from '../src/core/utils/taskFileUtils';
 import { canonicalizeFile } from '../src/core/utils/canonicalizeFile';
 
 const mockUpdateFm = updateTaskFrontmatter as jest.Mock;

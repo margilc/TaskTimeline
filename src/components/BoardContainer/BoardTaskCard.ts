@@ -1,17 +1,18 @@
-import { positionTooltipAtMouse } from "../../core/utils/tooltipUtils";
-import { TFile } from "obsidian";
+import { positionTooltipAtMouse } from "../common/tooltip";
+import { App, TFile, WorkspaceLeaf } from "obsidian";
 import { ITask } from "../../interfaces/ITask";
 import { ITaskTimelineSettings } from "../../interfaces/ITaskTimelineSettings";
 import { AppStateManager } from "../../core/AppStateManager";
 import { DEFAULT_COLOR, HIDE_VALUE } from "../../core/utils/colorUtils";
 import { BoardArrowOverlay } from "./BoardArrowOverlay";
-import { HORIZONTAL_TASK_VIEW_TYPE } from "../../views/HorizontalTaskView";
+import { HORIZONTAL_TASK_VIEW_TYPE } from "../../views/viewTypes";
 import { hasHorizontalModeFrontmatter, shouldUseHorizontalTaskView } from "../../core/utils/horizontalTaskUtils";
 
 export function BoardTaskCard(
 	task: ITask,
 	settings: ITaskTimelineSettings,
 	appStateManager: AppStateManager,
+	app: App,
 	sharedTooltip: HTMLElement,
 	arrowOverlay?: BoardArrowOverlay
 ): HTMLElement {
@@ -77,7 +78,7 @@ export function BoardTaskCard(
 		const sl = scroller?.scrollLeft ?? 0;
 		const st = scroller?.scrollTop ?? 0;
 
-		void openTaskFile(task.filePath, appStateManager, shouldUseHorizontalTaskView(task))
+		void openTaskFile(app, task.filePath, shouldUseHorizontalTaskView(task))
 			.then(() => {
 				if (!scroller) return;
 				const restore = () => { scroller.scrollLeft = sl; scroller.scrollTop = st; };
@@ -187,19 +188,21 @@ function updateSharedTooltipContent(tooltip: HTMLElement, task: ITask): void {
 	tooltip.appendChild(content);
 }
 
-// Track the task file leaf ID to reuse the same split pane
+// Leaf ids live at module level so every card (across re-renders) reuses the
+// same split pane. WorkspaceLeaf.id is not in the public typings.
 let taskFileLeafId: string | null = null;
 let horizontalTaskViewLeafId: string | null = null;
 
-async function openTaskFile(filePath: string, appStateManager: AppStateManager, useHorizontalView = false): Promise<void> {
-	const app = (window as any).app;
-	if (!app) return;
+function leafId(leaf: WorkspaceLeaf): string {
+	return (leaf as WorkspaceLeaf & { id: string }).id;
+}
 
+async function openTaskFile(app: App, filePath: string, useHorizontalView = false): Promise<void> {
 	const file = app.vault.getAbstractFileByPath(filePath);
-	if (!file) return;
+	if (!(file instanceof TFile)) return;
 
-	if (useHorizontalView || await shouldOpenHorizontalTaskView(app, file as TFile, filePath)) {
-		await openHorizontalTaskView(filePath);
+	if (useHorizontalView || await shouldOpenHorizontalTaskView(app, file)) {
+		await openHorizontalTaskView(app, filePath);
 		return;
 	}
 
@@ -207,18 +210,18 @@ async function openTaskFile(filePath: string, appStateManager: AppStateManager, 
 	if (taskFileLeafId) {
 		const existingLeaf = app.workspace.getLeafById(taskFileLeafId);
 		if (existingLeaf) {
-			existingLeaf.openFile(file as TFile);
+			existingLeaf.openFile(file);
 			return;
 		}
 		taskFileLeafId = null;
 	}
 
 	const newLeaf = app.workspace.getLeaf("split", "vertical");
-	taskFileLeafId = newLeaf.id;
-	newLeaf.openFile(file as TFile);
+	taskFileLeafId = leafId(newLeaf);
+	void newLeaf.openFile(file);
 }
 
-async function shouldOpenHorizontalTaskView(app: any, file: TFile, filePath: string): Promise<boolean> {
+async function shouldOpenHorizontalTaskView(app: App, file: TFile): Promise<boolean> {
 	try {
 		const fileContent = await app.vault.read(file);
 		return hasHorizontalModeFrontmatter(fileContent);
@@ -227,13 +230,7 @@ async function shouldOpenHorizontalTaskView(app: any, file: TFile, filePath: str
 	}
 }
 
-async function openHorizontalTaskView(filePath: string): Promise<void> {
-	const app = (window as any).app;
-	if (!app) return;
-
-	const file = app.vault.getAbstractFileByPath(filePath);
-	if (!file) return;
-
+async function openHorizontalTaskView(app: App, filePath: string): Promise<void> {
 	try {
 		if (horizontalTaskViewLeafId) {
 			const existingLeaf = app.workspace.getLeafById(horizontalTaskViewLeafId);
@@ -250,7 +247,7 @@ async function openHorizontalTaskView(filePath: string): Promise<void> {
 		}
 
 		const newLeaf = app.workspace.getLeaf("split", "horizontal");
-		horizontalTaskViewLeafId = newLeaf.id;
+		horizontalTaskViewLeafId = leafId(newLeaf);
 		await newLeaf.setViewState({
 			type: HORIZONTAL_TASK_VIEW_TYPE,
 			state: { filePath },

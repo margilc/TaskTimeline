@@ -1,7 +1,13 @@
 import { AppStateManager } from "../../core/AppStateManager";
 import { PluginEvent } from "../../enums/events";
-import { getGroupingOptions, getGroupingLabel } from "../../core/update/updateBoardGrouping";
 import { CustomDropdown } from "../common/CustomDropdown";
+
+const GROUPING_OPTIONS = [
+    { value: 'none', label: 'No Grouping' },
+    { value: 'status', label: 'Group by Status' },
+    { value: 'priority', label: 'Group by Priority' },
+    { value: 'category', label: 'Group by Category' },
+];
 
 /**
  * Grouping dropdown for the board header's first column. One instance lives
@@ -20,13 +26,8 @@ export class BoardGroupingSelection {
         this.element = document.createElement("div");
         this.element.className = "board-grouping-selection";
 
-        const options = getGroupingOptions().map(option => ({
-            value: option,
-            label: getGroupingLabel(option)
-        }));
-
         this.dropdown = new CustomDropdown(this.element, {
-            options,
+            options: GROUPING_OPTIONS,
             value: appStateManager.getState().persistent.boardGrouping?.groupBy || 'none',
             onChange: (selectedValue) => {
                 appStateManager.getEvents().trigger(PluginEvent.UpdateBoardGroupingPending, { groupBy: selectedValue });

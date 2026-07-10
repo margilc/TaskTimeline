@@ -1,3 +1,5 @@
+import { App, TFile } from 'obsidian';
+
 /**
  * Sanitize a task name into a filename identifier.
  * Strips non-alphanumeric characters, replaces spaces with underscores, truncates to 20 chars.
@@ -41,4 +43,35 @@ export function taskFileName(dateStr: string, identifier: string, n = 0): string
     return n === 0
         ? `${dateStr}_${identifier}.md`
         : `${dateStr}_${identifier}_${n}.md`;
+}
+
+/**
+ * Update task frontmatter using Obsidian's safe processFrontMatter API.
+ * This handles YAML parsing correctly and preserves formatting.
+ *
+ * @param app - Obsidian app instance
+ * @param filePath - Path to the task file
+ * @param updates - Object with key-value pairs to update in frontmatter
+ */
+export async function updateTaskFrontmatter(
+    app: App,
+    filePath: string,
+    updates: Record<string, string | number | undefined>,
+    deleteKeys: string[] = []
+): Promise<void> {
+    const file = app.vault.getAbstractFileByPath(filePath);
+    if (!file || !(file instanceof TFile)) {
+        throw new Error(`File not found: ${filePath}`);
+    }
+
+    await app.fileManager.processFrontMatter(file, (frontmatter) => {
+        for (const [key, value] of Object.entries(updates)) {
+            if (value !== undefined) {
+                frontmatter[key] = value;
+            }
+        }
+        for (const key of deleteKeys) {
+            delete frontmatter[key];
+        }
+    });
 }

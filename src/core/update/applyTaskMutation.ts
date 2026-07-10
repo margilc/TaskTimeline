@@ -1,7 +1,7 @@
 import { App, Notice, TFile } from "obsidian";
 import { ITask } from "../../interfaces/ITask";
 import type { AppStateManager } from "../AppStateManager";
-import { updateTaskFrontmatter } from "../utils/frontmatterUtils";
+import { updateTaskFrontmatter } from "../utils/taskFileUtils";
 import { canonicalizeFile } from "../utils/canonicalizeFile";
 import { EMPTY_GROUP_LABELS } from "../utils/groupingUtils";
 import { taskIdFromPath } from "../utils/taskUtils";

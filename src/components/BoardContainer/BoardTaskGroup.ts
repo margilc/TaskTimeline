@@ -4,7 +4,7 @@ import { BoardTaskCard } from "./BoardTaskCard";
 import { ITaskTimelineSettings } from "../../interfaces/ITaskTimelineSettings";
 import { AppStateManager } from "../../core/AppStateManager";
 import { ITask } from "../../interfaces/ITask";
-import { TaskCreationHelper } from "../../utils/taskCreationHelper";
+import { TaskCreationHelper } from "../modals/TaskCreationHelper";
 import { PluginEvent } from "../../enums/events";
 import { BoardArrowOverlay } from "./BoardArrowOverlay";
 import { DEFAULT_COLOR } from "../../core/utils/colorUtils";
@@ -147,7 +147,7 @@ export function BoardTaskGroup(
 	tasks.forEach((task) => {
 		const card = isFolded
 			? createFoldedTaskIndicator(task, settings)
-			: BoardTaskCard(task, settings, appStateManager, sharedTooltip, arrowOverlay);
+			: BoardTaskCard(task, settings, appStateManager, app, sharedTooltip, arrowOverlay);
 
 		const startX = (task.xStart ?? 1);
 		const endX = (task.xEnd ?? startX);

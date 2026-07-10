@@ -1,5 +1,5 @@
 import { ITask } from '../../interfaces/ITask';
-import { nameToIdentifier } from './fileRenameUtils';
+import { nameToIdentifier } from './taskFileUtils';
 
 /**
  * Resolve raw wiki-link targets stored in linkedTaskIds to actual task IDs.

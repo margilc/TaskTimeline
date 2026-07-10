@@ -1,6 +1,6 @@
 import { App } from "obsidian";
 import { AppStateManager } from "../../core/AppStateManager";
-import { TaskCreationHelper } from "../../utils/taskCreationHelper";
+import { TaskCreationHelper } from "../modals/TaskCreationHelper";
 
 /**
  * Renders the timeline header for the board view, displaying time units (such as months or weeks) based on the current view mode. It sets up the grid headers for task alignment.

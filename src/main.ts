@@ -1,6 +1,7 @@
 import { Plugin, WorkspaceLeaf, Notice, TFile } from "obsidian";
-import { TaskTimelineView, TASK_TIMELINE_VIEW_TYPE } from "./views/TaskTimelineView";
-import { HorizontalTaskView, HORIZONTAL_TASK_VIEW_TYPE } from "./views/HorizontalTaskView";
+import { TaskTimelineView } from "./views/TaskTimelineView";
+import { HorizontalTaskView } from "./views/HorizontalTaskView";
+import { TASK_TIMELINE_VIEW_TYPE, HORIZONTAL_TASK_VIEW_TYPE } from "./views/viewTypes";
 import { AppStateManager } from "./core/AppStateManager";
 import { undoTaskMutation, redoTaskMutation } from "./core/update/taskHistory";
 import { TaskTimelineSettingTab } from "./settings/TaskTimelineSettingTab";

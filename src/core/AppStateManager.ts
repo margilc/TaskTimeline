@@ -7,11 +7,11 @@ import { updateTasksFromIndex } from './update/updateTasks';
 import { updateColorMappings, updateColorVariable } from './update/updateColorMappings';
 import { updateLayout, clearLayoutCache } from './update/updateLayout';
 import { updateBoardGrouping } from './update/updateBoardGrouping';
+import { updateGroupOrder } from './update/updateGroupOrder';
 import { updateGroupFold } from './update/updateGroupFold';
 import { updateSettings } from './update/updateSettings';
 import { createTask } from './update/createTask';
-import { parseTaskFilename, identifierToName, nameToIdentifier } from './utils/fileRenameUtils';
-import { updateTaskFrontmatter } from './utils/frontmatterUtils';
+import { parseTaskFilename, identifierToName, nameToIdentifier, updateTaskFrontmatter } from './utils/taskFileUtils';
 import { canonicalizeFile } from './utils/canonicalizeFile';
 import { updateDateBounds } from './update/updateDateBounds';
 import { DEFAULT_COLOR } from './utils/colorUtils';
@@ -428,34 +428,11 @@ export class AppStateManager extends Component {
 
     private async handleUpdateGroupOrderPending(data: { groupName: string; direction: 'up' | 'down' }): Promise<void> {
         try {
-            const persistent = this.state.persistent;
-            const projectId = persistent.currentProjectName || 'All Projects';
-            const groupBy = persistent.boardGrouping?.groupBy || 'none';
-            const availableGroups = persistent.boardGrouping?.availableGroups || [];
+            const result = updateGroupOrder(this.state, data);
+            if (!result) return;
 
-            const currentIndex = availableGroups.indexOf(data.groupName);
-            if (currentIndex === -1) return;
-
-            const targetIndex = data.direction === 'up' ? currentIndex - 1 : currentIndex + 1;
-            if (targetIndex < 0 || targetIndex >= availableGroups.length) return;
-
-            const newOrder = [...availableGroups];
-            [newOrder[currentIndex], newOrder[targetIndex]] = [newOrder[targetIndex], newOrder[currentIndex]];
-
-            const groupingOrderings = { ...(persistent.groupingOrderings || {}) };
-            groupingOrderings[projectId] = {
-                ...(groupingOrderings[projectId] || {}),
-                [groupBy]: newOrder
-            };
-
-            this.state.persistent = {
-                ...persistent,
-                boardGrouping: {
-                    ...persistent.boardGrouping!,
-                    availableGroups: newOrder
-                },
-                groupingOrderings
-            };
+            this.state.persistent = result.persistent;
+            this.state.volatile = result.volatile;
 
             await this.saveData(this.state.persistent);
             clearLayoutCache();

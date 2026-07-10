@@ -18,16 +18,3 @@ export function updateBoardGrouping(app: App, currentState: IAppState, groupBy: 
     };
 }
 
-export function getGroupingOptions(): string[] {
-    return ['none', 'status', 'priority', 'category'];
-}
-
-export function getGroupingLabel(groupBy: string): string {
-    switch (groupBy) {
-        case 'none': return 'No Grouping';
-        case 'status': return 'Group by Status';
-        case 'priority': return 'Group by Priority';
-        case 'category': return 'Group by Category';
-        default: return 'Unknown Grouping';
-    }
-}
