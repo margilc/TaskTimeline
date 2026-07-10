@@ -45,12 +45,33 @@ export function normalizeDate(d: Date): Date {
   return new Date(Date.UTC(year, month, day));
 }
 
-export function getWeekNumber(date: Date): number {
-  const tempDate = new Date(date.getTime());
-  tempDate.setHours(0, 0, 0, 0);
-  tempDate.setDate(tempDate.getDate() + 3 - ((tempDate.getDay() + 6) % 7));
-  const week1 = new Date(tempDate.getFullYear(), 0, 4);
-  return 1 + Math.round((((tempDate.getTime() - week1.getTime()) / 86400000) - 3 + ((week1.getDay() + 6) % 7)) / 7);
+/**
+ * ISO-8601 week number and week-based year, computed in UTC (all task and
+ * column dates are UTC midnights). The week-based year differs from the
+ * calendar year around New Year (e.g. 2025-12-29 is 2026 - W01).
+ */
+export function getISOWeek(date: Date): { week: number; year: number } {
+  const d = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
+  // The Thursday of this ISO week determines the ISO year.
+  const day = d.getUTCDay() || 7;
+  d.setUTCDate(d.getUTCDate() + 4 - day);
+  const year = d.getUTCFullYear();
+  const yearStart = Date.UTC(year, 0, 1);
+  const week = Math.ceil(((d.getTime() - yearStart) / 86400000 + 1) / 7);
+  return { week, year };
+}
+
+/** The user's local calendar date as YYYY-MM-DD. */
+export function localTodayISO(): string {
+  const now = new Date();
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+}
+
+/** Add days to a YYYY-MM-DD string in the UTC frame (DST-immune). */
+export function addDaysISO(dateStr: string, days: number): string {
+  const d = new Date(dateStr);
+  d.setUTCDate(d.getUTCDate() + days);
+  return d.toISOString().slice(0, 10);
 }
 
 export function getMonthYear(d: Date): string {
@@ -115,26 +136,29 @@ export function isDateInRange(date: Date, start: Date, end: Date, timeUnit: Time
 }
 
 
+// Display formatting reads dates with UTC accessors: task/column dates are
+// UTC midnights, and local accessors would render the previous day/week/month
+// for users west of UTC.
 export function formatDateByTimeUnit(date: Date, unit: TimeUnit): string {
   if (unit === TimeUnit.DAY) {
-    return date.toLocaleDateString('en-US', { weekday: 'short' }) + ", " + 
-           date.getDate().toString().padStart(2, '0') + "." + 
-           (date.getMonth() + 1).toString().padStart(2, '0') + "." + 
-           date.getFullYear().toString().slice(-2);
+    return date.toLocaleDateString('en-US', { weekday: 'short', timeZone: 'UTC' }) + ", " +
+           date.getUTCDate().toString().padStart(2, '0') + "." +
+           (date.getUTCMonth() + 1).toString().padStart(2, '0') + "." +
+           date.getUTCFullYear().toString().slice(-2);
   } else if (unit === TimeUnit.WEEK) {
-    const weekNum = getWeekNumber(date);
-    return date.getFullYear() + " - W" + (weekNum < 10 ? "0" + weekNum : weekNum);
+    const { week, year } = getISOWeek(date);
+    return year + " - W" + (week < 10 ? "0" + week : week);
   } else if (unit === TimeUnit.MONTH) {
-    return date.toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
+    return date.toLocaleDateString('en-US', { month: 'short', year: 'numeric', timeZone: 'UTC' });
   }
   return date.toDateString();
 }
 
 export function formatWeekWithMonth(date: Date, monthDate?: Date): string {
-  const weekNum = getWeekNumber(date);
+  const { week, year } = getISOWeek(date);
   const dateToUse = monthDate || date;
-  const monthAbbr = dateToUse.toLocaleDateString('en-US', { month: 'short' });
-  return date.getFullYear() + " - W" + (weekNum < 10 ? "0" + weekNum : weekNum) + " - " + monthAbbr;
+  const monthAbbr = dateToUse.toLocaleDateString('en-US', { month: 'short', timeZone: 'UTC' });
+  return year + " - W" + (week < 10 ? "0" + week : week) + " - " + monthAbbr;
 }
 
 export function diffMonths(a: Date, b: Date): number {

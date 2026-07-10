@@ -567,9 +567,9 @@ function dateDiffInUnits(start: Date, target: Date, timeUnit: TimeUnit): number 
     } else if (timeUnit === TimeUnit.WEEK) {
         return (target.getTime() - start.getTime()) / 604800000;
     } else if (timeUnit === TimeUnit.MONTH) {
-        const yearDiff = target.getFullYear() - start.getFullYear();
-        const monthDiff = target.getMonth() - start.getMonth();
-        const dayFraction = (target.getDate() - 1) / 30; // approximate
+        const yearDiff = target.getUTCFullYear() - start.getUTCFullYear();
+        const monthDiff = target.getUTCMonth() - start.getUTCMonth();
+        const dayFraction = (target.getUTCDate() - 1) / 30; // approximate
         return yearDiff * 12 + monthDiff + dayFraction;
     }
     return 0;

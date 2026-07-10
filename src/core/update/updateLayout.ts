@@ -2,7 +2,7 @@ import { App } from 'obsidian';
 import { IAppState } from '../../interfaces/IAppState';
 import { ITask } from '../../interfaces/ITask';
 import { TimeUnit } from '../../enums/TimeUnit';
-import { addTime, formatDateByTimeUnit, formatWeekWithMonth, normalizeDate } from '../utils/dateUtils';
+import { addTime, formatDateByTimeUnit, formatWeekWithMonth, localTodayISO, normalizeDate } from '../utils/dateUtils';
 import { generateAvailableGroups, groupTasks } from '../utils/groupingUtils';
 
 const layoutCache = new Map<string, any>();
@@ -123,14 +123,17 @@ export function countDateUnits(start: Date, end: Date, timeUnit: TimeUnit): numb
     } else if (timeUnit === TimeUnit.WEEK) {
         return Math.max(1, Math.ceil((end.getTime() - start.getTime()) / 604800000) + 1);
     } else if (timeUnit === TimeUnit.MONTH) {
-        return Math.max(1, (end.getFullYear() - start.getFullYear()) * 12 + (end.getMonth() - start.getMonth()) + 1);
+        return Math.max(1, (end.getUTCFullYear() - start.getUTCFullYear()) * 12 + (end.getUTCMonth() - start.getUTCMonth()) + 1);
     }
     return 1;
 }
 
 function generateColumnHeaders(startDate: Date, endDate: Date, timeUnit: TimeUnit, totalColumns: number): Array<{date: Date, label: string, index: number, isEmphasized: boolean, isToday: boolean}> {
     const headers: Array<{date: Date, label: string, index: number, isEmphasized: boolean, isToday: boolean}> = [];
-    const today = normalizeDate(new Date());
+    // "Today" is the user's LOCAL calendar day, projected to UTC midnight to
+    // match the UTC frame of the column dates. normalizeDate(new Date())
+    // would mark the wrong column in the evening/morning away from UTC.
+    const today = new Date(localTodayISO());
     let currentDate = normalizeDate(startDate);
 
     for (let i = 0; i < totalColumns; i++) {
@@ -140,8 +143,8 @@ function generateColumnHeaders(startDate: Date, endDate: Date, timeUnit: TimeUni
         if (timeUnit === TimeUnit.WEEK && isEmphasized) {
             const weekStart = getWeekStart(currentDate);
             const weekEnd = addTime(weekStart, 6, TimeUnit.DAY);
-            const currentMonth1st = new Date(weekStart.getFullYear(), weekStart.getMonth(), 1);
-            const nextMonth1st = new Date(weekStart.getFullYear(), weekStart.getMonth() + 1, 1);
+            const currentMonth1st = new Date(Date.UTC(weekStart.getUTCFullYear(), weekStart.getUTCMonth(), 1));
+            const nextMonth1st = new Date(Date.UTC(weekStart.getUTCFullYear(), weekStart.getUTCMonth() + 1, 1));
             const monthToShow = (nextMonth1st >= weekStart && nextMonth1st <= weekEnd) ? nextMonth1st : currentMonth1st;
             label = formatWeekWithMonth(currentDate, monthToShow);
         } else {
@@ -165,29 +168,29 @@ function generateColumnHeaders(startDate: Date, endDate: Date, timeUnit: TimeUni
 
 function isHeaderEmphasized(date: Date, timeUnit: TimeUnit): boolean {
     if (timeUnit === TimeUnit.MONTH) {
-        return date.getMonth() === 0;
+        return date.getUTCMonth() === 0;
     } else if (timeUnit === TimeUnit.WEEK) {
         const weekStart = getWeekStart(date);
         const weekEnd = addTime(weekStart, 6, TimeUnit.DAY);
-        const currentMonth1st = new Date(weekStart.getFullYear(), weekStart.getMonth(), 1);
-        const nextMonth1st = new Date(weekStart.getFullYear(), weekStart.getMonth() + 1, 1);
+        const currentMonth1st = new Date(Date.UTC(weekStart.getUTCFullYear(), weekStart.getUTCMonth(), 1));
+        const nextMonth1st = new Date(Date.UTC(weekStart.getUTCFullYear(), weekStart.getUTCMonth() + 1, 1));
         return (currentMonth1st >= weekStart && currentMonth1st <= weekEnd) ||
                (nextMonth1st >= weekStart && nextMonth1st <= weekEnd);
     } else if (timeUnit === TimeUnit.DAY) {
-        return date.getDay() === 1; // Monday
+        return date.getUTCDay() === 1; // Monday
     }
     return false;
 }
 
 function isHeaderToday(date: Date, today: Date, timeUnit: TimeUnit): boolean {
     if (timeUnit === TimeUnit.DAY) {
-        return date.getFullYear() === today.getFullYear() && date.getMonth() === today.getMonth() && date.getDate() === today.getDate();
+        return date.getTime() === today.getTime();
     } else if (timeUnit === TimeUnit.WEEK) {
         const weekStart = getWeekStart(date);
         const weekEnd = addTime(weekStart, 6, TimeUnit.DAY);
         return today >= weekStart && today <= weekEnd;
     } else if (timeUnit === TimeUnit.MONTH) {
-        return date.getFullYear() === today.getFullYear() && date.getMonth() === today.getMonth();
+        return date.getUTCFullYear() === today.getUTCFullYear() && date.getUTCMonth() === today.getUTCMonth();
     }
     return false;
 }

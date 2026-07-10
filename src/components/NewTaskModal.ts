@@ -1,6 +1,7 @@
 import { App, Modal, Setting, Notice } from "obsidian";
 import { AppStateManager } from "../core/AppStateManager";
 import { ITemplate } from "../interfaces/ITemplate";
+import { addDaysISO, localTodayISO } from "../core/utils/dateUtils";
 
 export interface NewTaskFormData {
 	name: string;
@@ -33,17 +34,17 @@ export class NewTaskModal extends Modal {
 		this.onSubmit = onSubmit;
 		this.templates = templates || [];
 
-		const startDate = new Date();
-		const endDate = new Date(startDate);
-		endDate.setDate(startDate.getDate() + 7);
-
+		// Default start is the user's LOCAL calendar day; toISOString() on a
+		// plain new Date() would pre-fill tomorrow for evening users west of
+		// UTC. End arithmetic runs in the UTC frame (DST-immune).
+		const start = localTodayISO();
 		this.formData = {
 			name: "",
 			category: "default",
 			status: "default",
 			priority: "5",
-			start: startDate.toISOString().split('T')[0],
-			end: endDate.toISOString().split('T')[0],
+			start,
+			end: addDaysISO(start, 7),
 			...prePopulated
 		};
 	}
@@ -99,10 +100,7 @@ export class NewTaskModal extends Modal {
 					.onChange(value => {
 						this.formData.start = value;
 						if (value && this.isValidDate(value)) {
-							const startDate = new Date(value);
-							const endDate = new Date(startDate);
-							endDate.setDate(startDate.getDate() + this.defaultLengthDays);
-							this.formData.end = endDate.toISOString().split('T')[0];
+							this.formData.end = addDaysISO(value, this.defaultLengthDays);
 							if (endDateInput) {
 								endDateInput.value = this.formData.end;
 							}
@@ -198,10 +196,7 @@ export class NewTaskModal extends Modal {
 
 		// Recompute end date from current start + new length
 		if (this.formData.start && this.isValidDate(this.formData.start)) {
-			const startDate = new Date(this.formData.start);
-			const endDate = new Date(startDate);
-			endDate.setDate(startDate.getDate() + this.defaultLengthDays);
-			this.formData.end = endDate.toISOString().split('T')[0];
+			this.formData.end = addDaysISO(this.formData.start, this.defaultLengthDays);
 		}
 	}
 

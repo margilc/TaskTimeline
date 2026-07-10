@@ -167,9 +167,11 @@ function updateSharedTooltipContent(tooltip: HTMLElement, task: ITask, isDebugMo
 		try {
 			const date = dateInput instanceof Date ? dateInput : new Date(dateInput);
 			if (isNaN(date.getTime())) return '';
-			const year = date.getFullYear();
-			const month = String(date.getMonth() + 1).padStart(2, "0");
-			const day = String(date.getDate()).padStart(2, "0");
+			// UTC accessors: task dates parse as UTC midnight, so local
+			// accessors would show the previous day west of UTC.
+			const year = date.getUTCFullYear();
+			const month = String(date.getUTCMonth() + 1).padStart(2, "0");
+			const day = String(date.getUTCDate()).padStart(2, "0");
 			return `${year}${month}${day}`;
 		} catch {
 			return '';
