@@ -40,6 +40,13 @@ export class AppStateManager extends Component {
     private events: Events;
     private taskIndex: TaskIndex | null = null;
 
+    // Obsidian fires a 'create' event for EVERY existing file during initial
+    // vault load. Until initialize() has loaded persisted data and built the
+    // index, those events must be ignored — otherwise their handlers run
+    // against default state and saveData() overwrites data.json with defaults.
+    private initialized = false;
+    private dataLoaded = false;
+
     // Undo/redo stacks for drag/resize/move mutations. Populated by the drag
     // commit (via applyTaskMutation's returned inverse) and consumed by the
     // Ctrl+Z / Ctrl+Shift+Z handlers in TaskTimelineView.
@@ -105,6 +112,7 @@ export class AppStateManager extends Component {
     }
 
     private async handleFileCreate(file: TAbstractFile): Promise<void> {
+        if (!this.initialized) return;
         if (this.isRelevantFile(file)) {
             if (file instanceof TFolder) {
                 this.handleUpdateProjectsPending();
@@ -118,6 +126,7 @@ export class AppStateManager extends Component {
     }
 
     private handleFileDelete(file: TAbstractFile): void {
+        if (!this.initialized) return;
         if (this.isRelevantFile(file)) {
             if (file instanceof TFolder) {
                 this.handleUpdateProjectsPending({ resetMissingProject: true });
@@ -131,6 +140,7 @@ export class AppStateManager extends Component {
     }
 
     private async handleFileRename(file: TAbstractFile, oldPath: string): Promise<void> {
+        if (!this.initialized) return;
         if (this.isRelevantPath(oldPath) || this.isRelevantFile(file)) {
             if (file instanceof TFolder) {
                 this.handleUpdateProjectsPending({ resetMissingProject: true });
@@ -151,6 +161,7 @@ export class AppStateManager extends Component {
     }
 
     private async handleFileModify(file: TAbstractFile): Promise<void> {
+        if (!this.initialized) return;
         if (this.isRelevantFile(file) && file instanceof TFile && file.extension === 'md') {
             if (this.taskIndex) {
                 await this.taskIndex.handleFileModify(file);
@@ -504,6 +515,7 @@ export class AppStateManager extends Component {
         try {
             const persistentData = await this.loadData();
             this.state.persistent = this.mergeDeep(this.state.persistent, persistentData);
+            this.dataLoaded = true;
 
             // Restore zoom state from persisted level (with migration from old stepIndex format)
             const savedZoom = this.state.persistent.zoomLevel as any;
@@ -533,6 +545,9 @@ export class AppStateManager extends Component {
             await ensureTemplatesFolder(this.app, taskDirectory);
             this.taskIndex = new TaskIndex(this.app, taskDirectory, ignorePatterns);
             await this.taskIndex.initialize();
+            // Accept vault events from here on: the index exists, so anything
+            // arriving while the initial task load below runs is indexed normally.
+            this.initialized = true;
 
             const taskResult = updateTasksFromIndex(this.taskIndex, this.state.volatile, this.state.persistent);
             this.state.volatile = taskResult.volatile;
@@ -556,6 +571,9 @@ export class AppStateManager extends Component {
     }
 
     private async saveData(record: Record<string, any>): Promise<void> {
+        // Never persist before loadData() has run — a write at that point
+        // would replace the user's saved state with defaults.
+        if (!this.dataLoaded) return;
         await this.plugin.saveData(record);
     }
 

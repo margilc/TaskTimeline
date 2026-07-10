@@ -12,6 +12,7 @@ import { snapToUnitBoundary, countDateUnits } from "../../core/update/updateLayo
 import { isGroupFolded } from "../../core/update/updateGroupFold";
 import { addTime } from "../../core/utils/dateUtils";
 import { BoardArrowOverlay } from "./BoardArrowOverlay";
+import { BoardGroupingSelection } from "./BoardGroupingSelection";
 import { ITaskTimelineSettings } from "../../interfaces/ITaskTimelineSettings";
 import { CardInteractionController } from "./interaction/CardInteractionController";
 
@@ -46,6 +47,9 @@ export class BoardContainer {
     // Arrow overlay for task link visualization
     private arrowOverlay: BoardArrowOverlay | null = null;
 
+    // Persistent grouping dropdown, re-attached on every header rebuild
+    private groupingSelection: BoardGroupingSelection | null = null;
+
     // Drag/drop + resize controller
     private cardInteraction: CardInteractionController | null = null;
 
@@ -74,6 +78,8 @@ export class BoardContainer {
 
         // Arrow overlay for link visualization (inside scrollable content)
         this.arrowOverlay = new BoardArrowOverlay(this.contentElement);
+
+        this.groupingSelection = new BoardGroupingSelection(this.appStateManager);
 
         // Create shared tooltip once (instead of per-card)
         this.sharedTooltip = this.createSharedTooltip();
@@ -371,9 +377,9 @@ export class BoardContainer {
     }
 
     private updateTimelineHeader(boardLayout: any, columnWidth: number): void {
-        if (!this.timelineHeaderContainer) return;
+        if (!this.timelineHeaderContainer || !this.groupingSelection) return;
         this.timelineHeaderContainer.innerHTML = '';
-        const timelineHeaderEl = BoardTimelineHeader(boardLayout, this.appStateManager, this.app, columnWidth, this.isDebugMode);
+        const timelineHeaderEl = BoardTimelineHeader(boardLayout, this.appStateManager, this.app, this.groupingSelection.getElement(), columnWidth, this.isDebugMode);
         this.timelineHeaderContainer.appendChild(timelineHeaderEl);
     }
 
@@ -498,6 +504,11 @@ export class BoardContainer {
         if (this.arrowOverlay) {
             this.arrowOverlay.destroy();
             this.arrowOverlay = null;
+        }
+
+        if (this.groupingSelection) {
+            this.groupingSelection.destroy();
+            this.groupingSelection = null;
         }
 
         this.groupElements.clear();

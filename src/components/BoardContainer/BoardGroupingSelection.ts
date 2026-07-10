@@ -3,34 +3,52 @@ import { PluginEvent } from "../../enums/events";
 import { getGroupingOptions, getGroupingLabel } from "../../core/update/updateBoardGrouping";
 import { CustomDropdown } from "../common/CustomDropdown";
 
-export function BoardGroupingSelection(appStateManager: AppStateManager): HTMLElement {
-    const container = document.createElement("div");
-    container.className = "board-grouping-selection";
+/**
+ * Grouping dropdown for the board header's first column. One instance lives
+ * for the whole BoardContainer lifetime and is re-attached on each header
+ * rebuild — creating it per render leaked its events listener and the
+ * dropdown's document-level click handler on every render.
+ */
+export class BoardGroupingSelection {
+    private readonly element: HTMLElement;
+    private readonly dropdown: CustomDropdown;
+    private readonly appStateManager: AppStateManager;
+    private readonly boundSync = this.sync.bind(this);
 
-    const options = getGroupingOptions().map(option => ({
-        value: option,
-        label: getGroupingLabel(option)
-    }));
+    constructor(appStateManager: AppStateManager) {
+        this.appStateManager = appStateManager;
+        this.element = document.createElement("div");
+        this.element.className = "board-grouping-selection";
 
-    const state = appStateManager.getState();
-    const currentGrouping = state.persistent.boardGrouping?.groupBy || 'none';
+        const options = getGroupingOptions().map(option => ({
+            value: option,
+            label: getGroupingLabel(option)
+        }));
 
-    const dropdown = new CustomDropdown(container, {
-        options,
-        value: currentGrouping,
-        onChange: (selectedValue) => {
-            appStateManager.getEvents().trigger(PluginEvent.UpdateBoardGroupingPending, { groupBy: selectedValue });
+        this.dropdown = new CustomDropdown(this.element, {
+            options,
+            value: appStateManager.getState().persistent.boardGrouping?.groupBy || 'none',
+            onChange: (selectedValue) => {
+                appStateManager.getEvents().trigger(PluginEvent.UpdateBoardGroupingPending, { groupBy: selectedValue });
+            }
+        });
+
+        appStateManager.getEvents().on(PluginEvent.UpdateBoardGroupingDone, this.boundSync);
+    }
+
+    private sync(): void {
+        const grouping = this.appStateManager.getState().persistent.boardGrouping?.groupBy || 'none';
+        if (this.dropdown.getValue() !== grouping) {
+            this.dropdown.setValue(grouping);
         }
-    });
+    }
 
-    // Listen for grouping changes to update dropdown
-    appStateManager.getEvents().on(PluginEvent.UpdateBoardGroupingDone, () => {
-        const newState = appStateManager.getState();
-        const newGrouping = newState.persistent.boardGrouping?.groupBy || 'none';
-        if (dropdown.getValue() !== newGrouping) {
-            dropdown.setValue(newGrouping);
-        }
-    });
+    public getElement(): HTMLElement {
+        return this.element;
+    }
 
-    return container;
+    public destroy(): void {
+        this.appStateManager.getEvents().off(PluginEvent.UpdateBoardGroupingDone, this.boundSync);
+        this.dropdown.destroy();
+    }
 }

@@ -1,6 +1,5 @@
 import { App } from "obsidian";
 import { AppStateManager } from "../../core/AppStateManager";
-import { BoardGroupingSelection } from "./BoardGroupingSelection";
 import { TaskCreationHelper } from "../../utils/taskCreationHelper";
 
 /**
@@ -12,7 +11,7 @@ import { TaskCreationHelper } from "../../utils/taskCreationHelper";
  * - 
  */
 
-export function BoardTimelineHeader(boardLayout: any, appStateManager: AppStateManager, app: App, columnWidth?: number, isDebugMode = false): HTMLElement {
+export function BoardTimelineHeader(boardLayout: any, appStateManager: AppStateManager, app: App, groupingSelectionEl: HTMLElement, columnWidth?: number, isDebugMode = false): HTMLElement {
   const container = document.createElement("div");
   container.className = isDebugMode ? "debug-board-column-headers" : "board-column-headers";
   container.style.display = "grid";
@@ -27,14 +26,14 @@ export function BoardTimelineHeader(boardLayout: any, appStateManager: AppStateM
   // Simple container styling
   container.style.minHeight = "36px";
 
-  // Create the grouping selection dropdown for the first column (group header column)
-  const groupingSelectionCell = BoardGroupingSelection(appStateManager);
-  groupingSelectionCell.style.gridColumn = "1";
-  groupingSelectionCell.style.gridRow = "1";
+  // First column (group header column): the persistent grouping dropdown,
+  // owned by BoardContainer and re-attached on every header rebuild.
+  groupingSelectionEl.style.gridColumn = "1";
+  groupingSelectionEl.style.gridRow = "1";
   if (isDebugMode) {
-    groupingSelectionCell.classList.add("debug-cell");
+    groupingSelectionEl.classList.add("debug-cell");
   }
-  container.appendChild(groupingSelectionCell);
+  container.appendChild(groupingSelectionEl);
 
   // Create task creation helper
   const taskCreationHelper = new TaskCreationHelper(app, appStateManager);
