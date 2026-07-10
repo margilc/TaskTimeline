@@ -5,6 +5,8 @@ import {
     createLayoutTestState,
     getPositionedTasks,
     expectValidTaskPosition,
+    makeTask,
+    makeTasks,
     updateTestTimeUnit as updateTimeUnit
 } from './testHelpers';
 
@@ -19,9 +21,9 @@ describe('Layout Edge Cases', () => {
     describe('Date Boundaries', () => {
         describe('Month Boundaries', () => {
             test('should show correct month start dates in column headers', async () => {
-                const tasks: ITask[] = [
+                const tasks: ITask[] = makeTasks([
                     { name: 'June Task', start: '2025-06-15', end: '2025-06-15', filePath: '/june.md', content: '' }
-                ];
+                ]);
                 const state = createLayoutTestState(tasks, { currentDate: '2025-06-15', numberOfColumns: 5 });
 
                 const timeUnitResult = await updateTimeUnit(mockApp, state.persistent, state.volatile, TimeUnit.MONTH);
@@ -39,12 +41,13 @@ describe('Layout Edge Cases', () => {
             });
 
             test('should handle month boundary edge (end of May to June)', async () => {
-                const tasks: ITask[] = [
+                const tasks: ITask[] = makeTasks([
                     { name: 'End of May', start: '2025-05-31', end: '2025-05-31', filePath: '/end-may.md', content: '' },
                     { name: 'Start of June', start: '2025-06-01', end: '2025-06-01', filePath: '/start-june.md', content: '' }
-                ];
+                ]);
 
-                const state = createLayoutTestState(tasks, { currentDate: '2025-06-01', numberOfColumns: 5 });
+                // Viewport must start in May so both tasks are on the board.
+                const state = createLayoutTestState(tasks, { currentDate: '2025-05-01', numberOfColumns: 5 });
                 const timeUnitResult = await updateTimeUnit(mockApp, state.persistent, state.volatile, TimeUnit.MONTH);
                 const result = updateLayout(mockApp, {
                     persistent: timeUnitResult.persistent,
@@ -57,17 +60,17 @@ describe('Layout Edge Cases', () => {
                 const juneTask = positioned.find(t => t.name === 'Start of June');
 
                 // Tasks in different months should be in different columns
-                if (mayTask && juneTask) {
-                    expect(mayTask.xStart).not.toBe(juneTask.xStart);
-                }
+                expect(mayTask).toBeDefined();
+                expect(juneTask).toBeDefined();
+                expect(mayTask!.xStart).not.toBe(juneTask!.xStart);
             });
         });
 
         describe('Week Boundaries', () => {
             test('should show correct week start dates (Monday) in column headers', async () => {
-                const tasks: ITask[] = [
+                const tasks: ITask[] = makeTasks([
                     { name: 'Week Task', start: '2025-06-16', end: '2025-06-16', filePath: '/week.md', content: '' }
-                ];
+                ]);
                 const state = createLayoutTestState(tasks, { currentDate: '2025-06-15', numberOfColumns: 5 });
 
                 const timeUnitResult = await updateTimeUnit(mockApp, state.persistent, state.volatile, TimeUnit.WEEK);
@@ -85,10 +88,10 @@ describe('Layout Edge Cases', () => {
             });
 
             test('should place tasks in same week column', async () => {
-                const tasks: ITask[] = [
+                const tasks: ITask[] = makeTasks([
                     { name: 'Monday Task', start: '2025-06-16', end: '2025-06-16', filePath: '/monday.md', content: '' },
                     { name: 'Friday Task', start: '2025-06-20', end: '2025-06-20', filePath: '/friday.md', content: '' }
-                ];
+                ]);
 
                 const state = createLayoutTestState(tasks, { currentDate: '2025-06-16', numberOfColumns: 5 });
                 const timeUnitResult = await updateTimeUnit(mockApp, state.persistent, state.volatile, TimeUnit.WEEK);
@@ -102,17 +105,17 @@ describe('Layout Edge Cases', () => {
                 const fridayTask = positioned.find(t => t.name === 'Friday Task');
 
                 // Same week tasks should be in same column
-                if (mondayTask && fridayTask) {
-                    expect(mondayTask.xStart).toBe(fridayTask.xStart);
-                }
+                expect(mondayTask).toBeDefined();
+                expect(fridayTask).toBeDefined();
+                expect(mondayTask!.xStart).toBe(fridayTask!.xStart);
             });
         });
 
         describe('Day Boundaries', () => {
             test('should have sequential day columns', () => {
-                const tasks: ITask[] = [
+                const tasks: ITask[] = makeTasks([
                     { name: 'Day Task', start: '2025-06-15', end: '2025-06-15', filePath: '/day.md', content: '' }
-                ];
+                ]);
                 const state = createLayoutTestState(tasks, { currentDate: '2025-06-15', numberOfColumns: 5 });
                 const result = updateLayout(mockApp, state);
                 const layout = result.volatile.boardLayout!;
@@ -126,10 +129,10 @@ describe('Layout Edge Cases', () => {
             });
 
             test('should place adjacent day tasks in adjacent columns', () => {
-                const tasks: ITask[] = [
+                const tasks: ITask[] = makeTasks([
                     { name: 'Day 1', start: '2024-01-15', end: '2024-01-15', filePath: '/d1.md', content: '' },
                     { name: 'Day 2', start: '2024-01-16', end: '2024-01-16', filePath: '/d2.md', content: '' }
-                ];
+                ]);
 
                 const state = createLayoutTestState(tasks);
                 const result = updateLayout(mockApp, state);
@@ -138,19 +141,19 @@ describe('Layout Edge Cases', () => {
                 const day1 = positioned.find(t => t.name === 'Day 1');
                 const day2 = positioned.find(t => t.name === 'Day 2');
 
-                if (day1 && day2) {
-                    expect(Math.abs(day1.xStart! - day2.xStart!)).toBe(1);
-                }
+                expect(day1).toBeDefined();
+                expect(day2).toBeDefined();
+                expect(Math.abs(day1!.xStart! - day2!.xStart!)).toBe(1);
             });
         });
 
         describe('Year Boundaries', () => {
             test('should handle year-crossing tasks', async () => {
-                const tasks: ITask[] = [
+                const tasks: ITask[] = makeTasks([
                     { name: 'Year End', start: '2024-12-30', end: '2024-12-31', filePath: '/yearend.md', content: '' },
                     { name: 'Year Start', start: '2025-01-01', end: '2025-01-02', filePath: '/yearstart.md', content: '' },
                     { name: 'Cross Year', start: '2024-12-28', end: '2025-01-05', filePath: '/crossyear.md', content: '' }
-                ];
+                ]);
 
                 const state = createLayoutTestState(tasks, { currentDate: '2025-01-01', numberOfColumns: 10 });
                 const result = updateLayout(mockApp, state);
@@ -165,9 +168,9 @@ describe('Layout Edge Cases', () => {
 
     describe('Multi-Column Spanning Tasks', () => {
         test('should correctly span task across multiple columns', () => {
-            const tasks: ITask[] = [
+            const tasks: ITask[] = makeTasks([
                 { name: 'Multi-Day', start: '2024-01-14', end: '2024-01-16', filePath: '/multi.md', content: '' }
-            ];
+            ]);
 
             const state = createLayoutTestState(tasks, { currentDate: '2024-01-14' });
             const result = updateLayout(mockApp, state);
@@ -179,28 +182,26 @@ describe('Layout Edge Cases', () => {
         });
 
         test('should clip task to viewport when spanning beyond', () => {
-            const tasks: ITask[] = [
+            const tasks: ITask[] = makeTasks([
                 { name: 'Long Task', start: '2024-01-13', end: '2024-01-25', filePath: '/long.md', content: '' }
-            ];
+            ]);
 
             const state = createLayoutTestState(tasks, { numberOfColumns: 5 });
             const result = updateLayout(mockApp, state);
             const layout = result.volatile.boardLayout!;
             const positioned = getPositionedTasks(layout);
 
-            if (positioned.length > 0) {
-                const task = positioned[0];
-                expect(task.xEnd).toBeLessThanOrEqual(layout.columnHeaders.length);
-            }
+            expect(positioned).toHaveLength(1);
+            expect(positioned[0].xEnd).toBeLessThanOrEqual(layout.columnHeaders.length);
         });
     });
 
     describe('Tasks Outside Viewport', () => {
         test('should handle tasks far in the future', () => {
-            const tasks: ITask[] = [
+            const tasks: ITask[] = makeTasks([
                 { name: 'Current', start: '2024-01-15', end: '2024-01-15', filePath: '/current.md', content: '' },
                 { name: 'Far Future', start: '2030-06-15', end: '2030-06-15', filePath: '/future.md', content: '' }
-            ];
+            ]);
 
             const state = createLayoutTestState(tasks, { numberOfColumns: 5 });
             const result = updateLayout(mockApp, state);
@@ -216,10 +217,10 @@ describe('Layout Edge Cases', () => {
         });
 
         test('should handle tasks far in the past', () => {
-            const tasks: ITask[] = [
+            const tasks: ITask[] = makeTasks([
                 { name: 'Current', start: '2024-01-15', end: '2024-01-15', filePath: '/current.md', content: '' },
                 { name: 'Far Past', start: '2020-01-15', end: '2020-01-15', filePath: '/past.md', content: '' }
-            ];
+            ]);
 
             const state = createLayoutTestState(tasks, { numberOfColumns: 5 });
             const result = updateLayout(mockApp, state);
@@ -232,9 +233,9 @@ describe('Layout Edge Cases', () => {
 
     describe('Special Task Properties', () => {
         test('should handle tasks with same start and end dates', () => {
-            const tasks: ITask[] = [
+            const tasks: ITask[] = makeTasks([
                 { name: 'Single Day', start: '2024-01-15', end: '2024-01-15', filePath: '/single.md', content: '' }
-            ];
+            ]);
 
             const state = createLayoutTestState(tasks);
             const result = updateLayout(mockApp, state);
@@ -245,22 +246,21 @@ describe('Layout Edge Cases', () => {
         });
 
         test('should handle tasks without end date', () => {
-            const tasks: ITask[] = [
+            const tasks: ITask[] = makeTasks([
                 { name: 'No End', start: '2024-01-15', filePath: '/noend.md', content: '' }
-            ];
+            ]);
 
             const state = createLayoutTestState(tasks);
             const result = updateLayout(mockApp, state);
             const positioned = getPositionedTasks(result.volatile.boardLayout!);
 
-            if (positioned.length > 0) {
-                expect(positioned[0].xStart).toBeGreaterThan(0);
-                expect(positioned[0].xEnd).toBeGreaterThanOrEqual(positioned[0].xStart!);
-            }
+            expect(positioned).toHaveLength(1);
+            expect(positioned[0].xStart).toBeGreaterThan(0);
+            expect(positioned[0].xEnd).toBeGreaterThanOrEqual(positioned[0].xStart!);
         });
 
         test('should handle many tasks on same date', () => {
-            const tasks: ITask[] = Array.from({ length: 10 }, (_, i) => ({
+            const tasks: ITask[] = Array.from({ length: 10 }, (_, i) => makeTask({
                 name: `Same Date Task ${i + 1}`,
                 start: '2024-01-15',
                 end: '2024-01-15',
@@ -268,7 +268,6 @@ describe('Layout Edge Cases', () => {
                 status: 'active',
                 priority: i % 3 + 1,
                 filePath: `/same${i + 1}.md`,
-                content: ''
             }));
 
             const state = createLayoutTestState(tasks);
@@ -292,9 +291,9 @@ describe('Layout Edge Cases', () => {
             '2025-12-31', // End of year
             '2025-02-28', // End of February
         ])('should handle current date %s', (currentDate) => {
-            const state = createLayoutTestState([
-                { name: 'Anchor', start: currentDate, end: currentDate, filePath: '/anchor.md', content: '' }
-            ], { currentDate });
+            const state = createLayoutTestState(makeTasks([
+                { name: 'Anchor', start: currentDate, end: currentDate, filePath: '/anchor.md' }
+            ]), { currentDate });
 
             expect(() => {
                 const result = updateLayout(mockApp, state);
@@ -306,10 +305,10 @@ describe('Layout Edge Cases', () => {
         });
 
         test('should handle current date at start of month', async () => {
-            const tasks: ITask[] = [
+            const tasks: ITask[] = makeTasks([
                 { name: 'Month Start', start: '2025-06-01', end: '2025-06-01', filePath: '/mstart.md', content: '' },
                 { name: 'Month End', start: '2025-06-30', end: '2025-06-30', filePath: '/mend.md', content: '' }
-            ];
+            ]);
 
             const state = createLayoutTestState(tasks, { currentDate: '2025-06-01', numberOfColumns: 5 });
             const timeUnitResult = await updateTimeUnit(mockApp, state.persistent, state.volatile, TimeUnit.MONTH);
@@ -321,17 +320,15 @@ describe('Layout Edge Cases', () => {
 
             // Both should be positioned in same June column
             expect(positioned.length).toBe(2);
-            if (positioned.length === 2) {
-                expect(positioned[0].xStart).toBe(positioned[1].xStart);
-            }
+            expect(positioned[0].xStart).toBe(positioned[1].xStart);
         });
     });
 
     describe('Cross Time-Unit Consistency', () => {
         test('should maintain task visibility across time unit changes', async () => {
-            const tasks: ITask[] = [
+            const tasks: ITask[] = makeTasks([
                 { name: 'Consistent Task', start: '2025-06-15', end: '2025-06-15', filePath: '/consistent.md', content: '' }
-            ];
+            ]);
 
             const state = createLayoutTestState(tasks, { currentDate: '2025-06-15', numberOfColumns: 5 });
 
@@ -352,11 +349,12 @@ describe('Layout Edge Cases', () => {
 
     describe('Multi-Month Spanning Tasks', () => {
         test('should handle tasks spanning multiple months', async () => {
-            const tasks: ITask[] = [
+            const tasks: ITask[] = makeTasks([
                 { name: 'Multi-Month', start: '2025-05-15', end: '2025-07-15', filePath: '/multi-month.md', content: '' }
-            ];
+            ]);
 
-            const state = createLayoutTestState(tasks, { currentDate: '2025-06-15', numberOfColumns: 5 });
+            // Viewport starts in May so the full May-July span is on the board.
+            const state = createLayoutTestState(tasks, { currentDate: '2025-05-15', numberOfColumns: 5 });
             const timeUnitResult = await updateTimeUnit(mockApp, state.persistent, state.volatile, TimeUnit.MONTH);
             const result = updateLayout(mockApp, {
                 persistent: timeUnitResult.persistent,
@@ -364,11 +362,9 @@ describe('Layout Edge Cases', () => {
             });
             const positioned = getPositionedTasks(result.volatile.boardLayout!);
 
-            if (positioned.length > 0) {
-                const task = positioned[0];
-                // Should span multiple columns (May, June, July = 3 months)
-                expect(task.xEnd! - task.xStart!).toBeGreaterThanOrEqual(1);
-            }
+            expect(positioned).toHaveLength(1);
+            // Should span multiple columns (May, June, July = 3 months)
+            expect(positioned[0].xEnd! - positioned[0].xStart!).toBeGreaterThanOrEqual(2);
         });
     });
 });

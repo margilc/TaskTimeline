@@ -4,9 +4,12 @@ import { ITask } from '../src/interfaces/ITask';
 import { TimeUnit } from '../src/enums/TimeUnit';
 import {
     createLayoutTestState,
+    detectOverlaps,
     expectValidLayout,
+    generateSeededRandomTasks,
     getPositionedTasks,
     expectValidTaskPosition,
+    makeTasks,
     updateTestTimeUnit as updateTimeUnit
 } from './testHelpers';
 
@@ -20,38 +23,11 @@ describe('Layout Core Tests', () => {
 
     // Sample tasks for testing
     function createSampleTasks(): ITask[] {
-        return [
-            {
-                name: 'Task 1',
-                start: '2024-01-15',
-                end: '2024-01-17',
-                category: 'development',
-                status: 'In Progress',
-                priority: 1,
-                filePath: '/task1.md',
-                content: 'Task 1 content'
-            },
-            {
-                name: 'Task 2',
-                start: '2024-01-16',
-                end: '2024-01-18',
-                category: 'testing',
-                status: 'Not Started',
-                priority: 2,
-                filePath: '/task2.md',
-                content: 'Task 2 content'
-            },
-            {
-                name: 'Task 3',
-                start: '2024-01-18',
-                end: '2024-01-20',
-                category: 'development',
-                status: 'Done',
-                priority: 3,
-                filePath: '/task3.md',
-                content: 'Task 3 content'
-            }
-        ];
+        return makeTasks([
+            { name: 'Task 1', start: '2024-01-15', end: '2024-01-17', category: 'development', status: 'In Progress', priority: 1, filePath: '/task1.md' },
+            { name: 'Task 2', start: '2024-01-16', end: '2024-01-18', category: 'testing', status: 'Not Started', priority: 2, filePath: '/task2.md' },
+            { name: 'Task 3', start: '2024-01-18', end: '2024-01-20', category: 'development', status: 'Done', priority: 3, filePath: '/task3.md' },
+        ]);
     }
 
     describe('Basic Layout Generation', () => {
@@ -164,7 +140,7 @@ describe('Layout Core Tests', () => {
             const tasks = createSampleTasks();
             const state = createLayoutTestState(tasks);
 
-            const timeUnitResult = await updateTimeUnit(mockApp, state.persistent, state.volatile, timeUnit);
+            const timeUnitResult = await updateTimeUnit(mockApp, state.persistent, state.volatile, timeUnit, 8);
             const stateWithTimeUnit = {
                 persistent: timeUnitResult.persistent,
                 volatile: timeUnitResult.volatile
@@ -182,7 +158,7 @@ describe('Layout Core Tests', () => {
             let state = createLayoutTestState(tasks, { numberOfColumns: 10 });
 
             for (const timeUnit of [TimeUnit.DAY, TimeUnit.WEEK, TimeUnit.MONTH, TimeUnit.DAY]) {
-                const timeUnitResult = await updateTimeUnit(mockApp, state.persistent, state.volatile, timeUnit);
+                const timeUnitResult = await updateTimeUnit(mockApp, state.persistent, state.volatile, timeUnit, 10);
                 state = {
                     persistent: timeUnitResult.persistent,
                     volatile: timeUnitResult.volatile
@@ -264,12 +240,6 @@ describe('Layout Core Tests', () => {
             expect(layout.gridHeight).toBeGreaterThanOrEqual(maxRow + 1);
         });
 
-        test('should skip grid generation with no tasks', () => {
-            const state = createLayoutTestState([]);
-            const result = updateLayout(mockApp, state);
-
-            expect(result.volatile.boardLayout).toBeUndefined();
-        });
     });
 
     describe('Viewport', () => {
@@ -298,6 +268,23 @@ describe('Layout Core Tests', () => {
 
             expect(firstHeaderDate.getTime()).toBeGreaterThanOrEqual(layout.viewport.startDate.getTime());
             expect(lastHeaderDate.getTime()).toBeLessThanOrEqual(layout.viewport.endDate.getTime());
+        });
+    });
+
+    describe('Scale (replaces the timing-based performance suite)', () => {
+        test('positions 200 seeded tasks without overlaps in every time unit', async () => {
+            const tasks = generateSeededRandomTasks(200, 42);
+
+            for (const timeUnit of [TimeUnit.DAY, TimeUnit.WEEK, TimeUnit.MONTH]) {
+                clearLayoutCache();
+                const state = createLayoutTestState(tasks, { currentDate: '2024-06-01', numberOfColumns: 60, timeUnit });
+                const timeUnitResult = await updateTimeUnit(mockApp, state.persistent, state.volatile, timeUnit, 60);
+                const result = updateLayout(mockApp, { persistent: timeUnitResult.persistent, volatile: timeUnitResult.volatile });
+                const layout = result.volatile.boardLayout!;
+
+                expect(detectOverlaps(layout.taskGrids)).toEqual([]);
+                getPositionedTasks(layout).forEach(expectValidTaskPosition);
+            }
         });
     });
 

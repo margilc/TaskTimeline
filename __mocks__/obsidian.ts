@@ -1,3 +1,7 @@
+// Test double for the 'obsidian' package (types-only on npm), wired via
+// jest.config.cjs moduleNameMapper. Intentional and load-bearing: any test
+// importing src modules that import 'obsidian' resolves here.
+
 export class Plugin {
     app: any;
     addChild = jest.fn();
@@ -19,50 +23,81 @@ export class Component {
     load = jest.fn();
 }
 
+/** Real minimal event emitter so state-manager tests can observe events. */
 export class Events {
-    on = jest.fn();
-    off = jest.fn();
-    trigger = jest.fn();
+    private handlers: Record<string, Array<(...args: any[]) => void>> = {};
+    on(name: string, cb: (...args: any[]) => void) {
+        (this.handlers[name] ??= []).push(cb);
+        return { name, cb } as any;
+    }
+    off(name: string, cb: (...args: any[]) => void) {
+        this.handlers[name] = (this.handlers[name] ?? []).filter(f => f !== cb);
+    }
+    trigger(name: string, ...data: any[]) {
+        (this.handlers[name] ?? []).slice().forEach(f => f(...data));
+    }
+}
+
+export class Notice {
+    constructor(public message?: string, public timeout?: number) {}
+}
+
+export function normalizePath(path: string): string {
+    return path.replace(/\\/g, '/').replace(/\/+/g, '/').replace(/^\/|\/$/g, '');
+}
+
+export function stringifyYaml(obj: Record<string, unknown>): string {
+    return Object.entries(obj)
+        .map(([key, value]) => `${key}: ${typeof value === 'string' ? JSON.stringify(value) : String(value)}`)
+        .join('\n') + '\n';
 }
 
 export class App {
-    vault = {
+    vault: any = {
         getAbstractFileByPath: jest.fn(),
         getFiles: jest.fn(() => []),
         getMarkdownFiles: jest.fn(() => []),
+        read: jest.fn(),
+        modify: jest.fn(),
+        create: jest.fn(),
         on: jest.fn(),
         off: jest.fn(),
-        adapter: {
-            path: {
-                relative: jest.fn()
-            }
-        }
+        adapter: { exists: jest.fn() },
     };
-    workspace = {
-        getLeaf: jest.fn(() => ({
-            openFile: jest.fn()
-        }))
+    fileManager: any = {
+        processFrontMatter: jest.fn(),
+        renameFile: jest.fn(),
+    };
+    workspace: any = {
+        getLeaf: jest.fn(() => ({ openFile: jest.fn() })),
     };
 }
 
-export class TFile {
+export class TAbstractFile {
     path: string;
     name: string;
-    constructor(path: string, name: string) {
+    constructor(path: string) {
         this.path = path;
-        this.name = name;
+        this.name = path.split('/').pop() ?? path;
     }
 }
 
-export class TFolder {
-    path: string;
-    name: string;
-    children: any[];
-    constructor(path: string, name: string) {
-        this.path = path;
-        this.name = name;
-        this.children = [];
+export class TFile extends TAbstractFile {
+    basename: string;
+    extension: string;
+    parent: { path: string } | null;
+    constructor(path: string) {
+        super(path);
+        const dot = this.name.lastIndexOf('.');
+        this.basename = dot === -1 ? this.name : this.name.slice(0, dot);
+        this.extension = dot === -1 ? '' : this.name.slice(dot + 1);
+        const dir = path.includes('/') ? path.slice(0, path.lastIndexOf('/')) : '';
+        this.parent = dir ? { path: dir } : null;
     }
+}
+
+export class TFolder extends TAbstractFile {
+    children: any[] = [];
 }
 
 export class DropdownComponent {
@@ -76,16 +111,7 @@ export class Menu {
     addItem = jest.fn(() => ({
         setTitle: jest.fn(),
         setIcon: jest.fn(),
-        onClick: jest.fn()
+        onClick: jest.fn(),
     }));
     showAtMouseEvent = jest.fn();
 }
-
-export const TAbstractFile = class {
-    path: string;
-    name: string;
-    constructor(path: string, name: string) {
-        this.path = path;
-        this.name = name;
-    }
-};

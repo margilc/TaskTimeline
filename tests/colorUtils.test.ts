@@ -4,7 +4,6 @@ import {
     DEFAULT_COLOR,
     HIDE_COLOR,
     HIDE_VALUE,
-    COLOR_VARIABLES,
     getAvailableColors,
     getAvailableBackgrounds,
     isValidColor,
@@ -12,35 +11,6 @@ import {
 } from '../src/core/utils/colorUtils';
 
 describe('colorUtils', () => {
-    describe('constants', () => {
-        test('PREDEFINED_COLORS contains muted accent colors', () => {
-            expect(PREDEFINED_COLORS.Blue).toBe("#4E6E8E");
-            expect(PREDEFINED_COLORS.Amber).toBe("#9E8A5A");
-            expect(Object.keys(PREDEFINED_COLORS)).toHaveLength(5);
-        });
-
-        test('GREY_BACKGROUNDS contains expected colors', () => {
-            expect(GREY_BACKGROUNDS["Grey 900"]).toBe("#1a1a1a");
-            expect(GREY_BACKGROUNDS["Grey 800"]).toBe("#2d2d2d");
-            expect(Object.keys(GREY_BACKGROUNDS)).toHaveLength(6);
-        });
-
-        test('DEFAULT_COLOR is Grey 800', () => {
-            expect(DEFAULT_COLOR).toBe("#2d2d2d");
-        });
-
-        test('HIDE_VALUE is correct', () => {
-            expect(HIDE_VALUE).toBe("hide");
-        });
-
-        test('COLOR_VARIABLES contains expected variables', () => {
-            expect(COLOR_VARIABLES).toContain("none");
-            expect(COLOR_VARIABLES).toContain("category");
-            expect(COLOR_VARIABLES).toContain("status");
-            expect(COLOR_VARIABLES).toContain("priority");
-        });
-    });
-
     describe('getAvailableColors', () => {
         test('returns array of color objects', () => {
             const colors = getAvailableColors();

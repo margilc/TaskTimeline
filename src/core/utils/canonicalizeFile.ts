@@ -41,8 +41,13 @@ export async function canonicalizeFile(
 
     if (!parsed.start) return file;
 
+    // Regex-valid but calendar-invalid dates (e.g. 2026-02-30) parse to an
+    // Invalid Date; renaming would produce "NaNNaNNaN_<id>.md".
+    const startDate = new Date(parsed.start);
+    if (isNaN(startDate.getTime())) return file;
+
     const dir = file.parent?.path ?? '';
-    const expectedDate = formatDateForFilename(new Date(parsed.start));
+    const expectedDate = formatDateForFilename(startDate);
     const expectedId = nameToIdentifier(parsed.name);
     if (!expectedId) return file;
 

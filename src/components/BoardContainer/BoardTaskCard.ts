@@ -263,8 +263,9 @@ async function openHorizontalTaskView(app: App, filePath: string): Promise<void>
  * Inline colors are only applied for an explicit user choice (a color
  * mapping, or a customized default card color) — otherwise they would
  * dead-code the stylesheet's light/dark surface system.
+ * Exported for tests.
  */
-function getTaskColor(task: ITask, appStateManager: AppStateManager): string | null {
+export function getTaskColor(task: ITask, appStateManager: AppStateManager): string | null {
 	const state = appStateManager.getState();
 	const colorVariable = state.persistent.colorVariable;
 	const currentProject = state.persistent.currentProjectName;
