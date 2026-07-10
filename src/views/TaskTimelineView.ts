@@ -76,19 +76,30 @@ export class TaskTimelineView extends ItemView {
         }
     }
 
-    private updateColorVariables(): void {
-        const settings = this.appStateManager.getPersistentState().settings;
-        const defaultColor = settings?.defaultCardColor || DEFAULT_COLOR;
-        const hoverColor = this.lightenColor(defaultColor, 15);
+    private static readonly SURFACE_PROPS = [
+        '--tt-button-bg', '--tt-button-bg-hover',
+        '--tt-surface-1', '--tt-surface-1-hover',
+        '--tt-surface-2', '--tt-surface-2-hover',
+    ];
 
-        // Set CSS variables on the container element
+    private updateColorVariables(): void {
+        const configured = this.appStateManager.getPersistentState().settings?.defaultCardColor;
         const containerEl = this.container as HTMLElement;
-        containerEl.style.setProperty('--tt-button-bg', defaultColor);
-        containerEl.style.setProperty('--tt-button-bg-hover', hoverColor);
-        containerEl.style.setProperty('--tt-surface-1', defaultColor);
-        containerEl.style.setProperty('--tt-surface-1-hover', hoverColor);
-        containerEl.style.setProperty('--tt-surface-2', defaultColor);
-        containerEl.style.setProperty('--tt-surface-2-hover', hoverColor);
+
+        // Only override the stylesheet's light/dark surface system when the
+        // user actually customized the default card color — unconditional
+        // inline variables would dead-code the theme rules.
+        if (!configured || configured === DEFAULT_COLOR) {
+            for (const prop of TaskTimelineView.SURFACE_PROPS) {
+                containerEl.style.removeProperty(prop);
+            }
+            return;
+        }
+
+        const hoverColor = this.lightenColor(configured, 15);
+        for (const prop of TaskTimelineView.SURFACE_PROPS) {
+            containerEl.style.setProperty(prop, prop.endsWith('-hover') ? hoverColor : configured);
+        }
     }
 
     /**

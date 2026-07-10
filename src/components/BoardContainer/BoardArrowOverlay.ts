@@ -61,7 +61,9 @@ export class BoardArrowOverlay {
             const path = document.createElementNS(SVG_NS, 'path');
             path.setAttribute('d', d);
             path.setAttribute('fill', 'none');
-            path.setAttribute('stroke', '#000000');
+            // currentColor: the overlay's CSS color follows the theme, so
+            // arrows stay visible in dark mode (hardcoded black was not).
+            path.setAttribute('stroke', 'currentColor');
             path.setAttribute('stroke-width', '2.5');
             path.setAttribute('stroke-opacity', '0.5');
             path.classList.add('board-arrow-path');
@@ -169,7 +171,7 @@ export class BoardArrowOverlay {
         dot.setAttribute('cx', String(p.x));
         dot.setAttribute('cy', String(p.y));
         dot.setAttribute('r', '4');
-        dot.setAttribute('fill', '#000000');
+        dot.setAttribute('fill', 'currentColor');
         dot.setAttribute('fill-opacity', '0.5');
         dot.classList.add('board-arrow-path');
         this.lineGroup.appendChild(dot);

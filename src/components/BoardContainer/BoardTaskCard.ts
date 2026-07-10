@@ -4,6 +4,7 @@ import { ITask } from "../../interfaces/ITask";
 import { ITaskTimelineSettings } from "../../interfaces/ITaskTimelineSettings";
 import { AppStateManager } from "../../core/AppStateManager";
 import { DEFAULT_COLOR, HIDE_VALUE } from "../../core/utils/colorUtils";
+import { taskFieldValue } from "../../core/utils/groupingUtils";
 import { BoardArrowOverlay } from "./BoardArrowOverlay";
 import { HORIZONTAL_TASK_VIEW_TYPE } from "../../views/viewTypes";
 import { hasHorizontalModeFrontmatter, shouldUseHorizontalTaskView } from "../../core/utils/horizontalTaskUtils";
@@ -49,7 +50,6 @@ export function BoardTaskCard(
 		card.appendChild(progressBar);
 	}
 
-	card.classList.add("hover-enabled");
 	card.setAttribute('data-task-id', task.id || '');
 	card.setAttribute('data-task-start', task.start || '');
 	card.setAttribute('data-task-end', task.end || task.start || '');
@@ -69,7 +69,6 @@ export function BoardTaskCard(
 	// Click to open task file. Opening the file in a side-by-side split reflows the
 	// workspace; snapshot and restore the board's scroll position so the timeline
 	// doesn't drift horizontally when the pane shifts.
-	card.style.cursor = 'pointer';
 	card.addEventListener("click", (e) => {
 		e.stopPropagation();
 		if (!task.filePath) return;
@@ -259,40 +258,26 @@ async function openHorizontalTaskView(app: App, filePath: string): Promise<void>
 	}
 }
 
-function getTaskColor(task: ITask, appStateManager: AppStateManager): string {
+/**
+ * Inline background for a card, or null to let the theme stylesheet decide.
+ * Inline colors are only applied for an explicit user choice (a color
+ * mapping, or a customized default card color) — otherwise they would
+ * dead-code the stylesheet's light/dark surface system.
+ */
+function getTaskColor(task: ITask, appStateManager: AppStateManager): string | null {
 	const state = appStateManager.getState();
 	const colorVariable = state.persistent.colorVariable;
 	const currentProject = state.persistent.currentProjectName;
-	const defaultCardColor = state.persistent.settings?.defaultCardColor || DEFAULT_COLOR;
+	const configured = state.persistent.settings?.defaultCardColor;
+	const userDefault = configured && configured !== DEFAULT_COLOR ? configured : null;
 
-	if (!colorVariable || colorVariable === 'none' || !currentProject) {
-		return defaultCardColor;
-	}
+	if (!colorVariable || colorVariable === 'none' || !currentProject) return userDefault;
 
-	let taskValue: string | undefined;
-	switch (colorVariable) {
-		case 'category':
-			taskValue = task.category;
-			break;
-		case 'status':
-			taskValue = task.status;
-			break;
-		case 'priority':
-			taskValue = task.priority?.toString();
-			break;
-		default:
-			return defaultCardColor;
-	}
+	const taskValue = taskFieldValue(task, colorVariable);
+	if (!taskValue) return userDefault;
 
-	if (!taskValue) return defaultCardColor;
-
-	const colorMappings = state.persistent.colorMappings;
-	if (!colorMappings || !colorMappings[currentProject] || !colorMappings[currentProject][colorVariable]) {
-		return defaultCardColor;
-	}
-
-	const color = colorMappings[currentProject][colorVariable][taskValue];
-	if (!color || color === HIDE_VALUE) return defaultCardColor;
+	const color = state.persistent.colorMappings?.[currentProject]?.[colorVariable]?.[taskValue];
+	if (!color || color === HIDE_VALUE) return userDefault;
 
 	return color;
 }
