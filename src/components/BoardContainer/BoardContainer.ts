@@ -31,7 +31,6 @@ export class BoardContainer {
 
     // Bound handlers for proper event listener cleanup
     private readonly boundRenderBoard = this.renderBoard.bind(this);
-    private readonly boundDebouncedRender: (...args: any[]) => void;
     private readonly boundOnDragEnded = this.onDragEnded.bind(this);
 
     // Set when a render was requested mid-drag; replayed on TaskDragEnded.
@@ -62,8 +61,6 @@ export class BoardContainer {
         this.appStateManager = appStateManager;
         this.isDebugMode = isDebugMode;
 
-        this.boundDebouncedRender = debounce(() => this.renderBoard(), 250);
-
         this.element = document.createElement("div");
         this.element.classList.add("board-container");
 
@@ -89,12 +86,12 @@ export class BoardContainer {
         this.sharedTooltip = this.createSharedTooltip();
         document.body.appendChild(this.sharedTooltip);
 
-        // Event listeners
+        // Event listeners. Grouping and group-order handlers already trigger
+        // a layout update whose UpdateLayoutDone re-renders, so only fold and
+        // color-mapping changes (which don't touch layout) render directly.
         this.appStateManager.getEvents().on(PluginEvent.UpdateLayoutDone, this.boundRenderBoard);
-        this.appStateManager.getEvents().on(PluginEvent.UpdateBoardGroupingDone, this.boundDebouncedRender);
-        this.appStateManager.getEvents().on(PluginEvent.UpdateColorMappingsDone, this.boundDebouncedRender);
-        this.appStateManager.getEvents().on(PluginEvent.UpdateGroupOrderDone, this.boundDebouncedRender);
-        this.appStateManager.getEvents().on(PluginEvent.UpdateGroupFoldDone, this.boundDebouncedRender);
+        this.appStateManager.getEvents().on(PluginEvent.UpdateColorMappingsDone, this.boundRenderBoard);
+        this.appStateManager.getEvents().on(PluginEvent.UpdateGroupFoldDone, this.boundRenderBoard);
         this.appStateManager.getEvents().on(PluginEvent.TaskDragEnded, this.boundOnDragEnded);
 
         // Setup zoom, pan, and scroll persistence handlers
@@ -291,7 +288,14 @@ export class BoardContainer {
 
             if (!boardLayout) {
                 this.clearContainers();
-                this.showEmptyState('Loading board layout...', 'board-loading-state');
+                // No layout with zero tasks is the empty-vault state, not a
+                // loading state — without this an empty project showed
+                // "Loading board layout..." forever.
+                if (currentTasks && currentTasks.length === 0) {
+                    this.showEmptyState('No tasks to display. Create some tasks to see them here!', 'board-no-tasks-state');
+                } else {
+                    this.showEmptyState('Loading board layout...', 'board-loading-state');
+                }
                 return;
             }
 
@@ -357,6 +361,7 @@ export class BoardContainer {
             requestAnimationFrame(() => this.restoreScrollPosition());
 
         } catch (error) {
+            console.error('TaskTimeline: board render failed', error);
             this.clearContainers();
             this.showEmptyState('Error loading board. Please try refreshing.', 'board-error-state');
         }
@@ -433,14 +438,16 @@ export class BoardContainer {
                     continue;
                 }
 
-                // Compact y positions to eliminate gaps from hidden tasks
+                // Compact y positions to eliminate gaps from hidden tasks.
+                // Work on shallow copies: the task objects are shared with
+                // volatile.boardLayout AND the layout cache, and mutating
+                // their y corrupts row assignments on the next render
+                // (overlapping cards after hide/unhide via color mappings).
                 const uniqueYs = [...new Set(validTasks.map(t => t.y ?? 0))].sort((a, b) => a - b);
                 const yMap = new Map(uniqueYs.map((y, i) => [y, i]));
-                for (const task of validTasks) {
-                    task.y = yMap.get(task.y ?? 0) ?? 0;
-                }
+                const displayTasks = validTasks.map(t => ({ ...t, y: yMap.get(t.y ?? 0) ?? 0 }));
 
-                const maxY = validTasks.reduce((max: number, task: ITask) => Math.max(max, task.y ?? -1), -1);
+                const maxY = displayTasks.reduce((max: number, task: ITask) => Math.max(max, task.y ?? -1), -1);
                 const gridHeight = isFolded ? 1 : Math.max(1, maxY + 1);
 
                 const gridConfig = {
@@ -452,11 +459,11 @@ export class BoardContainer {
 
                 const existingGroup = this.groupElements.get(groupName);
                 if (existingGroup) {
-                    const newGroupEl = BoardTaskGroup(groupName, validTasks, gridConfig, settings, this.appStateManager, this.app, this.isDebugMode, this.sharedTooltip, groupIdx, totalGroups, isFolded, this.arrowOverlay ?? undefined);
+                    const newGroupEl = BoardTaskGroup(groupName, displayTasks, gridConfig, settings, this.appStateManager, this.app, this.isDebugMode, this.sharedTooltip, groupIdx, totalGroups, isFolded, this.arrowOverlay ?? undefined);
                     existingGroup.replaceWith(newGroupEl);
                     this.groupElements.set(groupName, newGroupEl);
                 } else {
-                    const taskGroupEl = BoardTaskGroup(groupName, validTasks, gridConfig, settings, this.appStateManager, this.app, this.isDebugMode, this.sharedTooltip, groupIdx, totalGroups, isFolded, this.arrowOverlay ?? undefined);
+                    const taskGroupEl = BoardTaskGroup(groupName, displayTasks, gridConfig, settings, this.appStateManager, this.app, this.isDebugMode, this.sharedTooltip, groupIdx, totalGroups, isFolded, this.arrowOverlay ?? undefined);
                     this.groupsContainer!.appendChild(taskGroupEl);
                     this.groupElements.set(groupName, taskGroupEl);
                 }
@@ -502,10 +509,8 @@ export class BoardContainer {
             this.cardInteraction = null;
         }
         this.appStateManager.getEvents().off(PluginEvent.UpdateLayoutDone, this.boundRenderBoard);
-        this.appStateManager.getEvents().off(PluginEvent.UpdateBoardGroupingDone, this.boundDebouncedRender);
-        this.appStateManager.getEvents().off(PluginEvent.UpdateColorMappingsDone, this.boundDebouncedRender);
-        this.appStateManager.getEvents().off(PluginEvent.UpdateGroupOrderDone, this.boundDebouncedRender);
-        this.appStateManager.getEvents().off(PluginEvent.UpdateGroupFoldDone, this.boundDebouncedRender);
+        this.appStateManager.getEvents().off(PluginEvent.UpdateColorMappingsDone, this.boundRenderBoard);
+        this.appStateManager.getEvents().off(PluginEvent.UpdateGroupFoldDone, this.boundRenderBoard);
 
         if (this.zoomCleanup) {
             this.zoomCleanup();

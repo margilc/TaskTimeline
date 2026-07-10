@@ -3,6 +3,22 @@ import { ITask } from '../interfaces/ITask';
 import { parseTaskFromContent } from './utils/taskUtils';
 import { isPathIgnored } from './utils/ignoreUtils';
 
+/** Equality over everything parseTaskFromContent derives (id/filePath are
+ *  fixed per path, layout fields are never stored on indexed tasks). */
+function taskContentEquals(a: ITask, b: ITask): boolean {
+    return a.name === b.name
+        && a.start === b.start
+        && a.end === b.end
+        && a.category === b.category
+        && a.status === b.status
+        && a.priority === b.priority
+        && a.content === b.content
+        && a.horizontalMode === b.horizontalMode
+        && a.totalSubtasks === b.totalSubtasks
+        && a.completedSubtasks === b.completedSubtasks
+        && (a.linkedTaskIds ?? []).join('\n') === (b.linkedTaskIds ?? []).join('\n');
+}
+
 /**
  * TaskIndex maintains an incremental index of tasks by file path.
  * Instead of scanning all files on every change, it updates only the affected files.
@@ -114,13 +130,15 @@ export class TaskIndex {
 
     /**
      * Handle file modification - reparse the task.
+     * Returns whether the indexed task actually changed, so callers can skip
+     * the rebuild pipeline for modify events that alter nothing (e.g. the
+     * echo of the plugin's own frontmatter write after an optimistic update).
      */
     async handleFileModify(file: TAbstractFile): Promise<boolean> {
         if (!this.isRelevantFile(file)) return false;
 
         if (file instanceof TFile && file.extension === 'md') {
-            await this.indexFile(file);
-            return true;
+            return this.indexFile(file);
         }
         return false;
     }
@@ -176,16 +194,19 @@ export class TaskIndex {
     }
 
     /**
-     * Index a single file.
+     * Index a single file. Returns whether the stored task changed.
      */
-    private async indexFile(file: TFile): Promise<void> {
+    private async indexFile(file: TFile): Promise<boolean> {
         try {
             const content = await this.app.vault.read(file);
             const task = parseTaskFromContent(content, file.path);
+            const prev = this.tasksByPath.get(file.path);
+            if (prev && taskContentEquals(prev, task)) return false;
             this.tasksByPath.set(file.path, task);
+            return true;
         } catch (error) {
             // If parsing fails, remove from index to avoid stale data
-            this.tasksByPath.delete(file.path);
+            return this.tasksByPath.delete(file.path);
         }
     }
 

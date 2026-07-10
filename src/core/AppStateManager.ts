@@ -55,6 +55,7 @@ export class AppStateManager extends Component {
     // Event coalescing state
     private pendingLayoutUpdate = false;
     private rafId: number | null = null;
+    private persistTimer: number | null = null;
 
     // Per-file mutex for write operations. Drag/resize commits, modify-event
     // canonicalization, and rename-event name-sync all acquire withFileLock
@@ -163,9 +164,14 @@ export class AppStateManager extends Component {
     private async handleFileModify(file: TAbstractFile): Promise<void> {
         if (!this.initialized) return;
         if (this.isRelevantFile(file) && file instanceof TFile && file.extension === 'md') {
+            let changed = true;
             if (this.taskIndex) {
-                await this.taskIndex.handleFileModify(file);
+                changed = await this.taskIndex.handleFileModify(file);
             }
+            // A modify whose parsed task is unchanged (typically the echo of
+            // our own frontmatter write after an optimistic update) needs no
+            // rebuild, and the filename alignment can't have changed either.
+            if (!changed) return;
             this.handleFileModifyWithRenaming(file);
         }
     }
@@ -417,8 +423,11 @@ export class AppStateManager extends Component {
             this.state.persistent.zoomLevel = { modeIndex: data.modeIndex, columnWidth: data.columnWidth };
             this.state.persistent.currentTimeUnit = timeUnitFromModeIndex(data.modeIndex);
 
-            await this.saveData(this.state.persistent);
-            clearLayoutCache();
+            // Zoom fires once per wheel tick: persist trailing-debounced, and
+            // leave the layout cache alone — the layout result contains no
+            // pixel widths, and a time-unit change produces a different cache
+            // key anyway, so same-unit ticks are pure cache hits.
+            this.schedulePersist();
 
             this.events.trigger(PluginEvent.UpdateZoomDone);
             this.events.trigger(PluginEvent.AppStateUpdated, this.state);
@@ -427,6 +436,14 @@ export class AppStateManager extends Component {
         } catch (error) {
             console.error('TaskTimeline: Failed to update zoom', error);
         }
+    }
+
+    private schedulePersist(): void {
+        if (this.persistTimer !== null) window.clearTimeout(this.persistTimer);
+        this.persistTimer = window.setTimeout(() => {
+            this.persistTimer = null;
+            void this.saveData(this.state.persistent);
+        }, 500);
     }
 
     private async handleUpdateGroupOrderPending(data: { groupName: string; direction: 'up' | 'down' }): Promise<void> {
@@ -750,6 +767,11 @@ export class AppStateManager extends Component {
     }
 
     public destroy(): void {
+        if (this.persistTimer !== null) {
+            window.clearTimeout(this.persistTimer);
+            this.persistTimer = null;
+            void this.saveData(this.state.persistent);
+        }
         if (this.rafId !== null) {
             cancelAnimationFrame(this.rafId);
             this.rafId = null;
