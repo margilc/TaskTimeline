@@ -12,16 +12,11 @@ export function BoardTaskCard(
 	task: ITask,
 	settings: ITaskTimelineSettings,
 	appStateManager: AppStateManager,
-	isDebugMode = false,
 	sharedTooltip: HTMLElement,
 	arrowOverlay?: BoardArrowOverlay
 ): HTMLElement {
 	const card = document.createElement("div");
 	card.className = "task-timeline-task";
-
-	if (isDebugMode) {
-		card.classList.add("debug-cell");
-	}
 
 	// Apply color based on current color variable or user's default card color
 	const taskColor = getTaskColor(task, appStateManager);
@@ -93,7 +88,7 @@ export function BoardTaskCard(
 
 	// Shared tooltip
 	card.addEventListener("mouseenter", (e) => {
-		updateSharedTooltipContent(sharedTooltip, task, isDebugMode);
+		updateSharedTooltipContent(sharedTooltip, task);
 		positionTooltipAtMouse(e, sharedTooltip);
 	});
 
@@ -147,7 +142,7 @@ function getContrastingTextColor(color: string): string | null {
 	return L < 0.45 ? '#ffffff' : '#111111';
 }
 
-function updateSharedTooltipContent(tooltip: HTMLElement, task: ITask, isDebugMode: boolean): void {
+function updateSharedTooltipContent(tooltip: HTMLElement, task: ITask): void {
 	tooltip.innerHTML = '';
 
 	const content = document.createElement("div");
@@ -181,12 +176,6 @@ function updateSharedTooltipContent(tooltip: HTMLElement, task: ITask, isDebugMo
 	addRow("name", task.name || "Unnamed Task");
 	addRow("start", formatDate(task.start));
 	addRow("end", formatDate(task.end));
-
-	if (isDebugMode) {
-		addRow("x (layout)", `${task.xStart ?? 1}-${task.xEnd ?? task.xStart ?? 1}`);
-		addRow("y (layout)", task.y ?? 0);
-	}
-
 	addRow("category", task.category);
 	addRow("status", task.status);
 	addRow("priority", task.priority ?? "N/A");

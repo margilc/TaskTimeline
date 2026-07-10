@@ -18,26 +18,6 @@ export function addTime(date: Date, amount: number, unit: TimeUnit): Date {
 	return result;
 }
 
-export function formatDateYYYYMMDD(date: Date): string {
-  if (!date || !(date instanceof Date) || isNaN(date.getTime())) {
-    const today = new Date();
-    const year = today.getFullYear();
-    const month = (today.getMonth() + 1).toString().padStart(2, '0');
-    const day = today.getDate().toString().padStart(2, '0');
-    return `${year}-${month}-${day}`;
-  }
-  
-  const year = date.getFullYear();
-  const month = (date.getMonth() + 1).toString().padStart(2, '0');
-  const day = date.getDate().toString().padStart(2, '0');
-  
-  return `${year}-${month}-${day}`;
-}
-
-export function diffDays(d1: Date, d2: Date): number {
-  return Math.floor((d1.getTime() - d2.getTime()) / (1000 * 60 * 60 * 24));
-}
-
 export function normalizeDate(d: Date): Date {
   const year = d.getUTCFullYear();
   const month = d.getUTCMonth();
@@ -74,68 +54,6 @@ export function addDaysISO(dateStr: string, days: number): string {
   return d.toISOString().slice(0, 10);
 }
 
-export function getMonthYear(d: Date): string {
-  return `${d.getFullYear()}-${d.getMonth()}`;
-}
-
-export function isDateInRange(date: Date, start: Date, end: Date, timeUnit: TimeUnit): boolean {
-  // Handle invalid inputs
-  if (!date || !start || !end) {
-    return false;
-  }
-  
-  try {
-    // Ensure we're working with Date objects
-    const d = date instanceof Date ? date : new Date(date);
-    const s = start instanceof Date ? start : new Date(start);
-    const e = end instanceof Date ? end : new Date(end);
-    
-    // Check for invalid dates
-    if (isNaN(d.getTime()) || isNaN(s.getTime()) || isNaN(e.getTime())) {
-      return false;
-    }
-    
-    const normalizedDate = normalizeDate(d);
-    let normalizedStart = normalizeDate(s);
-    let normalizedEnd = normalizeDate(e);
-    
-    // If end date is before start date, swap them for the comparison
-    if (normalizedEnd < normalizedStart) {
-      [normalizedStart, normalizedEnd] = [normalizedEnd, normalizedStart];
-    }
-    
-    if (timeUnit === TimeUnit.DAY) {
-      // For day view, check if the date is between start and end (inclusive)
-      return normalizedDate >= normalizedStart && normalizedDate <= normalizedEnd;
-    } else if (timeUnit === TimeUnit.WEEK) {
-      // For week view, we need to compare the actual dates rather than week strings
-      // This fix handles tasks that span multiple weeks
-      
-      // Get start of week for each date
-      const dayOfWeek = normalizedDate.getDay() || 7; // Convert Sunday (0) to 7
-      const startOfWeekDate = new Date(normalizedDate);
-      startOfWeekDate.setDate(normalizedDate.getDate() - dayOfWeek + 1); // Monday is 1, so +1
-      
-      // For tasks that span multiple weeks, we need to check if the date's week
-      // is anywhere between the start and end dates of the task
-      return startOfWeekDate >= normalizedStart && startOfWeekDate <= normalizedEnd;
-    } else if (timeUnit === TimeUnit.MONTH) {
-      // For month view, get the month and year
-      const dateMonthYear = getMonthYear(normalizedDate);
-      const startMonthYear = getMonthYear(normalizedStart);
-      const endMonthYear = getMonthYear(normalizedEnd);
-      
-      // Check if the date's month-year is between start and end month-years
-      return dateMonthYear >= startMonthYear && dateMonthYear <= endMonthYear;
-    }
-  } catch (error) {
-    return false;
-  }
-  
-  return false;
-}
-
-
 // Display formatting reads dates with UTC accessors: task/column dates are
 // UTC midnights, and local accessors would render the previous day/week/month
 // for users west of UTC.
@@ -161,8 +79,5 @@ export function formatWeekWithMonth(date: Date, monthDate?: Date): string {
   return year + " - W" + (week < 10 ? "0" + week : week) + " - " + monthAbbr;
 }
 
-export function diffMonths(a: Date, b: Date): number {
-  return (a.getFullYear() - b.getFullYear()) * 12 + (a.getMonth() - b.getMonth());
-}
 
 

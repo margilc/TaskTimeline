@@ -520,40 +520,6 @@ body.theme-dark .tt-dropdown-trigger {
   min-width: 200px;
 }
 
-/* High-contrast dump-state button */
-.tt-debug-dump-btn {
-  background-color: var(--background-modifier-error, #e74c3c);
-  color: var(--text-on-accent, #ffffff);
-  border: none;
-  padding: 4px 8px;
-  cursor: pointer;
-  font-size: var(--tt-font-size-caption);
-  font-weight: var(--tt-font-weight-label);
-  line-height: var(--tt-line-height-normal);
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: var(--border-radius);
-  box-shadow: var(--tt-shadow-1);
-}
-
-.tt-debug-dump-btn:hover {
-  filter: brightness(1.05);
-}
-
-/* Toasts / notifications */
-.tt-toast {
-  border: 2px solid var(--tt-border);
-  box-shadow: var(--tt-shadow-1);
-  font-size: var(--tt-font-size-label);
-  line-height: var(--tt-line-height-normal);
-}
-
-.tt-toast--success {
-  background-color: var(--background-modifier-success, #27ae60);
-  color: var(--text-on-accent, #ffffff);
-}
-
 /* Menu styling */
 .menu, 
 .dropdown-menu, 
@@ -805,13 +771,6 @@ body.theme-dark .task-timeline-task:hover {
 .tooltip-action:hover {
   color: var(--color-grey-700);
   text-decoration: underline;
-}
-
-/* =================
-   DEBUG COMPONENTS
-   ================= */
-.debug-cell {
-  outline: 2px solid red;
 }
 
 h3 {

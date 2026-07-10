@@ -11,9 +11,9 @@ import { TaskCreationHelper } from "../../utils/taskCreationHelper";
  * - 
  */
 
-export function BoardTimelineHeader(boardLayout: any, appStateManager: AppStateManager, app: App, groupingSelectionEl: HTMLElement, columnWidth?: number, isDebugMode = false): HTMLElement {
+export function BoardTimelineHeader(boardLayout: any, appStateManager: AppStateManager, app: App, groupingSelectionEl: HTMLElement, columnWidth?: number): HTMLElement {
   const container = document.createElement("div");
-  container.className = isDebugMode ? "debug-board-column-headers" : "board-column-headers";
+  container.className = "board-column-headers";
   container.style.display = "grid";
   
   // Use provided columnWidth or default to 100px
@@ -30,9 +30,6 @@ export function BoardTimelineHeader(boardLayout: any, appStateManager: AppStateM
   // owned by BoardContainer and re-attached on every header rebuild.
   groupingSelectionEl.style.gridColumn = "1";
   groupingSelectionEl.style.gridRow = "1";
-  if (isDebugMode) {
-    groupingSelectionEl.classList.add("debug-cell");
-  }
   container.appendChild(groupingSelectionEl);
 
   // Create task creation helper
@@ -68,10 +65,7 @@ export function BoardTimelineHeader(boardLayout: any, appStateManager: AppStateM
     cellEl.addEventListener('click', () => {
       taskCreationHelper.openTaskModalForDate(header.date);
     });
-    
-    if (isDebugMode) {
-      cellEl.classList.add("debug-cell");
-    }
+
     container.appendChild(cellEl);
   });
   return container;

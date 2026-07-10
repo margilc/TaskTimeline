@@ -5,14 +5,11 @@ export interface IPersistentState {
     settings?: ITaskTimelineSettings;
     // Navigation state
     currentProjectName?: string;
-    lastOpenedDate?: string;
     // Color mapping state
     colorVariable?: string;
     colorMappings?: Record<string, Record<string, Record<string, string>>>;
     // View state
     currentTimeUnit?: string;
-    // Timeline state
-    currentDate?: string;
     // Board state
     boardGrouping?: {
         groupBy: string;

@@ -3,9 +3,8 @@ import { ITask } from '../interfaces/ITask';
 import { PluginEvent } from '../enums/events';
 import { Plugin, App, TAbstractFile, TFile, TFolder, Component, Events, Notice } from 'obsidian';
 import { updateProjects } from './update/updateProjects';
-import { updateTasks, updateTasksFromIndex } from './update/updateTasks';
+import { updateTasksFromIndex } from './update/updateTasks';
 import { updateColorMappings, updateColorVariable } from './update/updateColorMappings';
-import { updateCurrentDate } from './update/updateCurrentDate';
 import { updateLayout, clearLayoutCache } from './update/updateLayout';
 import { updateBoardGrouping } from './update/updateBoardGrouping';
 import { updateGroupFold } from './update/updateGroupFold';
@@ -102,7 +101,6 @@ export class AppStateManager extends Component {
 
         this.events.on(PluginEvent.UpdateTasksPending, this.handleUpdateTasksPending.bind(this));
         this.events.on(PluginEvent.UpdateColorMappingsPending, this.handleUpdateColorMappingsPending.bind(this));
-        this.events.on(PluginEvent.UpdateCurrentDatePending, this.handleUpdateCurrentDatePending.bind(this));
         this.events.on(PluginEvent.UpdateLayoutPending, this.handleUpdateLayoutPending.bind(this));
         this.events.on(PluginEvent.UpdateBoardGroupingPending, this.handleUpdateBoardGroupingPending.bind(this));
         this.events.on(PluginEvent.UpdateSettingsPending, this.handleUpdateSettingsPending.bind(this));
@@ -257,12 +255,10 @@ export class AppStateManager extends Component {
 
     private async handleUpdateTasksPending(): Promise<void> {
         try {
-            let result;
-            if (this.taskIndex && this.taskIndex.isInitialized()) {
-                result = updateTasksFromIndex(this.taskIndex, this.state.volatile, this.state.persistent);
-            } else {
-                result = await updateTasks(this.app, this.state.volatile, this.state.persistent);
-            }
+            // Vault events are gated behind `initialized`, so the index is
+            // always ready here; initialize() itself loads tasks directly.
+            if (!this.taskIndex || !this.taskIndex.isInitialized()) return;
+            const result = updateTasksFromIndex(this.taskIndex, this.state.volatile, this.state.persistent);
 
             this.state.volatile = result.volatile;
             this.state.persistent = result.persistent;
@@ -312,22 +308,6 @@ export class AppStateManager extends Component {
             this.events.trigger(PluginEvent.AppStateUpdated, this.state);
         } catch (error) {
             console.error('TaskTimeline: Failed to update color mappings', error);
-        }
-    }
-
-    private async handleUpdateCurrentDatePending(date: string): Promise<void> {
-        try {
-            const result = await updateCurrentDate(this.app, this.state.persistent, this.state.volatile, date);
-
-            this.state.persistent = result.persistent;
-            this.state.volatile = result.volatile;
-
-            await this.saveData(this.state.persistent);
-
-            this.events.trigger(PluginEvent.UpdateCurrentDateDone);
-            this.events.trigger(PluginEvent.AppStateUpdated, this.state);
-        } catch (error) {
-            console.error('TaskTimeline: Failed to update current date', error);
         }
     }
 
@@ -511,12 +491,10 @@ export class AppStateManager extends Component {
         const defaultPersistent: IPersistentState = {
             currentProjectName: "All Projects",
             settings: { ...DEFAULT_TASK_TIMELINE_SETTINGS },
-            lastOpenedDate: new Date().toISOString(),
             colorVariable: "none",
             colorMappings: {},
             foldedGroups: {},
             currentTimeUnit: "day",
-            currentDate: new Date().toISOString(),
             zoomLevel: { modeIndex: 0, columnWidth: 90 },
             scrollPosition: { left: 0, top: 0 }
         };
@@ -626,24 +604,6 @@ export class AppStateManager extends Component {
         this.events.trigger(PluginEvent.AppStateUpdated, this.state);
     }
 
-    public async updatePersistentState(updates: Partial<IPersistentState>): Promise<void> {
-        const oldTaskDirectory = this.state.persistent.settings?.taskDirectory;
-        this.state.persistent = { ...this.state.persistent, ...updates };
-
-        const newTaskDirectory = this.state.persistent.settings?.taskDirectory;
-        if (oldTaskDirectory !== newTaskDirectory) {
-            this.handleUpdateProjectsPending({ resetMissingProject: true });
-        }
-
-        await this.saveData(this.state.persistent);
-        this.events.trigger(PluginEvent.AppStateUpdated, this.state);
-    }
-
-    public updateVolatileState(updateFn: (currentState: IVolatileState) => IVolatileState): void {
-        this.state.volatile = updateFn(this.state.volatile);
-        this.events.trigger(PluginEvent.AppStateUpdated, this.state);
-    }
-
     public getAvailableLevels(variable: string): string[] {
         if (variable === 'none') return [];
 
@@ -666,14 +626,6 @@ export class AppStateManager extends Component {
             return DEFAULT_COLOR;
         }
         return mappings[projectId][variable][level] || DEFAULT_COLOR;
-    }
-
-    public getCurrentTimeUnit(): string {
-        return this.state.persistent.currentTimeUnit || "day";
-    }
-
-    public getCurrentDate(): string {
-        return new Date().toISOString();
     }
 
     public async saveScrollPosition(left: number, top: number): Promise<void> {

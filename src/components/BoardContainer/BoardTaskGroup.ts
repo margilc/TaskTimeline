@@ -21,7 +21,6 @@ export function BoardTaskGroup(
 	settings: ITaskTimelineSettings,
 	appStateManager: AppStateManager,
 	app: App,
-	isDebugMode = false,
 	sharedTooltip: HTMLElement,
 	groupIndex: number,
 	totalGroups: number,
@@ -29,9 +28,7 @@ export function BoardTaskGroup(
 	arrowOverlay?: BoardArrowOverlay
 ): HTMLElement {
 	const container = document.createElement("div");
-	container.className = isDebugMode
-		? "debug-board-task-group"
-		: "board-task-group";
+	container.className = "board-task-group";
 	if (isFolded) {
 		container.classList.add("is-folded");
 	}
@@ -145,16 +142,12 @@ export function BoardTaskGroup(
 	header.style.gridColumn = "1";
 	header.style.gridRow = `1 / span ${actualGridHeight}`;
 
-	if (isDebugMode) {
-		header.classList.add("debug-cell");
-	}
-
 	container.appendChild(header);
 
 	tasks.forEach((task) => {
 		const card = isFolded
 			? createFoldedTaskIndicator(task, settings)
-			: BoardTaskCard(task, settings, appStateManager, isDebugMode, sharedTooltip, arrowOverlay);
+			: BoardTaskCard(task, settings, appStateManager, sharedTooltip, arrowOverlay);
 
 		const startX = (task.xStart ?? 1);
 		const endX = (task.xEnd ?? startX);

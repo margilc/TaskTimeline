@@ -21,7 +21,6 @@ export class BoardContainer {
     private app: App;
     private appStateManager: AppStateManager;
     private contentElement: HTMLElement;
-    private isDebugMode: boolean;
     private sharedTooltip: HTMLElement;
 
     // Stable containers for incremental DOM updates
@@ -56,10 +55,9 @@ export class BoardContainer {
     // Drag/drop + resize controller
     private cardInteraction: CardInteractionController | null = null;
 
-    constructor(app: App, appStateManager: AppStateManager, isDebugMode = false) {
+    constructor(app: App, appStateManager: AppStateManager) {
         this.app = app;
         this.appStateManager = appStateManager;
-        this.isDebugMode = isDebugMode;
 
         this.element = document.createElement("div");
         this.element.classList.add("board-container");
@@ -404,7 +402,7 @@ export class BoardContainer {
     private updateTimelineHeader(boardLayout: any, columnWidth: number): void {
         if (!this.timelineHeaderContainer || !this.groupingSelection) return;
         this.timelineHeaderContainer.innerHTML = '';
-        const timelineHeaderEl = BoardTimelineHeader(boardLayout, this.appStateManager, this.app, this.groupingSelection.getElement(), columnWidth, this.isDebugMode);
+        const timelineHeaderEl = BoardTimelineHeader(boardLayout, this.appStateManager, this.app, this.groupingSelection.getElement(), columnWidth);
         this.timelineHeaderContainer.appendChild(timelineHeaderEl);
     }
 
@@ -459,11 +457,11 @@ export class BoardContainer {
 
                 const existingGroup = this.groupElements.get(groupName);
                 if (existingGroup) {
-                    const newGroupEl = BoardTaskGroup(groupName, displayTasks, gridConfig, settings, this.appStateManager, this.app, this.isDebugMode, this.sharedTooltip, groupIdx, totalGroups, isFolded, this.arrowOverlay ?? undefined);
+                    const newGroupEl = BoardTaskGroup(groupName, displayTasks, gridConfig, settings, this.appStateManager, this.app, this.sharedTooltip, groupIdx, totalGroups, isFolded, this.arrowOverlay ?? undefined);
                     existingGroup.replaceWith(newGroupEl);
                     this.groupElements.set(groupName, newGroupEl);
                 } else {
-                    const taskGroupEl = BoardTaskGroup(groupName, displayTasks, gridConfig, settings, this.appStateManager, this.app, this.isDebugMode, this.sharedTooltip, groupIdx, totalGroups, isFolded, this.arrowOverlay ?? undefined);
+                    const taskGroupEl = BoardTaskGroup(groupName, displayTasks, gridConfig, settings, this.appStateManager, this.app, this.sharedTooltip, groupIdx, totalGroups, isFolded, this.arrowOverlay ?? undefined);
                     this.groupsContainer!.appendChild(taskGroupEl);
                     this.groupElements.set(groupName, taskGroupEl);
                 }

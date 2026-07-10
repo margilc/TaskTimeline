@@ -41,7 +41,7 @@ export class TaskTimelineView extends ItemView {
         this.navBar = new NavBar(this.app, this.appStateManager);
         this.container.appendChild(this.navBar.getElement());
 
-        this.boardContainer = new BoardContainer(this.app, this.appStateManager, false);
+        this.boardContainer = new BoardContainer(this.app, this.appStateManager);
         this.container.appendChild(this.boardContainer.element);
 
         // Ctrl/Cmd+Z = undo, Ctrl/Cmd+Shift+Z (or Ctrl+Y) = redo for
