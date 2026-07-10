@@ -10,8 +10,8 @@
 		"check": "tsc --noEmit",
 		"test": "npm run check && jest"
 	},
-	"keywords": [],
-	"author": "Your Name",
+	"keywords": ["obsidian", "obsidian-plugin", "tasks", "timeline", "project-management"],
+	"author": "Mario Gilcher",
 	"license": "MIT",
 	"devDependencies": {
 		"@types/jest": "^29.5.14",

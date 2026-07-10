@@ -1,221 +1,97 @@
 # TaskTimeline
 
-Transform your task-based markdown files into an interactive, timeline-based board view for project management in Obsidian.
+Transform task-based markdown files into an interactive timeline board for project management in Obsidian.
 
 ## Overview
 
-TaskTimeline is an Obsidian plugin that revolutionizes task management by visualizing markdown-based tasks on an interactive timeline board. It seamlessly integrates with Obsidian's note-taking workflow, offering a powerful yet intuitive way to plan, track, and manage projects directly within your vault.
+TaskTimeline renders the markdown task files in your vault as cards on a scrollable, zoomable timeline board. Tasks stay plain markdown — the board is just a view. Edit a file and the board updates; drag a card and the file's frontmatter updates.
 
-## Key Features
+## Features
 
-- **Timeline-Based Visualization**: Tasks are displayed on a board across days, weeks, or months
-- **Multiple Time Views**: Switch between Day, Week, and Month views for different perspectives
-- **Markdown-Powered**: Leverages the simplicity and flexibility of markdown for task creation
-- **Frontmatter Integration**: Uses frontmatter for rich metadata like dates, categories, and priorities
-- **Progress Tracking**: Visualizes task completion through automatic parsing of markdown checkboxes
-- **Color-Coded Organization**: Customize colors based on category, status, or priority
-- **Project Management**: Organize tasks into project folders for better structure
-- **Task Creation**: Create new tasks directly from the timeline interface
-- **File Integration**: Click task cards to open and edit the underlying markdown files
-- **Real-time Updates**: Automatically updates when task files are modified in the vault
+- **Timeline board** with day, week, and month zoom levels — scroll-wheel zoom is cursor-anchored and transitions smoothly between time units
+- **Drag & drop**: move a card horizontally to shift its dates (duration is preserved, even on week/month zoom) or vertically to change its group; drag the card edges to resize start/end
+- **Undo/redo** for drag/resize/move changes (Ctrl/Cmd+Z, Ctrl/Cmd+Shift+Z or Ctrl+Y), also available as commands
+- **Grouping** by status, category, or priority, with per-project group ordering, fold/unfold, and reordering from the group headers
+- **Color mappings**: per-project colors by category/status/priority, including a "hide" value to filter tasks off the board; optional custom default card color
+- **Progress bars** from markdown checkboxes in the task body
+- **Task links**: `[[wikilinks]]` between task files draw arrows on hover
+- **Quick creation**: click a date column header or group header to open the New Task modal pre-filled; templates from your templates folder can pre-fill fields and body
+- **Horizontal task view**: files with `horizontal_mode: true` open in a column-per-section editing view with inline markdown editing, checkbox toggling, and `[[link]]`/`#tag` autocompletion
+- **Filename sync**: files are kept in the `YYYYMMDD_IDENTIFIER.md` convention — change a task's `start` or `name` and the file is renamed to match (collisions get an `_N` suffix)
+- **Ignore list**: exclude folders/files from the board with glob patterns
+- **Right-click-drag panning**, sticky header row and group column, light/dark theme aware
 
-## Screenshots
+## Task file format
 
-### Main Timeline View
-*Interactive timeline board showing tasks across multiple days with color coding by category*
-
-![Timeline Board](https://via.placeholder.com/800x400?text=TaskTimeline+Board+View)
-
-### Navigation Controls
-*Project selection, view switching, and color customization controls*
-
-![Navigation Controls](https://via.placeholder.com/800x200?text=Navigation+Controls)
-
-### Task Creation
-*Simple modal for creating new tasks with frontmatter metadata*
-
-![Task Creation](https://via.placeholder.com/400x300?text=New+Task+Modal)
-
-## Installation
-
-### From Obsidian Community Plugins (Recommended)
-
-1. Open Obsidian Settings
-2. Navigate to Community plugins
-3. Browse and search for "TaskTimeline"
-4. Click Install and then Enable
-
-### Manual Installation
-
-1. Download the latest release from the [GitHub releases page](https://github.com/margilc/TaskTimeline/releases)
-2. Extract the files to your vault's `.obsidian/plugins/task-timeline/` directory
-3. Reload Obsidian
-4. Enable the plugin in Settings → Community plugins
-
-## Usage
-
-### Creating Task Files
-
-Tasks are markdown files with frontmatter metadata:
+Tasks are markdown files named `YYYYMMDD_IDENTIFIER.md` (e.g. `20260115_DevelopLoginModule.md`):
 
 ```yaml
 ---
-name: "Develop Login Module"
-start: 2024-01-15
-end: 2024-02-05
-priority: 1
-projectId: "WebApp"
-responsible: "John Doe"
+name: Develop Login Module
+start: 2026-01-15
+end: 2026-02-05
+category: development
+status: In Progress
+priority: 2
 ---
 
 # Develop Login Module
 
-This task involves creating the user authentication system.
-
 ## Subtasks
-
 - [x] Design user interface
 - [ ] Implement backend authentication
-- [ ] Add password validation
-- [ ] Write unit tests
 ```
 
-### Task File Requirements
+- **Required**: `name`, `start` (YYYY-MM-DD)
+- **Optional**: `end` (YYYY-MM-DD, may equal `start`), `category`, `status`, `priority` (1–5, default 5), `horizontal_mode: true`
+- **Progress** is parsed from checkboxes (`- [ ]`, `* [x]`, `+ [ ]`, `1. [ ]`) outside code blocks
 
-- **Filename format**: `YYYYMMDD_IDENTIFIER.md` (e.g., `20240115_DevelopLoginModule.md`)
-- **Required frontmatter**: `name` and `start` date
-- **Optional frontmatter**: `end`, `category`, `status`, `priority` (1-5)
-- **Progress tracking**: Uses markdown checkboxes in the content
+## Projects
 
-### Timeline Views
+Folders directly under the task directory are projects:
 
-1. **Day View**: Individual day columns for detailed daily planning
-2. **Week View**: Daily columns for weekly overview  
-3. **Month View**: Daily columns for monthly planning
-
-### Customization
-
-Access plugin settings through:
-- Obsidian Settings → Plugin Options → TaskTimeline
-- Configure task directory, color mappings, and display preferences
-- Set default views and card display options
-
-## Configuration
-
-### Settings Options
-
-- **Task Directory**: Specify where your task files are stored (default: "Taskdown")
-- **Open by Default**: Automatically open timeline on startup
-- **Open in New Pane**: Open timeline in a separate pane
-- **Number of Columns**: Customize timeline width (3-10 columns)
-- **Timeline Date Range**: Set global start and end dates for the timeline
-
-### Project Organization
-
-Organize tasks by creating project folders under your task directory:
-
-```yaml
----
-name: "Database Design"
-start: 2024-01-20
-projectId: "E-commerce Platform"
----
+```
+Taskdown/
+├── WebApp/
+│   ├── 20260115_DevelopLoginModule.md
+│   └── 20260120_DatabaseDesign.md
+└── Marketing/
+    └── 20260201_LaunchPlan.md
 ```
 
-## Troubleshooting
+The project picker in the nav bar switches between them (or shows all).
 
-### Common Issues
+## Installation
 
-**Tasks not appearing on the board:**
-- Verify task files have required `name` and `start` frontmatter
-- Check that files are in the configured task directory
-- Ensure dates are in YYYY-MM-DD format
+1. Download `main.js`, `manifest.json`, and `styles.css` from the [latest release](https://github.com/margilc/TaskTimeline/releases)
+2. Copy them into `<vault>/.obsidian/plugins/task-timeline/`
+3. Reload Obsidian and enable the plugin in Settings → Community plugins
 
-**Performance issues with many tasks:**
-- The plugin is optimized for large task sets with intelligent caching
-- Consider organizing tasks into subdirectories by project or time period
+Open the board via the calendar-clock ribbon icon or the "Open Task Timeline" command.
 
-**Color customization not working:**
-- Restart Obsidian after changing color settings
-- Verify project IDs match exactly between tasks and color mappings
+## Settings
 
-### Getting Help
-
-- Report issues on [GitHub Issues](https://github.com/margilc/TaskTimeline/issues)
-- Check the [documentation](https://github.com/margilc/TaskTimeline/wiki) for detailed guides
-- Join the discussion in the [Obsidian Community Forum](https://forum.obsidian.md/)
-
-## Advanced Features
-
-### Available Commands
-- **"Open Task Timeline"**: Command palette option to open the timeline view
-- **Ribbon Icon**: Click the calendar-clock icon in the left ribbon to open timeline
-- **Modal Interactions**: Escape key closes the task creation modal
-
-### Performance Optimization
-- **Layout caching**: Automatic caching for fast rendering with cache invalidation
-- **Event-driven updates**: Efficient re-rendering only when data changes
-- **Memory management**: Proper cleanup on component destruction
-- **File watching**: Optimized vault event handling for real-time updates
-
-### Integration with Obsidian Features
-- **File watching**: Automatically updates when task files change
-- **Vault events**: Responds to file creation, deletion, and moves
-- **Plugin API**: Uses standard Obsidian plugin architecture
-- **Settings sync**: Integrates with Obsidian's settings system
+- **Task Directory** — where task files live (default `Taskdown`; committed on blur)
+- **Ignore list** — one glob pattern per line, matched against whole path segments (`templates/`, `.claude/`, `archive/**`)
+- **Open by default / Open in new pane**
+- **Row height**, **min/max column width**, **zoom step**, **min/max font size**
+- **Default card color** — leave at the default to follow your theme
 
 ## Development
 
-### Architecture
-
-TaskTimeline follows a three-component architecture:
-
-1. **AppStateManager**: Central state management with event orchestration
-2. **UI Components**: Pure presentation layer with event-driven updates
-3. **Business Logic**: Pure functions for state updates in `src/core/update/`
-
-### Building from Source
-
 ```bash
-# Clone the repository
-git clone https://github.com/margilc/TaskTimeline.git
-cd TaskTimeline
-
-# Install dependencies
 npm install
-
-# Build for development (with file watching)
-npm run dev
-
-# Build for production
-node esbuild.config.mjs production
-
-# Run tests
-npm test
+npm run dev     # watch build; copies main.js/manifest.json/styles.css into the test vault
+npm run build   # one-off production build (no copy)
+npm test        # tsc --noEmit + jest
 ```
 
-### Contributing
-
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
-
-See [CONTRIBUTING.md](CONTRIBUTING.md) for detailed guidelines.
+Releases are tag-driven: pushing a bare-semver tag (e.g. `2.2.0`) triggers the GitHub Actions workflow that builds `main.js` and publishes the release. `./create_release.sh -v <version>` automates the version bump, commit, tag, and push.
 
 ## License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
-## Attribution
-
-TaskTimeline was inspired by project management tools like Gantt charts and kanban boards, adapted specifically for Obsidian's markdown-centric workflow.
-
-## Changelog
-
-See [CHANGELOG.md](CHANGELOG.md) for a detailed history of changes and version updates.
+MIT — see [LICENSE](LICENSE).
 
 ---
 
-**Funding**: If you find TaskTimeline helpful, consider [sponsoring the development](https://github.com/sponsors/margilc) to support continued improvements and new features.
+**Funding**: If TaskTimeline is useful to you, consider [sponsoring development](https://github.com/sponsors/margilc).
