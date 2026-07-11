@@ -169,8 +169,10 @@ body.theme-dark .tt-dropdown-trigger {
 
 .horizontal-task-preview {
   height: 100%;
-  overflow: hidden;
+  overflow-x: hidden;
+  overflow-y: auto;
   cursor: text;
+  scrollbar-gutter: stable;
 }
 
 .horizontal-task-preview.is-empty {
@@ -218,11 +220,18 @@ body.theme-dark .tt-dropdown-trigger {
 }
 
 .horizontal-task-column-body .cm-scroller {
-  overflow: hidden;
+  overflow-x: hidden;
+  overflow-y: auto;
+  scrollbar-gutter: stable;
 }
 
 .horizontal-task-column-body .cm-content {
   caret-color: var(--text-normal);
+}
+
+.horizontal-task-editor-checkbox {
+  margin-inline: 0.2em 0.35em;
+  vertical-align: middle;
 }
 
 .horizontal-task-column-body.is-frontmatter .cm-editor {

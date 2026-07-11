@@ -1,6 +1,7 @@
 import { App, getAllTags, ItemView, MarkdownRenderer, Notice, TFile, ViewStateResult, WorkspaceLeaf } from 'obsidian';
-import { EditorState } from '@codemirror/state';
-import { EditorView } from '@codemirror/view';
+import { EditorState, Range } from '@codemirror/state';
+import { indentWithTab } from '@codemirror/commands';
+import { Decoration, DecorationSet, EditorView, keymap, ViewPlugin, ViewUpdate, WidgetType } from '@codemirror/view';
 import { IHorizontalTaskColumn, parseHorizontalTaskContent, serializeHorizontalTaskColumns } from '../core/utils/horizontalTaskUtils';
 import { isFenceLine, parseCheckboxLine, toggleCheckboxLine } from '../core/utils/taskUtils';
 import { HORIZONTAL_TASK_VIEW_TYPE } from './viewTypes';
@@ -29,6 +30,81 @@ function isHorizontalTaskViewState(state: unknown): state is HorizontalTaskViewS
         !('filePath' in state) || typeof (state as HorizontalTaskViewState).filePath === 'string'
     );
 }
+
+class HorizontalCheckboxWidget extends WidgetType {
+    constructor(private readonly from: number, private readonly checked: boolean) {
+        super();
+    }
+
+    eq(other: HorizontalCheckboxWidget): boolean {
+        return this.from === other.from && this.checked === other.checked;
+    }
+
+    toDOM(view: EditorView): HTMLElement {
+        const checkbox = document.createElement('input');
+        checkbox.type = 'checkbox';
+        checkbox.className = 'task-list-item-checkbox horizontal-task-editor-checkbox';
+        checkbox.checked = this.checked;
+        checkbox.setAttribute('aria-label', this.checked ? 'Mark task incomplete' : 'Mark task complete');
+        checkbox.addEventListener('change', () => {
+            view.dispatch({
+                changes: {
+                    from: this.from,
+                    to: this.from + 3,
+                    insert: checkbox.checked ? '[x]' : '[ ]',
+                },
+            });
+            view.focus();
+        });
+        return checkbox;
+    }
+
+    ignoreEvent(): boolean {
+        return true;
+    }
+}
+
+function buildCheckboxDecorations(view: EditorView): Range<Decoration>[] {
+    const decorations: Range<Decoration>[] = [];
+    let inFence = false;
+
+    for (let lineNumber = 1; lineNumber <= view.state.doc.lines; lineNumber += 1) {
+        const line = view.state.doc.line(lineNumber);
+        if (isFenceLine(line.text)) {
+            inFence = !inFence;
+            continue;
+        }
+
+        const checkbox = inFence ? null : parseCheckboxLine(line.text);
+        if (!checkbox) continue;
+
+        const markerIndex = line.text.search(/\[[ xX]\]/);
+        if (markerIndex < 0) continue;
+
+        const from = line.from + markerIndex;
+        decorations.push(Decoration.replace({
+            widget: new HorizontalCheckboxWidget(from, checkbox.checked),
+        }).range(from, from + 3));
+    }
+
+    return decorations;
+}
+
+const horizontalCheckboxes = ViewPlugin.fromClass(class {
+    decorations: DecorationSet;
+
+    constructor(view: EditorView) {
+        this.decorations = Decoration.set(buildCheckboxDecorations(view));
+    }
+
+    update(update: ViewUpdate): void {
+        if (update.docChanged) {
+            this.decorations = Decoration.set(buildCheckboxDecorations(update.view));
+        }
+    }
+}, {
+    decorations: plugin => plugin.decorations,
+});
 
 export class HorizontalTaskView extends ItemView {
     private filePath: string | null = null;
@@ -296,9 +372,13 @@ export class HorizontalTaskView extends ItemView {
         }
     }
 
-    private startEditing(columnId: string): void {
+    private async startEditing(columnId: string): Promise<void> {
+        this.closeCompletion();
         this.editingColumnId = columnId;
-        this.render();
+        await this.saveColumns();
+        if (this.editingColumnId === columnId) {
+            await this.render();
+        }
     }
 
     private handlePreviewClick(event: MouseEvent, columnId: string): void {
@@ -339,6 +419,11 @@ export class HorizontalTaskView extends ItemView {
                 doc: column.content,
                 extensions: [
                     EditorView.lineWrapping,
+                    keymap.of([{
+                        ...indentWithTab,
+                        run: view => this.handleEditorTab(view),
+                    }]),
+                    horizontalCheckboxes,
                     EditorView.updateListener.of(update => {
                         if (!update.docChanged) return;
                         column.content = update.state.doc.toString();
@@ -348,8 +433,13 @@ export class HorizontalTaskView extends ItemView {
                     }),
                     EditorView.domEventHandlers({
                         keydown: (event, view) => this.handleCompletionKeydown(event, view),
-                        blur: () => {
-                            this.finishEditing();
+                        blur: (_event, view) => {
+                            window.setTimeout(() => {
+                                if (view.dom.contains(document.activeElement)) return;
+                                if (this.editingColumnId === column.id) {
+                                    void this.finishEditing(column.id);
+                                }
+                            }, 0);
                         },
                     }),
                     EditorView.theme({
@@ -358,7 +448,6 @@ export class HorizontalTaskView extends ItemView {
                             backgroundColor: 'transparent',
                         },
                         '.cm-scroller': {
-                            overflow: 'hidden',
                             fontFamily: column.type === 'frontmatter'
                                 ? 'var(--font-monospace)'
                                 : 'var(--font-text)',
@@ -380,9 +469,11 @@ export class HorizontalTaskView extends ItemView {
         });
     }
 
-    private async finishEditing(): Promise<void> {
+    private async finishEditing(columnId: string): Promise<void> {
+        if (this.editingColumnId !== columnId) return;
         this.closeCompletion();
         await this.saveColumns();
+        if (this.editingColumnId !== columnId) return;
         this.editingColumnId = null;
         await this.render();
     }
@@ -420,6 +511,8 @@ export class HorizontalTaskView extends ItemView {
 
         column.content = nextLines.join('\n');
         this.dirtyColumnIds.add(column.id);
+        this.editingColumnId = null;
+        this.closeCompletion();
         void this.saveColumns().then(() => this.render());
     }
 
@@ -442,13 +535,21 @@ export class HorizontalTaskView extends ItemView {
             return true;
         }
 
-        if (event.key === 'Enter' || event.key === 'Tab') {
+        if (event.key === 'Enter') {
             event.preventDefault();
             this.applyCompletion(this.completionState.options[this.completionState.selectedIndex]);
             return true;
         }
 
         return false;
+    }
+
+    private handleEditorTab(view: EditorView): boolean {
+        if (this.completionState?.view === view) {
+            this.applyCompletion(this.completionState.options[this.completionState.selectedIndex]);
+            return true;
+        }
+        return indentWithTab.run?.(view) ?? false;
     }
 
     private updateCompletion(view: EditorView): void {
