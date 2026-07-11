@@ -471,9 +471,26 @@ body.theme-dark .tt-dropdown-trigger {
   padding-right: var(--spacing-sm);
 }
 
-/* Color variable & value pickers — text only, no button background */
+/* Navbar selectors stay text-only; their opened menus need an opaque surface. */
 .nav-color-map-controls .tt-dropdown-trigger {
   background-color: transparent;
+}
+
+.nav-project-picker .tt-dropdown-menu,
+.nav-color-map-controls .tt-dropdown-menu,
+.board-grouping-selection .tt-dropdown-menu {
+  background-color: var(--tt-surface-1);
+}
+
+.board-grouping-selection .tt-dropdown-trigger {
+  background-color: var(--tt-surface-1);
+}
+
+.board-grouping-selection .tt-dropdown-trigger:hover,
+.nav-project-picker .tt-dropdown-item:hover,
+.nav-color-map-controls .tt-dropdown-item:hover,
+.board-grouping-selection .tt-dropdown-item:hover {
+  background-color: var(--tt-surface-1-hover);
 }
 
 .nav-project-picker .tt-dropdown-menu {
@@ -503,7 +520,6 @@ body.theme-dark .tt-dropdown-trigger {
   padding: 0;
   border: none;
   border-radius: 0;
-  background-color: transparent; /* Ensure cell bg doesn't interfere */
 }
 
 /* Frozen first column - grouping dropdown (top-left corner cell) */
@@ -990,4 +1006,3 @@ body.theme-dark .task-timeline-task .resize-handle-right:hover {
   transform: none;
   box-shadow: none;
 }
-

@@ -11,6 +11,8 @@ export interface CustomDropdownConfig {
     onChange?: (value: string) => void;
 }
 
+let activeDropdown: CustomDropdown | null = null;
+
 export class CustomDropdown {
     private container: HTMLElement;
     private triggerEl: HTMLElement;
@@ -74,13 +76,21 @@ export class CustomDropdown {
     }
 
     private open(): void {
+        if (activeDropdown && activeDropdown !== this) {
+            activeDropdown.close();
+        }
+
         this.menuEl.classList.add('is-open');
         this.isOpen = true;
+        activeDropdown = this;
     }
 
     private close(): void {
         this.menuEl.classList.remove('is-open');
         this.isOpen = false;
+        if (activeDropdown === this) {
+            activeDropdown = null;
+        }
     }
 
     private buildMenu(): void {
@@ -167,6 +177,7 @@ export class CustomDropdown {
     }
 
     destroy(): void {
+        this.close();
         document.removeEventListener('click', this.outsideClickHandler);
         this.container.remove();
     }
