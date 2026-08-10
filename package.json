@@ -1,6 +1,6 @@
 {
 	"name": "TaskTimeline",
-	"version": "2.1.5",
+	"version": "2.2.0",
 	"description": "Transform your task-based markdown files into an interactive, timeline-based board view",
 	"main": "main.js",
 	"type": "module",
@@ -10,7 +10,13 @@
 		"check": "tsc --noEmit",
 		"test": "npm run check && jest"
 	},
-	"keywords": ["obsidian", "obsidian-plugin", "tasks", "timeline", "project-management"],
+	"keywords": [
+		"obsidian",
+		"obsidian-plugin",
+		"tasks",
+		"timeline",
+		"project-management"
+	],
 	"author": "Mario Gilcher",
 	"license": "MIT",
 	"devDependencies": {
