@@ -173,6 +173,14 @@ body.theme-dark .tt-dropdown-trigger {
   overflow-y: auto;
   cursor: text;
   scrollbar-gutter: stable;
+  /* Same metrics as the column editor, so switching modes doesn't reflow. */
+  font-size: var(--font-text-size);
+  line-height: var(--line-height-normal);
+}
+
+.horizontal-task-preview > :first-child,
+.horizontal-task-preview > :first-child > :first-child {
+  margin-top: 0;
 }
 
 .horizontal-task-preview.is-empty {

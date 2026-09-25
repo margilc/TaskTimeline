@@ -54,6 +54,15 @@ describe('canonicalizeFile', () => {
         expect(renames).toEqual([]);
     });
 
+    it('renames when the name shrinks to a prefix of the old identifier', async () => {
+        const file = new TFile('Taskdown/P/20260110_Meeting_Prep.md');
+        const { app, renames } = makeApp(file, taskContent('Meeting', '2026-01-10'));
+
+        await canonicalizeFile(app, asReal(file));
+
+        expect(renames).toEqual(['Taskdown/P/20260110_Meeting.md']);
+    });
+
     it('renames when the start date changed', async () => {
         const file = new TFile('Taskdown/P/20260110_Meeting.md');
         const { app, renames } = makeApp(file, taskContent('Meeting', '2026-02-01'));

@@ -5,6 +5,7 @@ import { PluginEvent } from "../enums/events";
 import { ITaskTimelineSettings } from "../interfaces/ITaskTimelineSettings";
 import { getAvailableBackgrounds } from "../core/utils/colorUtils";
 import { DEFAULT_TASK_TIMELINE_SETTINGS } from "./defaultSettings";
+import { DEFAULT_TEMPLATE_FILE_NAMES, resetDefaultTemplates } from "../core/utils/templateUtils";
 
 export class TaskTimelineSettingTab extends PluginSettingTab {
 	plugin: TaskTimelinePlugin;
@@ -129,6 +130,8 @@ export class TaskTimelineSettingTab extends PluginSettingTab {
 			dropdownEl.parentElement?.insertBefore(colorPreview, dropdownEl);
 		});
 
+		this.addResetTemplatesSetting(containerEl, settings.taskDirectory);
+
 		new Setting(containerEl)
 			.setName("Reset to defaults")
 			.setDesc("Reset all settings to their default values")
@@ -140,6 +143,43 @@ export class TaskTimelineSettingTab extends PluginSettingTab {
 					this.display();
 					new Notice("Settings reset to defaults");
 				}));
+	}
+
+	/**
+	 * Rewrites the built-in templates in {taskDirectory}/templates/. It
+	 * discards edits to those files, so the button asks for a second click.
+	 */
+	private addResetTemplatesSetting(containerEl: HTMLElement, taskDirectory: string): void {
+		const fileList = DEFAULT_TEMPLATE_FILE_NAMES.join(", ");
+		new Setting(containerEl)
+			.setName("Reset templates")
+			.setDesc(`Rewrite ${fileList} in ${taskDirectory}/templates/ with the built-in versions. Your own template_*.md files are not touched.`)
+			.addButton(button => {
+				const idleText = "Reset templates";
+				let confirmTimer: number | null = null;
+				const disarm = () => {
+					if (confirmTimer !== null) window.clearTimeout(confirmTimer);
+					confirmTimer = null;
+					button.setButtonText(idleText);
+					button.buttonEl.removeClass("mod-warning");
+				};
+
+				button.setButtonText(idleText).onClick(async () => {
+					if (confirmTimer === null) {
+						button.setButtonText("Click again to overwrite").setWarning();
+						confirmTimer = window.setTimeout(disarm, 4000);
+						return;
+					}
+					disarm();
+					try {
+						await resetDefaultTemplates(this.app, this.getSettings().taskDirectory);
+						new Notice("Templates reset to defaults");
+					} catch (error) {
+						console.error("TaskTimeline: Failed to reset templates", error);
+						new Notice("Failed to reset templates — see console for details.");
+					}
+				});
+			});
 	}
 
 	private getSettings(): ITaskTimelineSettings {

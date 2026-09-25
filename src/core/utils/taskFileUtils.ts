@@ -46,6 +46,18 @@ export function taskFileName(dateStr: string, identifier: string, n = 0): string
 }
 
 /**
+ * Whether a filename identifier matches the name's identifier, counting the
+ * collision-bumped `_N` variants produced by taskFileName as a match. Only a
+ * numeric suffix counts: renaming "Meeting Prep" to "Meeting" must still
+ * rename `…_Meeting_Prep.md`.
+ */
+export function isAlignedIdentifier(fileIdentifier: string, nameIdentifier: string): boolean {
+    if (fileIdentifier === nameIdentifier) return true;
+    return fileIdentifier.startsWith(nameIdentifier + '_')
+        && /^\d+$/.test(fileIdentifier.slice(nameIdentifier.length + 1));
+}
+
+/**
  * Update task frontmatter using Obsidian's safe processFrontMatter API.
  * This handles YAML parsing correctly and preserves formatting.
  *

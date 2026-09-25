@@ -11,7 +11,7 @@ import { updateGroupOrder } from './update/updateGroupOrder';
 import { updateGroupFold } from './update/updateGroupFold';
 import { updateSettings } from './update/updateSettings';
 import { createTask } from './update/createTask';
-import { parseTaskFilename, identifierToName, nameToIdentifier, updateTaskFrontmatter } from './utils/taskFileUtils';
+import { parseTaskFilename, identifierToName, nameToIdentifier, updateTaskFrontmatter, isAlignedIdentifier } from './utils/taskFileUtils';
 import { canonicalizeFile } from './utils/canonicalizeFile';
 import { updateDateBounds } from './update/updateDateBounds';
 import { DEFAULT_COLOR } from './utils/colorUtils';
@@ -55,6 +55,10 @@ export class AppStateManager extends Component {
     private pendingLayoutUpdate = false;
     private rafId: number | null = null;
     private persistTimer: number | null = null;
+
+    // Serialized data.json writes (see saveData)
+    private saveChain: Promise<void> = Promise.resolve();
+    private saveQueued = false;
 
     // Per-file mutex for write operations. Drag/resize commits, modify-event
     // canonicalization, and rename-event name-sync all acquire withFileLock
@@ -210,7 +214,7 @@ export class AppStateManager extends Component {
             try {
                 const parsed = parseTaskFromContent(content, file.path);
                 const slug = parsed ? nameToIdentifier(parsed.name) : '';
-                if (slug && (newParsed.identifier === slug || newParsed.identifier.startsWith(slug + '_'))) return;
+                if (slug && isAlignedIdentifier(newParsed.identifier, slug)) return;
             } catch {
                 // unparseable file — fall through to write
             }
@@ -238,15 +242,27 @@ export class AppStateManager extends Component {
 
     private async handleUpdateProjectsPending(options: { resetMissingProject?: boolean } = {}): Promise<void> {
         try {
+            const previousProject = this.state.persistent.currentProjectName;
             const result = await updateProjects(this.app, this.state.volatile, this.state.persistent, options);
 
             this.state.volatile = result.volatile;
             this.state.persistent = result.persistent;
 
-            await this.saveData(this.state.persistent);
+            await this.saveData();
             clearLayoutCache();
 
             this.events.trigger(PluginEvent.UpdateProjectsDone);
+
+            // The selected project's folder was deleted/renamed/ignored and
+            // updateProjects fell back to "All Projects": switch the board
+            // over too, instead of leaving the old project's tasks on screen.
+            const currentProject = this.state.persistent.currentProjectName;
+            if (currentProject !== previousProject) {
+                this.taskHistory.clear();
+                this.events.trigger(PluginEvent.ProjectSelected, currentProject);
+                this.events.trigger(PluginEvent.UpdateTasksPending);
+            }
+
             this.events.trigger(PluginEvent.AppStateUpdated, this.state);
         } catch (error) {
             console.error('TaskTimeline: Failed to update projects', error);
@@ -263,7 +279,7 @@ export class AppStateManager extends Component {
             this.state.volatile = result.volatile;
             this.state.persistent = result.persistent;
 
-            await this.saveData(this.state.persistent);
+            await this.saveData();
             clearLayoutCache();
 
             // Update date bounds from tasks
@@ -302,7 +318,7 @@ export class AppStateManager extends Component {
             this.state.persistent = result.persistent;
             this.state.volatile = result.volatile;
 
-            await this.saveData(this.state.persistent);
+            await this.saveData();
 
             this.events.trigger(PluginEvent.UpdateColorMappingsDone);
             this.events.trigger(PluginEvent.AppStateUpdated, this.state);
@@ -332,7 +348,7 @@ export class AppStateManager extends Component {
             this.state.persistent = result.persistent;
             this.state.volatile = result.volatile;
 
-            await this.saveData(this.state.persistent);
+            await this.saveData();
             clearLayoutCache();
 
             this.events.trigger(PluginEvent.UpdateBoardGroupingDone);
@@ -355,7 +371,7 @@ export class AppStateManager extends Component {
             this.state.persistent = result.persistent;
             this.state.volatile = result.volatile;
 
-            await this.saveData(this.state.persistent);
+            await this.saveData();
 
             const dirChanged = oldTaskDirectory !== newSettings.taskDirectory;
             const ignoreChanged = oldIgnore !== (newSettings.ignorePatterns ?? []).join('\n');
@@ -364,6 +380,11 @@ export class AppStateManager extends Component {
             // index holds; if either changed, rebuild the index and refresh the
             // project list and task list from it.
             if (dirChanged || ignoreChanged) {
+                if (dirChanged) {
+                    // Best effort — must not block the index rebuild below.
+                    await ensureTemplatesFolder(this.app, newSettings.taskDirectory)
+                        .catch(err => console.error('TaskTimeline: Failed to create templates', err));
+                }
                 if (this.taskIndex) {
                     await this.taskIndex.configure(newSettings.taskDirectory, newSettings.ignorePatterns ?? []);
                 }
@@ -422,7 +443,7 @@ export class AppStateManager extends Component {
         if (this.persistTimer !== null) window.clearTimeout(this.persistTimer);
         this.persistTimer = window.setTimeout(() => {
             this.persistTimer = null;
-            void this.saveData(this.state.persistent);
+            void this.saveData();
         }, 500);
     }
 
@@ -434,7 +455,7 @@ export class AppStateManager extends Component {
             this.state.persistent = result.persistent;
             this.state.volatile = result.volatile;
 
-            await this.saveData(this.state.persistent);
+            await this.saveData();
             clearLayoutCache();
 
             this.events.trigger(PluginEvent.UpdateGroupOrderDone);
@@ -453,7 +474,7 @@ export class AppStateManager extends Component {
             this.state.persistent = result.persistent;
             this.state.volatile = result.volatile;
 
-            await this.saveData(this.state.persistent);
+            await this.saveData();
 
             this.events.trigger(PluginEvent.UpdateGroupFoldDone);
             this.events.trigger(PluginEvent.AppStateUpdated, this.state);
@@ -535,6 +556,10 @@ export class AppStateManager extends Component {
 
             this.triggerLayoutUpdate();
 
+            // A timeline restored with the workspace is built before this
+            // runs, so its project picker still holds the pre-load option
+            // list; without this it shows the loaded project as blank.
+            this.events.trigger(PluginEvent.UpdateProjectsDone);
             this.events.trigger(PluginEvent.AppStateUpdated, this.state);
         } catch (error) {
             console.error('TaskTimeline: Failed to initialize', error);
@@ -546,11 +571,29 @@ export class AppStateManager extends Component {
         return data || {};
     }
 
-    private async saveData(record: Record<string, any>): Promise<void> {
+    /**
+     * Persist the current persistent state. Writes are serialized: handlers
+     * fire saves back-to-back (project switch → task update → scroll), and
+     * overlapping writes to data.json can land out of order, leaving an
+     * older snapshot (e.g. the previous project) on disk. Each queued write
+     * serializes the state at write time, so callers that arrive while one is
+     * already queued simply share it.
+     */
+    private saveData(): Promise<void> {
         // Never persist before loadData() has run — a write at that point
         // would replace the user's saved state with defaults.
-        if (!this.dataLoaded) return;
-        await this.plugin.saveData(record);
+        if (!this.dataLoaded) return Promise.resolve();
+        if (this.saveQueued) return this.saveChain;
+        this.saveQueued = true;
+        this.saveChain = this.saveChain.then(async () => {
+            this.saveQueued = false;
+            try {
+                await this.plugin.saveData(this.state.persistent);
+            } catch (error) {
+                console.error('TaskTimeline: Failed to save data', error);
+            }
+        });
+        return this.saveChain;
     }
 
     private mergeDeep(target: any, source: any): any {
@@ -575,7 +618,7 @@ export class AppStateManager extends Component {
         // switching projects makes them unresolvable, so drop them.
         this.taskHistory.clear();
         this.state.persistent.currentProjectName = projectName;
-        await this.saveData(this.state.persistent);
+        await this.saveData();
         this.events.trigger(PluginEvent.ProjectSelected, projectName);
         this.events.trigger(PluginEvent.UpdateTasksPending);
         this.events.trigger(PluginEvent.AppStateUpdated, this.state);
@@ -607,7 +650,7 @@ export class AppStateManager extends Component {
 
     public async saveScrollPosition(left: number, top: number): Promise<void> {
         this.state.persistent.scrollPosition = { left, top };
-        await this.saveData(this.state.persistent);
+        await this.saveData();
     }
 
     public emit(event: string, data?: any): void {
@@ -699,7 +742,7 @@ export class AppStateManager extends Component {
         if (this.persistTimer !== null) {
             window.clearTimeout(this.persistTimer);
             this.persistTimer = null;
-            void this.saveData(this.state.persistent);
+            void this.saveData();
         }
         if (this.rafId !== null) {
             cancelAnimationFrame(this.rafId);

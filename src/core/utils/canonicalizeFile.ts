@@ -2,6 +2,7 @@ import { App, TFile } from 'obsidian';
 import { parseTaskFromContent } from './taskUtils';
 import {
     formatDateForFilename,
+    isAlignedIdentifier,
     nameToIdentifier,
     parseTaskFilename,
     taskFileName,
@@ -55,8 +56,7 @@ export async function canonicalizeFile(
     if (
         parsedCurrent
         && parsedCurrent.dateStr === expectedDate
-        && (parsedCurrent.identifier === expectedId
-            || parsedCurrent.identifier.startsWith(expectedId + '_'))
+        && isAlignedIdentifier(parsedCurrent.identifier, expectedId)
     ) {
         return file;
     }

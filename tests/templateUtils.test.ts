@@ -1,4 +1,5 @@
-import { parseTemplateFromContent } from '../src/core/utils/templateUtils';
+import { parseTemplateFromContent, resetDefaultTemplates } from '../src/core/utils/templateUtils';
+import { App, TFile } from '../__mocks__/obsidian';
 import DEFAULT_PROJECT_TEMPLATE from '../src/templates/default_project.md';
 import DEFAULT_WEEKLY_TEMPLATE from '../src/templates/default_weekly.md';
 
@@ -40,5 +41,35 @@ horizontal_mode: true
         expect(template.defaultCategory).toBe('internal');
         expect(template.horizontalMode).toBe(true);
         expect(template.bodyContent).toBe('# Monday\n- [ ] internal');
+    });
+});
+
+describe('resetDefaultTemplates', () => {
+    test('overwrites existing default templates and creates missing ones', async () => {
+        const app = new App();
+        const existing = new TFile('Tasks/templates/default_project.md');
+        app.vault.getAbstractFileByPath.mockImplementation((p: string) =>
+            p === 'Tasks/templates/default_project.md' ? existing : null);
+        app.vault.adapter.exists.mockImplementation(async (p: string) => p === 'Tasks/templates');
+        app.vault.adapter.write = jest.fn();
+
+        await resetDefaultTemplates(app as any, 'Tasks');
+
+        expect(app.vault.modify).toHaveBeenCalledWith(existing, DEFAULT_PROJECT_TEMPLATE);
+        expect(app.vault.create).toHaveBeenCalledWith('Tasks/templates/default_weekly.md', DEFAULT_WEEKLY_TEMPLATE);
+        expect(app.vault.adapter.write).not.toHaveBeenCalled();
+    });
+
+    test('falls back to the adapter when a file exists on disk but not in the cache', async () => {
+        const app = new App();
+        app.vault.getAbstractFileByPath.mockReturnValue(null);
+        app.vault.adapter.exists.mockResolvedValue(true);
+        app.vault.adapter.write = jest.fn();
+
+        await resetDefaultTemplates(app as any, 'Tasks');
+
+        expect(app.vault.adapter.write).toHaveBeenCalledWith('Tasks/templates/default_project.md', DEFAULT_PROJECT_TEMPLATE);
+        expect(app.vault.adapter.write).toHaveBeenCalledWith('Tasks/templates/default_weekly.md', DEFAULT_WEEKLY_TEMPLATE);
+        expect(app.vault.create).not.toHaveBeenCalled();
     });
 });

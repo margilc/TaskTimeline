@@ -1,8 +1,8 @@
-import { App, getAllTags, ItemView, MarkdownRenderer, Notice, TFile, ViewStateResult, WorkspaceLeaf } from 'obsidian';
-import { EditorState, Range } from '@codemirror/state';
-import { indentWithTab } from '@codemirror/commands';
+import { App, Component, getAllTags, ItemView, MarkdownRenderer, Notice, TFile, ViewStateResult, WorkspaceLeaf } from 'obsidian';
+import { EditorState, Prec, Range } from '@codemirror/state';
+import { defaultKeymap, history, historyKeymap, indentLess, indentWithTab } from '@codemirror/commands';
 import { Decoration, DecorationSet, EditorView, keymap, ViewPlugin, ViewUpdate, WidgetType } from '@codemirror/view';
-import { IHorizontalTaskColumn, parseHorizontalTaskContent, serializeHorizontalTaskColumns } from '../core/utils/horizontalTaskUtils';
+import { continueListItem, IHorizontalTaskColumn, mergeColumnsForSave, parseHorizontalTaskContent, serializeHorizontalTaskColumns } from '../core/utils/horizontalTaskUtils';
 import { isFenceLine, parseCheckboxLine, toggleCheckboxLine } from '../core/utils/taskUtils';
 import { HORIZONTAL_TASK_VIEW_TYPE } from './viewTypes';
 
@@ -106,20 +106,66 @@ const horizontalCheckboxes = ViewPlugin.fromClass(class {
     decorations: plugin => plugin.decorations,
 });
 
+/**
+ * Map a click in the rendered preview to an offset in the column's markdown,
+ * so editing starts where the user clicked (as in Obsidian's editor).
+ * Heuristic: take the clicked text node and find the same occurrence of its
+ * text in the source — rendered text nodes are verbatim runs of the source
+ * with the markup stripped. Null when the click isn't on text or the text
+ * can't be found (e.g. an aliased link), and the caller falls back to the end.
+ */
+function sourceOffsetAtPoint(previewEl: HTMLElement, source: string, x: number, y: number): number | null {
+    const range = document.caretRangeFromPoint?.(x, y);
+    const node = range?.startContainer;
+    if (!range || !node || node.nodeType !== Node.TEXT_NODE || !previewEl.contains(node)) return null;
+
+    const text = node.textContent ?? '';
+    if (!text.trim()) return null;
+
+    // How many times this text occurs in the preview before the clicked node.
+    let before = '';
+    const walker = document.createTreeWalker(previewEl, NodeFilter.SHOW_TEXT);
+    for (let current = walker.nextNode(); current && current !== node; current = walker.nextNode()) {
+        before += current.textContent ?? '';
+    }
+    let occurrence = 0;
+    for (let i = before.indexOf(text); i !== -1; i = before.indexOf(text, i + 1)) occurrence++;
+
+    let index = -1;
+    for (let n = 0; n <= occurrence; n++) {
+        const next = source.indexOf(text, index + 1);
+        if (next === -1) break;
+        index = next;
+    }
+    return index === -1 ? null : index + range.startOffset;
+}
+
 export class HorizontalTaskView extends ItemView {
     private filePath: string | null = null;
     private foldedColumnIds: Set<string> = new Set();
     private columns: IHorizontalTaskColumn[] = [];
     private saveTimer: number | null = null;
-    private editorViews: EditorView[] = [];
-    private editingColumnId: string | null = null;
     private completionEl: HTMLElement | null = null;
     private completionState: HorizontalCompletionState | null = null;
+
+    // At most one column is in edit mode. Switching modes swaps only that
+    // column's body — the rest of the grid stays mounted.
+    private editor: { columnId: string; view: EditorView } | null = null;
+    private columnBodies: Map<string, HTMLElement> = new Map();
+    // Per-column owner of the rendered preview's child components, unloaded
+    // whenever that preview is replaced.
+    private previewComponents: Map<string, Component> = new Map();
+
+    // Bumped per render(); a render that finds itself superseded after its
+    // file read bails instead of appending a second grid.
+    private renderGeneration = 0;
 
     // Columns the user changed since the last save. Saves merge these onto a
     // fresh parse of the file, so an external edit to another column (second
     // pane, sync) survives instead of being overwritten from stale state.
     private dirtyColumnIds: Set<string> = new Set();
+    // Saves run one at a time (each reads, merges, then writes the file).
+    private saveChain: Promise<void> = Promise.resolve();
     // True while our own vault.modify is in flight, so the modify listener
     // can tell our writes apart from external ones.
     private selfModify = false;
@@ -154,8 +200,8 @@ export class HorizontalTaskView extends ItemView {
 
         const nextFilePath = state.filePath ?? null;
         if (nextFilePath !== this.filePath) {
+            await this.flushSave();
             this.foldedColumnIds.clear();
-            this.editingColumnId = null;
         }
 
         this.filePath = nextFilePath;
@@ -179,7 +225,7 @@ export class HorizontalTaskView extends ItemView {
         // per-column at save time instead.
         this.registerEvent(this.app.vault.on('modify', (file) => {
             if (this.selfModify || !this.filePath || file.path !== this.filePath) return;
-            if (this.editingColumnId === null && this.dirtyColumnIds.size === 0) {
+            if (this.editor === null && this.dirtyColumnIds.size === 0) {
                 void this.render();
             }
         }));
@@ -189,19 +235,31 @@ export class HorizontalTaskView extends ItemView {
 
     async onClose(): Promise<void> {
         // Flush, don't drop: a debounced save may still be pending.
-        if (this.saveTimer !== null) {
-            window.clearTimeout(this.saveTimer);
-            this.saveTimer = null;
-            await this.saveColumns();
-        }
-        this.destroyEditors();
         this.closeCompletion();
-        this.editingColumnId = null;
+        this.destroyEditor();
+        await this.flushSave();
+        this.clearPreviews();
         this.foldedColumnIds.clear();
     }
 
     private async render(): Promise<void> {
-        this.destroyEditors();
+        const generation = ++this.renderGeneration;
+
+        const file = this.filePath ? this.getCurrentFile() : null;
+        let fileContent: string | null = null;
+        let readError: unknown = null;
+        if (file) {
+            try {
+                fileContent = await this.app.vault.read(file);
+            } catch (error) {
+                readError = error;
+            }
+        }
+        if (generation !== this.renderGeneration) return;
+
+        this.closeCompletion();
+        this.destroyEditor();
+        this.clearPreviews();
         this.contentEl.empty();
         this.contentEl.addClass('horizontal-task-view');
 
@@ -209,16 +267,14 @@ export class HorizontalTaskView extends ItemView {
             this.renderMessage('No task file selected.');
             return;
         }
-
-        const file = this.getCurrentFile();
         if (!file) {
             this.renderMessage(`Task file not found: ${this.filePath}`);
             return;
         }
 
         try {
-            const fileContent = await this.app.vault.read(file);
-            const parsedTask = parseHorizontalTaskContent(fileContent);
+            if (readError) throw readError;
+            const parsedTask = parseHorizontalTaskContent(fileContent ?? '');
             this.columns = parsedTask.columns.map(column => ({ ...column }));
             this.dirtyColumnIds.clear();
 
@@ -237,12 +293,8 @@ export class HorizontalTaskView extends ItemView {
     }
 
     private renderColumn(parent: HTMLElement, column: IHorizontalTaskColumn): void {
-        const isFolded = this.foldedColumnIds.has(column.id);
         const columnEl = document.createElement('section');
         columnEl.className = 'horizontal-task-column';
-        if (isFolded) {
-            columnEl.classList.add('is-folded');
-        }
 
         const headerEl = document.createElement('header');
         headerEl.className = 'horizontal-task-column-header';
@@ -255,35 +307,35 @@ export class HorizontalTaskView extends ItemView {
         const toggleButton = document.createElement('button');
         toggleButton.className = 'horizontal-task-fold-toggle';
         toggleButton.type = 'button';
-        toggleButton.textContent = isFolded ? '+' : '-';
-        toggleButton.setAttribute('aria-label', `${isFolded ? 'Unfold' : 'Fold'} ${column.title}`);
+        headerEl.appendChild(toggleButton);
+
+        const applyFold = () => {
+            const isFolded = this.foldedColumnIds.has(column.id);
+            columnEl.classList.toggle('is-folded', isFolded);
+            toggleButton.textContent = isFolded ? '+' : '-';
+            toggleButton.setAttribute('aria-label', `${isFolded ? 'Unfold' : 'Fold'} ${column.title}`);
+        };
         toggleButton.addEventListener('click', () => {
-            if (isFolded) {
+            if (this.foldedColumnIds.has(column.id)) {
                 this.foldedColumnIds.delete(column.id);
             } else {
                 this.foldedColumnIds.add(column.id);
+                if (this.editor?.columnId === column.id) this.stopEditing();
             }
-            this.render();
+            applyFold();
         });
-        headerEl.appendChild(toggleButton);
+        applyFold();
 
         columnEl.appendChild(headerEl);
 
         const bodyEl = document.createElement('div');
         bodyEl.className = 'horizontal-task-column-body';
+        bodyEl.classList.toggle('is-frontmatter', column.type === 'frontmatter');
         columnEl.appendChild(bodyEl);
         parent.appendChild(columnEl);
 
-        if (isFolded) {
-            return;
-        }
-
-        bodyEl.classList.toggle('is-frontmatter', column.type === 'frontmatter');
-        if (this.editingColumnId === column.id) {
-            this.editorViews.push(this.createColumnEditor(bodyEl, column));
-        } else {
-            this.renderColumnPreview(bodyEl, column);
-        }
+        this.columnBodies.set(column.id, bodyEl);
+        this.renderColumnPreview(column);
     }
 
     private renderMessage(message: string): void {
@@ -299,6 +351,10 @@ export class HorizontalTaskView extends ItemView {
         return file instanceof TFile ? file : null;
     }
 
+    private getColumn(columnId: string): IHorizontalTaskColumn | undefined {
+        return this.columns.find(column => column.id === columnId);
+    }
+
     private queueSave(): void {
         if (this.saveTimer !== null) {
             window.clearTimeout(this.saveTimer);
@@ -306,11 +362,25 @@ export class HorizontalTaskView extends ItemView {
 
         this.saveTimer = window.setTimeout(() => {
             this.saveTimer = null;
-            this.saveColumns();
+            void this.saveColumns();
         }, 500);
     }
 
-    private async saveColumns(): Promise<void> {
+    /** Cancel the debounce and write pending changes now. */
+    private flushSave(): Promise<void> {
+        if (this.saveTimer !== null) {
+            window.clearTimeout(this.saveTimer);
+            this.saveTimer = null;
+        }
+        return this.saveColumns();
+    }
+
+    private saveColumns(): Promise<void> {
+        this.saveChain = this.saveChain.then(() => this.writeDirtyColumns());
+        return this.saveChain;
+    }
+
+    private async writeDirtyColumns(): Promise<void> {
         if (this.dirtyColumnIds.size === 0) return;
         const file = this.getCurrentFile();
         if (!file) {
@@ -318,16 +388,23 @@ export class HorizontalTaskView extends ItemView {
             return;
         }
 
+        // Claim the dirty set up front: edits typed while this write is in
+        // flight re-mark their column and queue the next save.
+        const saving = new Set(this.dirtyColumnIds);
+        this.dirtyColumnIds.clear();
+
         try {
-            // Merge onto a fresh parse of the file so external edits to
-            // columns the user did NOT touch survive this save.
             try {
                 const diskColumns = parseHorizontalTaskContent(await this.app.vault.read(file)).columns;
-                this.columns = diskColumns.map(diskColumn =>
-                    this.dirtyColumnIds.has(diskColumn.id)
-                        ? this.columns.find(c => c.id === diskColumn.id) ?? diskColumn
-                        : diskColumn
-                );
+                const previous = this.columns;
+                this.columns = mergeColumnsForSave(previous, diskColumns, saving);
+                // Show external edits that were merged into other columns.
+                this.columns.forEach((column, i) => {
+                    if (column !== previous[i] && column.content !== previous[i]?.content
+                        && this.editor?.columnId !== column.id) {
+                        this.renderColumnPreview(column);
+                    }
+                });
             } catch {
                 // File unreadable/unparseable — write our full local state.
             }
@@ -338,107 +415,185 @@ export class HorizontalTaskView extends ItemView {
             } finally {
                 this.selfModify = false;
             }
-            this.dirtyColumnIds.clear();
         } catch (error) {
+            saving.forEach(id => this.dirtyColumnIds.add(id));
             console.error('Failed to save horizontal task view:', error);
             new Notice('Failed to save horizontal task view.');
         }
     }
 
-    private renderColumnPreview(parent: HTMLElement, column: IHorizontalTaskColumn): void {
+    private clearPreviews(): void {
+        this.previewComponents.forEach(component => this.removeChild(component));
+        this.previewComponents.clear();
+        this.columnBodies.clear();
+    }
+
+    private renderColumnPreview(column: IHorizontalTaskColumn): void {
+        const bodyEl = this.columnBodies.get(column.id);
+        if (!bodyEl) return;
+
+        const previous = this.previewComponents.get(column.id);
+        if (previous) this.removeChild(previous);
+        const component = this.addChild(new Component());
+        this.previewComponents.set(column.id, component);
+
+        bodyEl.empty();
         const previewEl = document.createElement('div');
         previewEl.className = 'horizontal-task-preview markdown-rendered';
         previewEl.tabIndex = 0;
         previewEl.setAttribute('role', 'button');
         previewEl.setAttribute('aria-label', `Edit ${column.title}`);
-        previewEl.addEventListener('click', (event) => this.handlePreviewClick(event, column.id), { capture: true });
+        previewEl.addEventListener('click', (event) => this.handlePreviewClick(event, column.id, previewEl), { capture: true });
         previewEl.addEventListener('keydown', (event) => {
             if (event.key === 'Enter') {
                 event.preventDefault();
                 this.startEditing(column.id);
             }
         });
-        parent.appendChild(previewEl);
+        bodyEl.appendChild(previewEl);
 
         const markdown = column.type === 'frontmatter'
             ? `\`\`\`yaml\n${column.content}\n\`\`\``
             : column.content;
 
         if (markdown.trim()) {
-            MarkdownRenderer.render(this.app, markdown, previewEl, this.filePath ?? '', this);
+            void MarkdownRenderer.render(this.app, markdown, previewEl, this.filePath ?? '', component);
         } else {
             previewEl.addClass('is-empty');
             previewEl.textContent = 'Click to edit';
         }
     }
 
-    private async startEditing(columnId: string): Promise<void> {
-        this.closeCompletion();
-        this.editingColumnId = columnId;
-        await this.saveColumns();
-        if (this.editingColumnId === columnId) {
-            await this.render();
+    /**
+     * Put the column in edit mode with the cursor at `cursor` (a source
+     * offset; defaults to the end). Any other column being edited is
+     * returned to preview first.
+     */
+    private startEditing(columnId: string, cursor?: number): void {
+        if (this.editor?.columnId === columnId) return;
+        if (this.editor) this.stopEditing();
+
+        const column = this.getColumn(columnId);
+        const bodyEl = this.columnBodies.get(columnId);
+        if (!column || !bodyEl) return;
+
+        const previous = this.previewComponents.get(columnId);
+        if (previous) {
+            this.removeChild(previous);
+            this.previewComponents.delete(columnId);
         }
+        bodyEl.empty();
+
+        const view = this.createColumnEditor(bodyEl, column);
+        this.editor = { columnId, view };
+
+        const anchor = Math.min(cursor ?? view.state.doc.length, view.state.doc.length);
+        view.dispatch({
+            selection: { anchor },
+            effects: EditorView.scrollIntoView(anchor, { y: 'center' }),
+        });
+        view.focus();
     }
 
-    private handlePreviewClick(event: MouseEvent, columnId: string): void {
+    /** Return the edited column to preview and write its changes. */
+    private stopEditing(): void {
+        if (!this.editor) return;
+        const { columnId, view } = this.editor;
+        this.editor = null;
+        this.closeCompletion();
+        view.destroy();
+
+        const column = this.getColumn(columnId);
+        if (column) this.renderColumnPreview(column);
+
+        const structureBefore = this.columns.map(c => c.title).join('\n');
+        void this.flushSave().then(() => {
+            // A `# heading` typed inside the column became its own section
+            // on disk; re-read so the grid shows it as a column.
+            const parsed = parseHorizontalTaskContent(serializeHorizontalTaskColumns(this.columns)).columns;
+            if (parsed.map(c => c.title).join('\n') !== structureBefore && this.editor === null) {
+                void this.render();
+            }
+        });
+    }
+
+    private destroyEditor(): void {
+        this.editor?.view.destroy();
+        this.editor = null;
+    }
+
+    private handlePreviewClick(event: MouseEvent, columnId: string, previewEl: HTMLElement): void {
         const target = event.target;
-        if (!(target instanceof HTMLElement)) {
-            this.startEditing(columnId);
-            return;
-        }
-
-        const checkboxEl = target.closest('input[type="checkbox"]');
-        if (checkboxEl instanceof HTMLInputElement) {
-            event.preventDefault();
-            event.stopPropagation();
-            this.togglePreviewCheckbox(checkboxEl, columnId);
-            return;
-        }
-
-        const linkEl = target.closest('a');
-        if (linkEl instanceof HTMLAnchorElement) {
-            if (linkEl.hasClass('internal-link')) {
+        if (target instanceof HTMLElement) {
+            const checkboxEl = target.closest('input[type="checkbox"]');
+            if (checkboxEl instanceof HTMLInputElement) {
                 event.preventDefault();
                 event.stopPropagation();
-                const linkText = linkEl.getAttribute('data-href') || linkEl.getAttribute('href') || linkEl.textContent || '';
-                if (linkText.trim()) {
-                    this.app.workspace.openLinkText(linkText, this.filePath ?? '', event.ctrlKey || event.metaKey);
-                }
+                this.togglePreviewCheckbox(checkboxEl, columnId);
+                return;
             }
-            return;
+
+            const linkEl = target.closest('a');
+            if (linkEl instanceof HTMLAnchorElement) {
+                if (linkEl.hasClass('internal-link')) {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    const linkText = linkEl.getAttribute('data-href') || linkEl.getAttribute('href') || linkEl.textContent || '';
+                    if (linkText.trim()) {
+                        this.app.workspace.openLinkText(linkText, this.filePath ?? '', event.ctrlKey || event.metaKey);
+                    }
+                }
+                return;
+            }
         }
 
-        this.startEditing(columnId);
+        // A drag-selection in the preview is for copying, not editing.
+        const selection = window.getSelection();
+        if (selection && !selection.isCollapsed && previewEl.contains(selection.anchorNode)) return;
+
+        const column = this.getColumn(columnId);
+        const cursor = column && column.type !== 'frontmatter'
+            ? sourceOffsetAtPoint(previewEl, column.content, event.clientX, event.clientY)
+            : undefined;
+        this.startEditing(columnId, cursor ?? undefined);
     }
 
     private createColumnEditor(parent: HTMLElement, column: IHorizontalTaskColumn): EditorView {
+        const columnId = column.id;
         return new EditorView({
             parent,
             state: EditorState.create({
                 doc: column.content,
                 extensions: [
                     EditorView.lineWrapping,
-                    keymap.of([{
-                        ...indentWithTab,
-                        run: view => this.handleEditorTab(view),
-                    }]),
+                    history(),
+                    // Completion navigation must win over Enter/Tab/arrows.
+                    Prec.highest(EditorView.domEventHandlers({
+                        keydown: (event, view) => this.handleCompletionKeydown(event, view),
+                    })),
+                    keymap.of([
+                        { key: 'Enter', run: view => this.handleEditorEnter(view) },
+                        { key: 'Tab', run: view => this.handleEditorTab(view), shift: indentLess },
+                        { key: 'Escape', run: () => { this.stopEditing(); return true; } },
+                        ...historyKeymap,
+                        ...defaultKeymap,
+                    ]),
                     horizontalCheckboxes,
                     EditorView.updateListener.of(update => {
                         if (!update.docChanged) return;
-                        column.content = update.state.doc.toString();
-                        this.dirtyColumnIds.add(column.id);
+                        // Look the column up by id: a save may have swapped
+                        // the column objects since this editor was created.
+                        const current = this.getColumn(columnId);
+                        if (current) current.content = update.state.doc.toString();
+                        this.dirtyColumnIds.add(columnId);
                         this.queueSave();
                         this.updateCompletion(update.view);
                     }),
                     EditorView.domEventHandlers({
-                        keydown: (event, view) => this.handleCompletionKeydown(event, view),
                         blur: (_event, view) => {
                             window.setTimeout(() => {
                                 if (view.dom.contains(document.activeElement)) return;
-                                if (this.editingColumnId === column.id) {
-                                    void this.finishEditing(column.id);
-                                }
+                                if (this.editor?.view === view) this.stopEditing();
                             }, 0);
                         },
                     }),
@@ -451,6 +606,9 @@ export class HorizontalTaskView extends ItemView {
                             fontFamily: column.type === 'frontmatter'
                                 ? 'var(--font-monospace)'
                                 : 'var(--font-text)',
+                            fontSize: column.type === 'frontmatter'
+                                ? 'var(--tt-font-size-caption)'
+                                : 'var(--font-text-size)',
                             lineHeight: 'var(--line-height-normal)',
                         },
                         '.cm-content': {
@@ -469,24 +627,31 @@ export class HorizontalTaskView extends ItemView {
         });
     }
 
-    private async finishEditing(columnId: string): Promise<void> {
-        if (this.editingColumnId !== columnId) return;
-        this.closeCompletion();
-        await this.saveColumns();
-        if (this.editingColumnId !== columnId) return;
-        this.editingColumnId = null;
-        await this.render();
-    }
+    private handleEditorEnter(view: EditorView): boolean {
+        const selection = view.state.selection.main;
+        if (!selection.empty) return false;
 
-    private destroyEditors(): void {
-        for (const editorView of this.editorViews) {
-            editorView.destroy();
+        const line = view.state.doc.lineAt(selection.head);
+        const continuation = continueListItem(line.text, selection.head - line.from);
+        if (!continuation) return false;
+
+        if (continuation.kind === 'end') {
+            view.dispatch({
+                changes: { from: line.from, to: line.from + continuation.prefixLength, insert: '' },
+                userEvent: 'delete',
+            });
+        } else {
+            view.dispatch({
+                ...view.state.replaceSelection(continuation.insert),
+                scrollIntoView: true,
+                userEvent: 'input',
+            });
         }
-        this.editorViews = [];
+        return true;
     }
 
     private togglePreviewCheckbox(checkboxEl: HTMLInputElement, columnId: string): void {
-        const column = this.columns.find(item => item.id === columnId);
+        const column = this.getColumn(columnId);
         if (!column) return;
 
         const previewEl = checkboxEl.closest('.horizontal-task-preview');
@@ -511,9 +676,8 @@ export class HorizontalTaskView extends ItemView {
 
         column.content = nextLines.join('\n');
         this.dirtyColumnIds.add(column.id);
-        this.editingColumnId = null;
-        this.closeCompletion();
-        void this.saveColumns().then(() => this.render());
+        this.renderColumnPreview(column);
+        void this.flushSave();
     }
 
     private handleCompletionKeydown(event: KeyboardEvent, view: EditorView): boolean {

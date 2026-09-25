@@ -23,6 +23,7 @@ export class CustomDropdown {
     private options: DropdownOption[] = [];
     private selectedValue = '';
     private triggerTextOverride: string | null = null;
+    private placeholder = '';
     private onChangeCallback: ((value: string) => void) | null = null;
     private readonly outsideClickHandler: (e: MouseEvent) => void;
 
@@ -59,6 +60,7 @@ export class CustomDropdown {
 
         // Initialize
         this.options = config.options;
+        this.placeholder = config.placeholder ?? '';
         if (config.onChange) this.onChangeCallback = config.onChange;
         this.selectedValue = config.value ?? config.options[0]?.value ?? '';
         this.buildMenu();
@@ -130,7 +132,9 @@ export class CustomDropdown {
 
     private updateTrigger(): void {
         const selected = this.options.find(o => o.value === this.selectedValue);
-        this.triggerLabelEl.textContent = this.triggerTextOverride ?? selected?.label ?? '';
+        // Placeholder when the value isn't (yet) among the options, rather
+        // than a blank trigger.
+        this.triggerLabelEl.textContent = this.triggerTextOverride ?? selected?.label ?? this.placeholder;
 
         // Update trigger swatch
         const swatchColor = selected?.swatch;

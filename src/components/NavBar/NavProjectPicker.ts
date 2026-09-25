@@ -6,9 +6,8 @@ export class NavProjectPicker {
     private container: HTMLElement;
     private dropdown: CustomDropdown;
     private appStateManager: AppStateManager;
-    private readonly boundProjectSelected = this.handleProjectSelected.bind(this);
-    private readonly boundProjectsUpdated = this.handleProjectsUpdated.bind(this);
-    private readonly boundAppStateUpdated = this.handleAppStateUpdated.bind(this);
+    private optionsKey = '';
+    private readonly boundSync = this.sync.bind(this);
 
     constructor(appStateManager: AppStateManager) {
         this.appStateManager = appStateManager;
@@ -16,50 +15,49 @@ export class NavProjectPicker {
         this.container = document.createElement("div");
         this.container.className = "nav-project-picker";
 
-        const projects = appStateManager.getVolatileState().availableProjects || [];
-        const currentProject = appStateManager.getPersistentState().currentProjectName || '';
-
         this.dropdown = new CustomDropdown(this.container, {
-            options: projects.map(p => ({ value: p, label: p })),
-            value: currentProject,
+            options: [],
             placeholder: "Pick project",
             onChange: (value) => {
                 appStateManager.selectProject(value);
             }
         });
+        this.sync();
 
-        // Listen for state updates
-        appStateManager.getEvents().on(PluginEvent.ProjectSelected, this.boundProjectSelected);
-
-        appStateManager.getEvents().on(PluginEvent.UpdateProjectsDone, this.boundProjectsUpdated);
-
-        appStateManager.getEvents().on(PluginEvent.AppStateUpdated, this.boundAppStateUpdated);
+        // Options and selection are both re-read from state on every
+        // relevant event, so the picker can't drift from the loaded state
+        // (e.g. a view restored before the plugin finished initializing).
+        const events = appStateManager.getEvents();
+        events.on(PluginEvent.ProjectSelected, this.boundSync);
+        events.on(PluginEvent.UpdateProjectsDone, this.boundSync);
+        events.on(PluginEvent.AppStateUpdated, this.boundSync);
     }
 
     public getElement(): HTMLElement {
         return this.container;
     }
 
-    private handleProjectSelected(name: string): void {
-        this.dropdown.setValue(name);
-    }
+    private sync(): void {
+        const projects = this.appStateManager.getVolatileState().availableProjects || [];
+        const project = this.appStateManager.getPersistentState().currentProjectName || 'All Projects';
 
-    private handleProjectsUpdated(): void {
-        const updatedProjects = this.appStateManager.getVolatileState().availableProjects || [];
-        this.dropdown.setOptions(updatedProjects.map(p => ({ value: p, label: p })));
-    }
-
-    private handleAppStateUpdated(): void {
-        const project = this.appStateManager.getPersistentState().currentProjectName;
-        if (project && this.dropdown.getValue() !== project) {
+        // AppStateUpdated fires on every zoom tick — only rebuild the menu
+        // when the project list actually changed.
+        const key = projects.join('\n');
+        if (key !== this.optionsKey) {
+            this.optionsKey = key;
+            this.dropdown.setOptions(projects.map(p => ({ value: p, label: p })));
+        }
+        if (this.dropdown.getValue() !== project) {
             this.dropdown.setValue(project);
         }
     }
 
     public destroy(): void {
-        this.appStateManager.getEvents().off(PluginEvent.ProjectSelected, this.boundProjectSelected);
-        this.appStateManager.getEvents().off(PluginEvent.UpdateProjectsDone, this.boundProjectsUpdated);
-        this.appStateManager.getEvents().off(PluginEvent.AppStateUpdated, this.boundAppStateUpdated);
+        const events = this.appStateManager.getEvents();
+        events.off(PluginEvent.ProjectSelected, this.boundSync);
+        events.off(PluginEvent.UpdateProjectsDone, this.boundSync);
+        events.off(PluginEvent.AppStateUpdated, this.boundSync);
         this.dropdown.destroy();
     }
 }

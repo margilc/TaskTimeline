@@ -1,7 +1,19 @@
 import { IDateBounds } from '../../interfaces/IAppState';
 import { ITask } from '../../interfaces/ITask';
+import { localTodayISO } from '../utils/dateUtils';
 
-export function updateDateBounds(tasks: ITask[]): IDateBounds | null {
+const DAY_MS = 86400000;
+
+// Room around the tasks so there is space to drag/resize past the current
+// extremes; after > before because planning mostly extends forward.
+export const BOARD_PADDING_BEFORE_DAYS = 14;
+export const BOARD_PADDING_AFTER_DAYS = 56;
+
+/**
+ * The board's date range: every task plus today, padded on both sides.
+ * Layout snaps these bounds to the active time unit.
+ */
+export function updateDateBounds(tasks: ITask[], today: string = localTodayISO()): IDateBounds | null {
     if (tasks.length === 0) return null;
 
     let earliest = Infinity;
@@ -20,8 +32,13 @@ export function updateDateBounds(tasks: ITask[]): IDateBounds | null {
 
     if (!isFinite(earliest) || !isFinite(latest)) return null;
 
+    const todayMs = new Date(today).getTime();
+    earliest = Math.min(earliest, todayMs);
+    latest = Math.max(latest, todayMs);
+
     return {
-        earliest: new Date(earliest).toISOString(),
-        latest: new Date(latest).toISOString()
+        // UTC frame: no DST, so day arithmetic in ms is exact.
+        earliest: new Date(earliest - BOARD_PADDING_BEFORE_DAYS * DAY_MS).toISOString(),
+        latest: new Date(latest + BOARD_PADDING_AFTER_DAYS * DAY_MS).toISOString(),
     };
 }

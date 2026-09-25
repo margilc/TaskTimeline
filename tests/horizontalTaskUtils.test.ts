@@ -1,4 +1,4 @@
-import { hasHorizontalModeFrontmatter, parseHorizontalTaskContent, serializeHorizontalTaskColumns, shouldUseHorizontalTaskView } from '../src/core/utils/horizontalTaskUtils';
+import { continueListItem, hasHorizontalModeFrontmatter, mergeColumnsForSave, parseHorizontalTaskContent, serializeHorizontalTaskColumns, shouldUseHorizontalTaskView } from '../src/core/utils/horizontalTaskUtils';
 
 describe('parseHorizontalTaskContent', () => {
     test('creates frontmatter and top-level section columns', () => {
@@ -149,5 +149,53 @@ describe('fenced code blocks (corruption guard)', () => {
         const serialized = serializeHorizontalTaskColumns(parsed.columns);
         const reparsed = parseHorizontalTaskContent(serialized);
         expect(reparsed.columns.map((c: any) => c.content)).toEqual(parsed.columns.map((c: any) => c.content));
+    });
+});
+
+describe('mergeColumnsForSave', () => {
+    const doc = (body: string) => parseHorizontalTaskContent(`---\nname: T\nstart: 2024-01-15\n---\n${body}`).columns;
+
+    test('keeps external edits to untouched columns', () => {
+        const local = doc('# A\na\n# B\nb');
+        local[1] = { ...local[1], content: 'a edited' };
+        const disk = doc('# A\na\n# B\nb external');
+
+        const merged = mergeColumnsForSave(local, disk, new Set([local[1].id]));
+        expect(serializeHorizontalTaskColumns(merged)).toContain('# A\na edited\n\n# B\nb external');
+    });
+
+    test('a heading typed inside a column does not duplicate content on the next save', () => {
+        // The user typed "# New" into column A; the previous save wrote it,
+        // so on disk A is now split into two sections.
+        const local = doc('# A\na');
+        local[1] = { ...local[1], content: 'a\n# New\nnew text more' };
+        const disk = doc('# A\na\n# New\nnew text');
+
+        const merged = mergeColumnsForSave(local, disk, new Set([local[1].id]));
+        const out = serializeHorizontalTaskColumns(merged);
+        expect(out.match(/# New/g)).toHaveLength(1);
+        expect(out).toContain('new text more');
+    });
+});
+
+describe('continueListItem', () => {
+    test('continues bullets and carries an unchecked checkbox', () => {
+        expect(continueListItem('- item', 6)).toEqual({ kind: 'continue', insert: '\n- ' });
+        expect(continueListItem('  * [x] done', 12)).toEqual({ kind: 'continue', insert: '\n  * [ ] ' });
+    });
+
+    test('increments ordered lists', () => {
+        expect(continueListItem('9. nine', 7)).toEqual({ kind: 'continue', insert: '\n10. ' });
+        expect(continueListItem('1) one', 6)).toEqual({ kind: 'continue', insert: '\n2) ' });
+    });
+
+    test('ends the list on an empty item', () => {
+        expect(continueListItem('- [ ] ', 6)).toEqual({ kind: 'end', prefixLength: 6 });
+        expect(continueListItem('- ', 2)).toEqual({ kind: 'end', prefixLength: 2 });
+    });
+
+    test('ignores non-list lines and a cursor inside the bullet', () => {
+        expect(continueListItem('plain text', 10)).toBeNull();
+        expect(continueListItem('- item', 1)).toBeNull();
     });
 });

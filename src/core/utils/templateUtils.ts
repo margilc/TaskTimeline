@@ -88,18 +88,40 @@ export async function loadTemplates(app: App, taskDirectory: string): Promise<IT
     return templates.sort((a, b) => a.name.localeCompare(b.name));
 }
 
+// Built-in templates, written to {taskDirectory}/templates/. Contents live as
+// editable .md files under src/templates/ and are inlined into the bundle at
+// build time (esbuild text loader).
+const DEFAULT_TEMPLATES: ReadonlyArray<{ fileName: string; content: string }> = [
+    { fileName: 'default_project.md', content: DEFAULT_PROJECT_TEMPLATE_CONTENT },
+    { fileName: 'default_weekly.md', content: DEFAULT_WEEKLY_TEMPLATE_CONTENT },
+];
+
+export const DEFAULT_TEMPLATE_FILE_NAMES = DEFAULT_TEMPLATES.map(t => t.fileName);
+
 /**
- * Ensure the templates folder and the two default templates exist.
- * Default template contents live as editable .md files under src/templates/
- * and are inlined into the bundle at build time (esbuild text loader).
+ * Ensure the templates folder and the default templates exist.
  * Only creates files that are missing — never overwrites user edits.
  */
 export async function ensureTemplatesFolder(app: App, taskDirectory: string): Promise<void> {
     const templatesPath = `${taskDirectory}/templates`;
 
     await ensureFolder(app, templatesPath);
-    await ensureFile(app, `${templatesPath}/default_project.md`, DEFAULT_PROJECT_TEMPLATE_CONTENT);
-    await ensureFile(app, `${templatesPath}/default_weekly.md`, DEFAULT_WEEKLY_TEMPLATE_CONTENT);
+    for (const { fileName, content } of DEFAULT_TEMPLATES) {
+        await ensureFile(app, `${templatesPath}/${fileName}`, content);
+    }
+}
+
+/**
+ * Rewrite the default templates with the built-in versions, discarding any
+ * edits to them. User templates (template_*.md) are left untouched.
+ */
+export async function resetDefaultTemplates(app: App, taskDirectory: string): Promise<void> {
+    const templatesPath = `${taskDirectory}/templates`;
+
+    await ensureFolder(app, templatesPath);
+    for (const { fileName, content } of DEFAULT_TEMPLATES) {
+        await writeFile(app, `${templatesPath}/${fileName}`, content);
+    }
 }
 
 /**
@@ -127,6 +149,20 @@ async function ensureFile(app: App, path: string, content: string): Promise<void
         await app.vault.create(normalized, content);
     } catch (e) {
         if (!isAlreadyExistsError(e)) throw e;
+    }
+}
+
+/** Create or overwrite a file. */
+async function writeFile(app: App, path: string, content: string): Promise<void> {
+    const normalized = normalizePath(path);
+    const existing = app.vault.getAbstractFileByPath(normalized);
+    if (existing instanceof TFile) {
+        await app.vault.modify(existing, content);
+    } else if (await app.vault.adapter.exists(normalized)) {
+        // On disk but missing from the metadata cache (seen on NTFS via WSL).
+        await app.vault.adapter.write(normalized, content);
+    } else {
+        await app.vault.create(normalized, content);
     }
 }
 
